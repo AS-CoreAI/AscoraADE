@@ -5,6 +5,7 @@ import {
   type FileContent,
   type Workspace,
   type TaskSummary,
+  type TaskRecord,
   type LlmConfig,
   type ChatParams,
   type ChatResult,
@@ -56,7 +57,11 @@ const api = {
     list: (): Promise<Workspace[]> => ipcRenderer.invoke(IPC.workspace.list),
     add: (path: string): Promise<Workspace> => ipcRenderer.invoke(IPC.workspace.add, path),
     tasks: (workspaceId: string): Promise<TaskSummary[]> =>
-      ipcRenderer.invoke(IPC.workspace.tasks, workspaceId)
+      ipcRenderer.invoke(IPC.workspace.tasks, workspaceId),
+    task: (taskId: string): Promise<TaskRecord | null> =>
+      ipcRenderer.invoke(IPC.workspace.task, taskId),
+    saveTask: (task: TaskRecord): Promise<TaskSummary> =>
+      ipcRenderer.invoke(IPC.workspace.saveTask, task)
   },
   llm: {
     config: (): Promise<LlmConfig> => ipcRenderer.invoke(IPC.llm.config),

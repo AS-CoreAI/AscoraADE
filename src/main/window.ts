@@ -10,6 +10,7 @@ interface WindowBounds {
 }
 
 const DEFAULT_BOUNDS: WindowBounds = { width: 1280, height: 820 }
+const APP_ICON = join(__dirname, '../../ascora-ade-favicon.png')
 
 export function createMainWindow(): BrowserWindow {
   const store = getStore()
@@ -20,6 +21,7 @@ export function createMainWindow(): BrowserWindow {
     minWidth: 940,
     minHeight: 600,
     show: false,
+    icon: APP_ICON,
     frame: false, // custom ZCode-style title bar in the renderer
     backgroundColor: '#1b1b1d',
     titleBarStyle: 'hidden',

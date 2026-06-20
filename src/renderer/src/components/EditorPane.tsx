@@ -7,6 +7,7 @@ import '@/monaco-setup'
 export function EditorPane(): JSX.Element {
   const openFiles = useApp((s) => s.openFiles)
   const activeFile = useApp((s) => s.activeFile)
+  const resolvedTheme = useApp((s) => s.resolvedTheme)
   const setActiveFile = useApp((s) => s.setActiveFile)
   const closeFile = useApp((s) => s.closeFile)
 
@@ -40,7 +41,7 @@ export function EditorPane(): JSX.Element {
       {current ? (
         <div className="editor-host">
           <Editor
-            theme="vs-dark"
+            theme={resolvedTheme === 'dark' ? 'vs-dark' : 'light'}
             path={current.path}
             language={current.language}
             value={current.content}

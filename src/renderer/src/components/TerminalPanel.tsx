@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type JSX } from 'react'
-import { Terminal } from '@xterm/xterm'
+import { Terminal, type ITheme } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { Icon } from './Icon'
 import { api } from '@/lib/api'
@@ -8,10 +8,25 @@ import type { TerminalShellKind } from '@shared/ipc'
 import '@xterm/xterm/css/xterm.css'
 
 const C = {
-  green: '\x1b[38;2;63;207;142m',
-  muted: '\x1b[38;2;139;139;146m',
-  red: '\x1b[38;2;240;110;110m',
+  green: '\x1b[32m',
+  muted: '\x1b[90m',
+  red: '\x1b[31m',
   reset: '\x1b[0m'
+}
+
+function terminalTheme(theme: 'dark' | 'light'): ITheme {
+  const dark = theme === 'dark'
+  return {
+    background: dark ? '#161618' : '#f5f5f6',
+    foreground: dark ? '#cfcfd4' : '#2f2f34',
+    cursor: dark ? '#3fcf8e' : '#168a5b',
+    selectionBackground: dark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.12)',
+    green: dark ? '#3fcf8e' : '#168a5b',
+    brightGreen: dark ? '#62dca5' : '#117249',
+    red: dark ? '#f06e6e' : '#c43f3f',
+    brightRed: dark ? '#ff8a8a' : '#a92f2f',
+    brightBlack: dark ? '#8b8b92' : '#626269'
+  }
 }
 
 /**
@@ -34,6 +49,7 @@ export function TerminalPanel(): JSX.Element {
   const hostRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<Terminal | null>(null)
   const workspacePath = useApp((s) => s.active?.path)
+  const resolvedTheme = useApp((s) => s.resolvedTheme)
   // Bumping this restarts the shell (the effect tears down and re-runs).
   const [nonce, setNonce] = useState(0)
 
@@ -46,12 +62,7 @@ export function TerminalPanel(): JSX.Element {
       fontFamily: "'Cascadia Code', 'JetBrains Mono', Consolas, monospace",
       cursorBlink: true,
       convertEol: true,
-      theme: {
-        background: '#161618',
-        foreground: '#cfcfd4',
-        cursor: '#3fcf8e',
-        selectionBackground: 'rgba(255,255,255,0.12)'
-      }
+      theme: terminalTheme(resolvedTheme)
     })
     termRef.current = term
     const fit = new FitAddon()
@@ -193,6 +204,10 @@ export function TerminalPanel(): JSX.Element {
       termRef.current = null
     }
   }, [workspacePath, nonce])
+
+  useEffect(() => {
+    if (termRef.current) termRef.current.options.theme = terminalTheme(resolvedTheme)
+  }, [resolvedTheme])
 
   return (
     <div className="panel">

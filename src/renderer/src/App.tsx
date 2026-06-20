@@ -10,10 +10,21 @@ import { useApp } from '@/state/store'
 export function App(): JSX.Element {
   const view = useApp((s) => s.view)
   const init = useApp((s) => s.init)
+  const themePreference = useApp((s) => s.themePreference)
+  const syncSystemTheme = useApp((s) => s.syncSystemTheme)
 
   useEffect(() => {
     void init()
   }, [init])
+
+  useEffect(() => {
+    if (themePreference !== 'system') return
+    const media = window.matchMedia('(prefers-color-scheme: dark)')
+    const sync = (): void => syncSystemTheme()
+    media.addEventListener('change', sync)
+    sync()
+    return () => media.removeEventListener('change', sync)
+  }, [syncSystemTheme, themePreference])
 
   return (
     <div className="app">

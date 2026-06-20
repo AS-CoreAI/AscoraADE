@@ -2,7 +2,7 @@ import { app } from 'electron'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { readFileSync, writeFileSync, renameSync, existsSync } from 'node:fs'
-import type { Workspace, TaskSummary } from '@shared/ipc'
+import type { Workspace, TaskRecord, TaskSummary } from '@shared/ipc'
 
 /**
  * Local persistence for settings, workspaces and task history (spec: SQLite).
@@ -21,16 +21,32 @@ export interface Store {
   listWorkspaces(): Workspace[]
   addWorkspace(name: string, path: string): Workspace
   listTasks(workspaceId: string): TaskSummary[]
+  getTask(taskId: string): TaskRecord | null
+  saveTask(task: TaskRecord): TaskSummary
   close(): void
 }
 
 interface DbShape {
   settings: Record<string, unknown>
   workspaces: Workspace[]
-  tasks: TaskSummary[]
+  tasks: TaskRecord[]
 }
 
 const EMPTY: DbShape = { settings: {}, workspaces: [], tasks: [] }
+
+function taskSummary(task: TaskRecord): TaskSummary {
+  const { id, workspaceId, title, status, updatedAt } = task
+  return { id, workspaceId, title, status, updatedAt }
+}
+
+function parseArray<T>(value: string): T[] {
+  try {
+    const parsed = JSON.parse(value)
+    return Array.isArray(parsed) ? (parsed as T[]) : []
+  } catch {
+    return []
+  }
+}
 
 /** File-backed store with atomic writes (write temp, then rename). */
 class JsonStore implements Store {
@@ -46,8 +62,16 @@ class JsonStore implements Store {
   private load(): DbShape {
     try {
       if (existsSync(this.file)) {
-        const parsed = JSON.parse(readFileSync(this.file, 'utf8'))
-        return { ...EMPTY, ...parsed }
+        const parsed = JSON.parse(readFileSync(this.file, 'utf8')) as Partial<DbShape>
+        const tasks = Array.isArray(parsed.tasks)
+          ? parsed.tasks.map((task) => ({
+              ...task,
+              status: task.status === 'running' ? ('idle' as const) : task.status,
+              messages: Array.isArray(task.messages) ? task.messages : [],
+              convo: Array.isArray(task.convo) ? task.convo : []
+            }))
+          : []
+        return { ...EMPTY, ...parsed, tasks }
       }
     } catch (err) {
       console.warn('[store] failed to read store file, starting fresh:', err)
@@ -107,6 +131,21 @@ class JsonStore implements Store {
     return this.data.tasks
       .filter((t) => t.workspaceId === workspaceId)
       .sort((a, b) => b.updatedAt - a.updatedAt)
+      .map(taskSummary)
+  }
+
+  getTask(taskId: string): TaskRecord | null {
+    const task = this.data.tasks.find((item) => item.id === taskId)
+    return task ? structuredClone(task) : null
+  }
+
+  saveTask(task: TaskRecord): TaskSummary {
+    const stored = structuredClone(task)
+    const index = this.data.tasks.findIndex((item) => item.id === task.id)
+    if (index === -1) this.data.tasks.push(stored)
+    else this.data.tasks[index] = stored
+    this.scheduleFlush()
+    return taskSummary(stored)
   }
 
   close(): void {
@@ -144,9 +183,20 @@ class SqliteStore implements Store {
         title        TEXT NOT NULL,
         status       TEXT NOT NULL DEFAULT 'idle',
         updated_at   INTEGER NOT NULL,
+        messages_json TEXT NOT NULL DEFAULT '[]',
+        convo_json    TEXT NOT NULL DEFAULT '[]',
         FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
       );
     `)
+
+    const columns = this.db.prepare('PRAGMA table_info(tasks)').all() as { name: string }[]
+    if (!columns.some((column) => column.name === 'messages_json')) {
+      this.db.exec("ALTER TABLE tasks ADD COLUMN messages_json TEXT NOT NULL DEFAULT '[]'")
+    }
+    if (!columns.some((column) => column.name === 'convo_json')) {
+      this.db.exec("ALTER TABLE tasks ADD COLUMN convo_json TEXT NOT NULL DEFAULT '[]'")
+    }
+    this.db.prepare("UPDATE tasks SET status = 'idle' WHERE status = 'running'").run()
   }
 
   getSetting<T = unknown>(key: string): T | undefined {
@@ -212,6 +262,61 @@ class SqliteStore implements Store {
       status: r.status,
       updatedAt: r.updated_at
     }))
+  }
+
+  getTask(taskId: string): TaskRecord | null {
+    const row = this.db
+      .prepare(
+        `SELECT id, workspace_id, title, status, updated_at, messages_json, convo_json
+         FROM tasks WHERE id = ?`
+      )
+      .get(taskId) as
+      | {
+          id: string
+          workspace_id: string
+          title: string
+          status: TaskSummary['status']
+          updated_at: number
+          messages_json: string
+          convo_json: string
+        }
+      | undefined
+    if (!row) return null
+    return {
+      id: row.id,
+      workspaceId: row.workspace_id,
+      title: row.title,
+      status: row.status,
+      updatedAt: row.updated_at,
+      messages: parseArray(row.messages_json),
+      convo: parseArray(row.convo_json)
+    }
+  }
+
+  saveTask(task: TaskRecord): TaskSummary {
+    this.db
+      .prepare(
+        `INSERT INTO tasks
+           (id, workspace_id, title, status, updated_at, messages_json, convo_json)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET
+           workspace_id = excluded.workspace_id,
+           title = excluded.title,
+           status = excluded.status,
+           updated_at = excluded.updated_at,
+           messages_json = excluded.messages_json,
+           convo_json = excluded.convo_json`
+      )
+      .run(
+        task.id,
+        task.workspaceId,
+        task.title,
+        task.status,
+        task.updatedAt,
+        JSON.stringify(task.messages),
+        JSON.stringify(task.convo)
+      )
+    return taskSummary(task)
   }
 
   close(): void {

@@ -28,7 +28,9 @@ export const IPC = {
   workspace: {
     list: 'workspace:list',
     add: 'workspace:add',
-    tasks: 'workspace:tasks'
+    tasks: 'workspace:tasks',
+    task: 'workspace:task',
+    saveTask: 'workspace:saveTask'
   },
   llm: {
     config: 'llm:config',
@@ -101,6 +103,30 @@ export interface TaskSummary {
   updatedAt: number
   /** Visual status dot in the rail. */
   status: 'idle' | 'running' | 'error'
+}
+
+/** A renderer chat entry persisted as part of a task. */
+export interface TaskMessage {
+  id: string
+  role: 'user' | 'assistant'
+  kind: 'text' | 'tool'
+  text: string
+  tool?: string
+  args?: Record<string, unknown>
+  status?: 'awaiting' | 'running' | 'done' | 'rejected' | 'error'
+  output?: string
+  stderr?: string
+  exitCode?: number | null
+  oldContent?: string
+  newContent?: string
+  created?: boolean
+  error?: string
+}
+
+/** Complete persisted task, including display history and LLM context. */
+export interface TaskRecord extends TaskSummary {
+  messages: TaskMessage[]
+  convo: LlmMessage[]
 }
 
 // ---------- LLM (LM Studio, OpenAI-compatible /v1 API) ----------

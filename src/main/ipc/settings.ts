@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron'
-import { IPC, type Workspace, type TaskSummary } from '@shared/ipc'
+import { IPC, type Workspace, type TaskRecord, type TaskSummary } from '@shared/ipc'
 import { getStore } from '../store'
 import { basename } from 'node:path'
 
@@ -16,5 +16,11 @@ export function registerSettingsHandlers(): void {
   )
   ipcMain.handle(IPC.workspace.tasks, (_e, workspaceId: string): TaskSummary[] =>
     getStore().listTasks(workspaceId)
+  )
+  ipcMain.handle(IPC.workspace.task, (_e, taskId: string): TaskRecord | null =>
+    getStore().getTask(taskId)
+  )
+  ipcMain.handle(IPC.workspace.saveTask, (_e, task: TaskRecord): TaskSummary =>
+    getStore().saveTask(task)
   )
 }

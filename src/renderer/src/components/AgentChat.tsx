@@ -1,4 +1,4 @@
-import type { JSX } from 'react'
+import { useLayoutEffect, useRef, type JSX } from 'react'
 import { Composer } from './Composer'
 import { Icon } from './Icon'
 import { useApp, type ChatMessage, type ToolStatus } from '@/state/store'
@@ -94,8 +94,7 @@ function ToolCard({ m }: { m: ChatMessage }): JSX.Element {
   )
 }
 
-function Messages(): JSX.Element {
-  const messages = useApp((s) => s.messages)
+function Messages({ messages }: { messages: ChatMessage[] }): JSX.Element {
   if (messages.length === 0) {
     return (
       <div className="chat-empty">
@@ -122,12 +121,20 @@ function Messages(): JSX.Element {
 }
 
 export function AgentChat({ full = false }: { full?: boolean }): JSX.Element {
+  const messages = useApp((s) => s.messages)
+  const scrollRef = useRef<HTMLDivElement>(null)
+
+  useLayoutEffect(() => {
+    const container = scrollRef.current
+    if (container) container.scrollTop = container.scrollHeight
+  }, [messages])
+
   if (full) {
     return (
       <div className="chat-full">
-        <div className="chat-full-scroll">
+        <div className="chat-full-scroll" ref={scrollRef}>
           <div className="chat-col chat-messages-col">
-            <Messages />
+            <Messages messages={messages} />
           </div>
         </div>
         <div className="chat-full-composer">
@@ -148,8 +155,8 @@ export function AgentChat({ full = false }: { full?: boolean }): JSX.Element {
       </div>
 
       <div className="chat">
-        <div className="chat-messages">
-          <Messages />
+        <div className="chat-messages" ref={scrollRef}>
+          <Messages messages={messages} />
         </div>
         <div className="chat-composer">
           <Composer showFolder={false} />

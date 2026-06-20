@@ -1,5 +1,12 @@
 import { create } from 'zustand'
-import type { Workspace, TreeNode, LlmMessage, ToolDef } from '@shared/ipc'
+import type {
+  Workspace,
+  TreeNode,
+  LlmMessage,
+  TaskMessage,
+  TaskSummary,
+  ToolDef
+} from '@shared/ipc'
 import { DEFAULT_LLM_CONFIG } from '@shared/ipc'
 import { api } from '@/lib/api'
 
@@ -7,6 +14,8 @@ export type View = 'home' | 'workspace'
 /** Agent permission mode — mirrors ZCode's "Ask before changes" control. */
 export type AgentMode = 'ask' | 'auto'
 export type Connection = 'unknown' | 'connecting' | 'connected' | 'error'
+export type ThemePreference = 'dark' | 'light' | 'system'
+export type ResolvedTheme = 'dark' | 'light'
 
 export interface OpenFile {
   path: string
@@ -15,29 +24,9 @@ export interface OpenFile {
   language: string
 }
 
-/** Lifecycle of a tool-call card in the chat. */
-export type ToolStatus = 'awaiting' | 'running' | 'done' | 'rejected' | 'error'
-
-export interface ChatMessage {
-  id: string
-  role: 'user' | 'assistant'
-  /** 'text' is an ordinary chat bubble; 'tool' is a tool-call card. */
-  kind: 'text' | 'tool'
-  text: string
-  // ----- tool-card fields (kind === 'tool') -----
-  tool?: string
-  args?: Record<string, unknown>
-  status?: ToolStatus
-  /** Primary output / short summary shown on the card. */
-  output?: string
-  stderr?: string
-  exitCode?: number | null
-  /** write_file: previous + proposed content, for the inline diff. */
-  oldContent?: string
-  newContent?: string
-  created?: boolean
-  error?: string
-}
+/** Lifecycle and shape of chat entries persisted with a task. */
+export type ToolStatus = NonNullable<TaskMessage['status']>
+export type ChatMessage = TaskMessage
 
 /** How many tool round-trips a single task may take before we stop. */
 const MAX_STEPS = 16
@@ -153,6 +142,27 @@ function truncate(s: string, n: number): string {
   return s.length > n ? `${s.slice(0, n)}\n…(${s.length - n} more chars truncated)` : s
 }
 
+function taskTitle(text: string): string {
+  const title = text.replace(/\s+/g, ' ').trim()
+  return title.length > 72 ? `${title.slice(0, 69)}...` : title
+}
+
+function isThemePreference(value: unknown): value is ThemePreference {
+  return value === 'dark' || value === 'light' || value === 'system'
+}
+
+function resolveTheme(preference: ThemePreference): ResolvedTheme {
+  if (preference !== 'system') return preference
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+}
+
+function applyTheme(preference: ThemePreference): ResolvedTheme {
+  const resolved = resolveTheme(preference)
+  document.documentElement.dataset.theme = resolved
+  document.documentElement.style.colorScheme = resolved
+  return resolved
+}
+
 /** Parse a fenced ```tool_call / ```json block from assistant text (fallback path). */
 function parseTextToolCall(content: string): { call: ParsedCall; block: string } | null {
   const fence = content.match(/```(?:tool_call|json)?\s*([\s\S]*?)```/i)
@@ -176,6 +186,9 @@ interface AppState {
   view: View
   workspaces: Workspace[]
   active: Workspace | null
+  tasksByWorkspace: Record<string, TaskSummary[]>
+  activeTaskId: string | null
+  activeTaskTitle: string
 
   treeRoots: TreeNode[]
   childrenByPath: Record<string, TreeNode[]>
@@ -192,6 +205,8 @@ interface AppState {
   connection: Connection
   connectionError?: string
   settingsOpen: boolean
+  themePreference: ThemePreference
+  resolvedTheme: ResolvedTheme
 
   mode: AgentMode
   messages: ChatMessage[]
@@ -204,6 +219,8 @@ interface AppState {
   openFolder: () => Promise<void>
   loadWorkspaceData: (ws: Workspace) => Promise<void>
   openWorkspace: (ws: Workspace) => Promise<void>
+  openTask: (ws: Workspace, taskId: string) => Promise<void>
+  saveActiveTask: (status: TaskSummary['status']) => Promise<void>
   goHome: () => void
   toggleDir: (node: TreeNode) => Promise<void>
   openFile: (node: TreeNode) => Promise<void>
@@ -214,6 +231,8 @@ interface AppState {
   setModel: (m: string) => void
   setBaseUrl: (url: string) => Promise<void>
   setSettingsOpen: (open: boolean) => void
+  setThemePreference: (theme: ThemePreference) => void
+  syncSystemTheme: () => void
 
   setMode: (m: AgentMode) => void
   submitTask: (text: string) => Promise<void>
@@ -227,6 +246,9 @@ export const useApp = create<AppState>((set, get) => ({
   view: 'home',
   workspaces: [],
   active: null,
+  tasksByWorkspace: {},
+  activeTaskId: null,
+  activeTaskTitle: '',
   treeRoots: [],
   childrenByPath: {},
   expanded: {},
@@ -239,6 +261,8 @@ export const useApp = create<AppState>((set, get) => ({
   models: [],
   connection: 'unknown',
   settingsOpen: false,
+  themePreference: 'dark',
+  resolvedTheme: 'dark',
 
   mode: 'ask',
   messages: [],
@@ -247,8 +271,24 @@ export const useApp = create<AppState>((set, get) => ({
   streamId: null,
 
   async init() {
-    const [workspaces, cfg] = await Promise.all([api.workspace.list(), api.llm.config()])
-    set({ workspaces, baseUrl: cfg.baseUrl, model: cfg.model })
+    const [workspaces, cfg, savedTheme] = await Promise.all([
+      api.workspace.list(),
+      api.llm.config(),
+      api.settings.get<ThemePreference>('appearance.theme')
+    ])
+    const themePreference = isThemePreference(savedTheme) ? savedTheme : 'dark'
+    const resolvedTheme = applyTheme(themePreference)
+    const taskLists = await Promise.all(
+      workspaces.map(async (workspace) => [workspace.id, await api.workspace.tasks(workspace.id)] as const)
+    )
+    set({
+      workspaces,
+      tasksByWorkspace: Object.fromEntries(taskLists),
+      baseUrl: cfg.baseUrl,
+      model: cfg.model,
+      themePreference,
+      resolvedTheme
+    })
     if (workspaces.length > 0) await get().loadWorkspaceData(workspaces[0])
     await get().refreshModels()
   },
@@ -257,7 +297,11 @@ export const useApp = create<AppState>((set, get) => ({
     const ws = await api.dialog.openFolder()
     if (!ws) return
     const workspaces = await api.workspace.list()
-    set({ workspaces })
+    const tasks = await api.workspace.tasks(ws.id)
+    set((state) => ({
+      workspaces,
+      tasksByWorkspace: { ...state.tasksByWorkspace, [ws.id]: tasks }
+    }))
     await get().openWorkspace(ws)
   },
 
@@ -277,7 +321,57 @@ export const useApp = create<AppState>((set, get) => ({
 
   async openWorkspace(ws) {
     await get().loadWorkspaceData(ws)
-    set({ view: 'workspace', messages: [], convo: [] })
+    const tasks = await api.workspace.tasks(ws.id)
+    set((state) => ({
+      view: 'workspace',
+      messages: [],
+      convo: [],
+      activeTaskId: null,
+      activeTaskTitle: '',
+      tasksByWorkspace: { ...state.tasksByWorkspace, [ws.id]: tasks }
+    }))
+  },
+
+  async openTask(ws, taskId) {
+    if (get().streaming) return
+    const task = await api.workspace.task(taskId)
+    if (!task || task.workspaceId !== ws.id) return
+    if (get().active?.id !== ws.id) await get().loadWorkspaceData(ws)
+    set({
+      active: ws,
+      activeTaskId: task.id,
+      activeTaskTitle: task.title,
+      messages: task.messages,
+      convo: task.convo,
+      view: 'workspace'
+    })
+  },
+
+  async saveActiveTask(status) {
+    const state = get()
+    if (!state.active || !state.activeTaskId) return
+    try {
+      const summary = await api.workspace.saveTask({
+        id: state.activeTaskId,
+        workspaceId: state.active.id,
+        title: state.activeTaskTitle,
+        status,
+        updatedAt: Date.now(),
+        messages: state.messages,
+        convo: state.convo
+      })
+      set((current) => {
+        const tasks = current.tasksByWorkspace[summary.workspaceId] ?? []
+        return {
+          tasksByWorkspace: {
+            ...current.tasksByWorkspace,
+            [summary.workspaceId]: [summary, ...tasks.filter((task) => task.id !== summary.id)]
+          }
+        }
+      })
+    } catch (error) {
+      console.error('[tasks] failed to save task:', error)
+    }
   },
 
   goHome() {
@@ -355,6 +449,19 @@ export const useApp = create<AppState>((set, get) => ({
     set({ settingsOpen: open })
   },
 
+  setThemePreference(themePreference) {
+    const resolvedTheme = applyTheme(themePreference)
+    set({ themePreference, resolvedTheme })
+    void api.settings.set('appearance.theme', themePreference)
+  },
+
+  syncSystemTheme() {
+    const { themePreference, resolvedTheme } = get()
+    if (themePreference !== 'system') return
+    const next = applyTheme(themePreference)
+    if (next !== resolvedTheme) set({ resolvedTheme: next })
+  },
+
   setMode(mode) {
     set({ mode })
   },
@@ -364,6 +471,9 @@ export const useApp = create<AppState>((set, get) => ({
     const active = get().active
     if (!trimmed || !active || get().streaming) return
     const root = active.path
+    const taskId = get().activeTaskId ?? crypto.randomUUID()
+    const title = get().activeTaskTitle || taskTitle(trimmed)
+    let finalStatus: TaskSummary['status'] = 'idle'
 
     runAborted = false
     const patch = (id: string, p: Partial<ChatMessage>): void =>
@@ -376,9 +486,12 @@ export const useApp = create<AppState>((set, get) => ({
     set((s) => ({
       view: 'workspace',
       streaming: true,
+      activeTaskId: taskId,
+      activeTaskTitle: title,
       messages: [...s.messages, { id: crypto.randomUUID(), role: 'user', kind: 'text', text: trimmed }],
       convo: [...s.convo, { role: 'user', content: trimmed }]
     }))
+    await get().saveActiveTask('running')
 
     try {
       for (let step = 0; step < MAX_STEPS && !runAborted; step += 1) {
@@ -398,6 +511,7 @@ export const useApp = create<AppState>((set, get) => ({
         set({ streamId: null, connection: result.ok ? 'connected' : get().connection })
 
         if (!result.ok) {
+          finalStatus = 'error'
           const prev = get().messages.find((m) => m.id === replyId)?.text ?? ''
           patch(replyId, { text: prev ? `${prev}\n\n⚠ ${result.error}` : `⚠ ${result.error}` })
           break
@@ -573,6 +687,7 @@ export const useApp = create<AppState>((set, get) => ({
       }
     } finally {
       set({ streaming: false, streamId: null })
+      await get().saveActiveTask(finalStatus)
     }
   },
 
@@ -603,6 +718,6 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   newTask() {
-    set({ messages: [], convo: [], view: 'home' })
+    set({ messages: [], convo: [], activeTaskId: null, activeTaskTitle: '', view: 'home' })
   }
 }))
