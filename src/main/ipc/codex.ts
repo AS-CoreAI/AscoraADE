@@ -1,0 +1,32 @@
+import { ipcMain } from 'electron'
+import {
+  IPC,
+  DEFAULT_LLM_CONFIG,
+  type CodexCheckResult,
+  type CodexRunParams,
+  type CodexRunResult,
+  type CodexSandbox
+} from '@shared/ipc'
+import { getStore } from '../store'
+import { checkCodex, killRun, runCodex } from '../codex/runner'
+
+function readCodexConfig(): { codexPath: string; codexModel: string; codexSandbox: CodexSandbox } {
+  const store = getStore()
+  return {
+    codexPath: store.getSetting<string>('codex.path') ?? DEFAULT_LLM_CONFIG.codexPath,
+    codexModel: store.getSetting<string>('codex.model') ?? DEFAULT_LLM_CONFIG.codexModel,
+    codexSandbox: store.getSetting<CodexSandbox>('codex.sandbox') ?? DEFAULT_LLM_CONFIG.codexSandbox
+  }
+}
+
+export function registerCodexHandlers(): void {
+  ipcMain.handle(IPC.codex.check, (): Promise<CodexCheckResult> => checkCodex(readCodexConfig().codexPath))
+
+  ipcMain.handle(
+    IPC.codex.run,
+    (e, id: string, params: CodexRunParams): Promise<CodexRunResult> =>
+      runCodex(id, e.sender, params, readCodexConfig())
+  )
+
+  ipcMain.handle(IPC.codex.abort, (_e, id: string) => killRun(id))
+}

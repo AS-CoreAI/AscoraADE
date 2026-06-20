@@ -11,6 +11,11 @@ import {
   type ChatResult,
   type ChatChunkPayload,
   type ListModelsResult,
+  type CodexCheckResult,
+  type CodexRunParams,
+  type CodexRunResult,
+  type CodexEvent,
+  type CodexEventPayload,
   type GitStatusResult,
   type GitDiffRequest,
   type GitDiffResult,
@@ -79,6 +84,24 @@ const api = {
         .finally(() => ipcRenderer.removeListener(IPC.llm.chunk, listener))
     },
     abort: (id: string): Promise<void> => ipcRenderer.invoke(IPC.llm.abort, id)
+  },
+  codex: {
+    check: (): Promise<CodexCheckResult> => ipcRenderer.invoke(IPC.codex.check),
+    /** Runs a Codex turn; `onEvent` fires per normalized stream event. */
+    run: (
+      id: string,
+      params: CodexRunParams,
+      onEvent: (event: CodexEvent) => void
+    ): Promise<CodexRunResult> => {
+      const listener = (_e: IpcRendererEvent, payload: CodexEventPayload): void => {
+        if (payload.id === id) onEvent(payload.event)
+      }
+      ipcRenderer.on(IPC.codex.event, listener)
+      return ipcRenderer
+        .invoke(IPC.codex.run, id, params)
+        .finally(() => ipcRenderer.removeListener(IPC.codex.event, listener))
+    },
+    abort: (id: string): Promise<void> => ipcRenderer.invoke(IPC.codex.abort, id)
   },
   git: {
     status: (cwd: string): Promise<GitStatusResult> => ipcRenderer.invoke(IPC.git.status, cwd),

@@ -40,6 +40,12 @@ export const IPC = {
     chunk: 'llm:chunk',
     abort: 'llm:abort'
   },
+  codex: {
+    check: 'codex:check',
+    run: 'codex:run',
+    abort: 'codex:abort',
+    event: 'codex:event'
+  },
   git: {
     status: 'git:status',
     diff: 'git:diff',
@@ -129,7 +135,10 @@ export interface TaskRecord extends TaskSummary {
   convo: LlmMessage[]
 }
 
-// ---------- LLM (LM Studio, OpenAI-compatible /v1 API) ----------
+// ---------- LLM (provider-agnostic; LM Studio or Codex CLI) ----------
+
+/** Which backend drives the agent chat. */
+export type LlmProvider = 'lmstudio' | 'codex'
 
 export type LlmRole = 'system' | 'user' | 'assistant' | 'tool'
 
@@ -165,16 +174,31 @@ export interface LlmModel {
   id: string
 }
 
+/** Sandbox policy passed to `codex exec -s`. */
+export type CodexSandbox = 'read-only' | 'workspace-write' | 'danger-full-access'
+
 export interface LlmConfig {
-  /** OpenAI-compatible base, e.g. http://localhost:1234/v1 */
+  /** Active backend for the agent chat. */
+  provider: LlmProvider
+  /** OpenAI-compatible base, e.g. http://localhost:1234/v1 (LM Studio). */
   baseUrl: string
-  /** Default model id used when a request doesn't specify one. */
+  /** Default LM Studio model id used when a request doesn't specify one. */
   model: string
+  /** Path to the `codex` binary; empty → auto-detect (PATH / bundled extension). */
+  codexPath: string
+  /** Model passed to `codex exec -m`; empty → Codex's own default. */
+  codexModel: string
+  /** Sandbox policy Codex runs commands under. */
+  codexSandbox: CodexSandbox
 }
 
 export const DEFAULT_LLM_CONFIG: LlmConfig = {
+  provider: 'lmstudio',
   baseUrl: 'http://localhost:1234/v1',
-  model: ''
+  model: '',
+  codexPath: '',
+  codexModel: '',
+  codexSandbox: 'workspace-write'
 }
 
 export interface ChatParams {
@@ -205,6 +229,83 @@ export interface ChatResult {
 export interface ListModelsResult {
   ok: boolean
   models?: LlmModel[]
+  error?: string
+}
+
+// ---------- Codex CLI (OpenAI's `codex exec --json` agent) ----------
+
+/** Result of probing the local Codex CLI install + auth. */
+export interface CodexCheckResult {
+  ok: boolean
+  /** True when a runnable `codex` binary was found. */
+  installed: boolean
+  /** Resolved path to the binary that was probed. */
+  path?: string
+  /** e.g. "codex-cli 0.142.0". */
+  version?: string
+  /** True when `codex login status` reports an authenticated account. */
+  loggedIn?: boolean
+  /** Human-readable auth note, e.g. "Logged in using ChatGPT". */
+  authNote?: string
+  error?: string
+}
+
+export interface CodexRunParams {
+  prompt: string
+  /** Working root passed to `codex exec -C`. */
+  cwd: string
+  /** Resume this Codex session/thread instead of starting a fresh one. */
+  threadId?: string
+  /** Overrides the configured model (`-m`); empty → config/default. */
+  model?: string
+  /** Overrides the configured sandbox policy (`-s`). */
+  sandbox?: CodexSandbox
+}
+
+/**
+ * One normalized work item from a Codex turn. Mirrors the `item` object in
+ * `codex exec --json` events (`agent_message`, `command_execution`,
+ * `file_change`, `reasoning`, …); unknown types pass through via `type`/`text`.
+ */
+export interface CodexItem {
+  id: string
+  type: string
+  /** agent_message / reasoning prose. */
+  text?: string
+  /** command_execution: the shell command line. */
+  command?: string
+  /** command_execution: combined stdout+stderr so far. */
+  output?: string
+  /** command_execution: exit code (null while running / when killed). */
+  exitCode?: number | null
+  /** file_change: the files touched and how. */
+  changes?: { path: string; kind: string }[]
+  /** "in_progress" | "completed" | "failed". */
+  status?: string
+}
+
+/** Normalized Codex stream event delivered main → renderer. */
+export type CodexEvent =
+  | { kind: 'thread'; threadId: string }
+  | { kind: 'turn-started' }
+  | { kind: 'item'; phase: 'started' | 'updated' | 'completed'; item: CodexItem }
+  | { kind: 'turn-completed' }
+  /** A non-JSON line from Codex (notices, stderr) surfaced for visibility. */
+  | { kind: 'notice'; text: string }
+  | { kind: 'error'; message: string }
+
+export interface CodexEventPayload {
+  id: string
+  event: CodexEvent
+}
+
+export interface CodexRunResult {
+  ok: boolean
+  /** Process exit code; null when killed (e.g. aborted). */
+  code?: number | null
+  /** Session id captured from the run, for a later resume. */
+  threadId?: string
+  aborted?: boolean
   error?: string
 }
 

@@ -5,7 +5,12 @@ import type {
   LlmMessage,
   TaskMessage,
   TaskSummary,
-  ToolDef
+  ToolDef,
+  LlmProvider,
+  CodexSandbox,
+  CodexEvent,
+  CodexItem,
+  CodexCheckResult
 } from '@shared/ipc'
 import { DEFAULT_LLM_CONFIG } from '@shared/ipc'
 import { api } from '@/lib/api'
@@ -182,6 +187,47 @@ function parseTextToolCall(content: string): { call: ParsedCall; block: string }
   }
 }
 
+/** Map a Codex `status` string onto our tool-card lifecycle. */
+function codexStatus(status?: string): ToolStatus {
+  if (status === 'completed') return 'done'
+  if (status === 'failed') return 'error'
+  return 'running'
+}
+
+/** Last path segment, for compact file-change display. */
+function baseName(p: string): string {
+  const parts = p.split(/[\\/]/).filter(Boolean)
+  return parts.at(-1) ?? p
+}
+
+/**
+ * Translate a Codex work item into the same tool-card shape the LM Studio loop
+ * produces, so the existing chat UI renders both backends uniformly.
+ */
+function codexItemToCard(it: CodexItem): Partial<ChatMessage> {
+  const status = codexStatus(it.status)
+  if (it.type === 'command_execution') {
+    return {
+      tool: 'run_command',
+      args: { command: it.command ?? '' },
+      status,
+      output: it.output,
+      exitCode: typeof it.exitCode === 'number' ? it.exitCode : it.exitCode === null ? null : undefined
+    }
+  }
+  if (it.type === 'file_change') {
+    const changes = it.changes ?? []
+    return {
+      tool: 'apply_patch',
+      args: { path: `${changes.length} file${changes.length === 1 ? '' : 's'}` },
+      status,
+      output: changes.map((c) => `${c.kind} ${baseName(c.path)}`).join('\n')
+    }
+  }
+  // Unknown item type — show it generically rather than dropping it.
+  return { tool: it.type, args: {}, status, output: it.text }
+}
+
 interface AppState {
   view: View
   workspaces: Workspace[]
@@ -198,12 +244,21 @@ interface AppState {
   openFiles: OpenFile[]
   activeFile: string | null
 
-  // LLM / LM Studio
+  // LLM provider
+  provider: LlmProvider
+  // LM Studio
   baseUrl: string
   model: string
   models: string[]
   connection: Connection
   connectionError?: string
+  // Codex CLI
+  codexPath: string
+  codexModel: string
+  codexSandbox: CodexSandbox
+  codexThreadId: string | null
+  codexCheck: CodexCheckResult | null
+  codexChecking: boolean
   settingsOpen: boolean
   themePreference: ThemePreference
   resolvedTheme: ResolvedTheme
@@ -230,6 +285,11 @@ interface AppState {
   refreshModels: () => Promise<void>
   setModel: (m: string) => void
   setBaseUrl: (url: string) => Promise<void>
+  setProvider: (p: LlmProvider) => Promise<void>
+  setCodexPath: (path: string) => Promise<void>
+  setCodexModel: (m: string) => void
+  setCodexSandbox: (s: CodexSandbox) => void
+  checkCodex: () => Promise<void>
   setSettingsOpen: (open: boolean) => void
   setThemePreference: (theme: ThemePreference) => void
   syncSystemTheme: () => void
@@ -256,10 +316,17 @@ export const useApp = create<AppState>((set, get) => ({
   openFiles: [],
   activeFile: null,
 
+  provider: DEFAULT_LLM_CONFIG.provider,
   baseUrl: DEFAULT_LLM_CONFIG.baseUrl,
   model: '',
   models: [],
   connection: 'unknown',
+  codexPath: DEFAULT_LLM_CONFIG.codexPath,
+  codexModel: DEFAULT_LLM_CONFIG.codexModel,
+  codexSandbox: DEFAULT_LLM_CONFIG.codexSandbox,
+  codexThreadId: null,
+  codexCheck: null,
+  codexChecking: false,
   settingsOpen: false,
   themePreference: 'dark',
   resolvedTheme: 'dark',
@@ -284,13 +351,18 @@ export const useApp = create<AppState>((set, get) => ({
     set({
       workspaces,
       tasksByWorkspace: Object.fromEntries(taskLists),
+      provider: cfg.provider,
       baseUrl: cfg.baseUrl,
       model: cfg.model,
+      codexPath: cfg.codexPath,
+      codexModel: cfg.codexModel,
+      codexSandbox: cfg.codexSandbox,
       themePreference,
       resolvedTheme
     })
     if (workspaces.length > 0) await get().loadWorkspaceData(workspaces[0])
     await get().refreshModels()
+    if (cfg.provider === 'codex') await get().checkCodex()
   },
 
   async openFolder() {
@@ -328,6 +400,7 @@ export const useApp = create<AppState>((set, get) => ({
       convo: [],
       activeTaskId: null,
       activeTaskTitle: '',
+      codexThreadId: null,
       tasksByWorkspace: { ...state.tasksByWorkspace, [ws.id]: tasks }
     }))
   },
@@ -343,6 +416,7 @@ export const useApp = create<AppState>((set, get) => ({
       activeTaskTitle: task.title,
       messages: task.messages,
       convo: task.convo,
+      codexThreadId: null,
       view: 'workspace'
     })
   },
@@ -445,6 +519,42 @@ export const useApp = create<AppState>((set, get) => ({
     await get().refreshModels()
   },
 
+  async setProvider(provider) {
+    set({ provider })
+    await api.llm.setConfig({ provider })
+    if (provider === 'codex') await get().checkCodex()
+    else await get().refreshModels()
+  },
+
+  async setCodexPath(path) {
+    set({ codexPath: path })
+    await api.llm.setConfig({ codexPath: path })
+    await get().checkCodex()
+  },
+
+  setCodexModel(codexModel) {
+    set({ codexModel })
+    void api.llm.setConfig({ codexModel })
+  },
+
+  setCodexSandbox(codexSandbox) {
+    set({ codexSandbox })
+    void api.llm.setConfig({ codexSandbox })
+  },
+
+  async checkCodex() {
+    set({ codexChecking: true })
+    try {
+      const res = await api.codex.check()
+      set({ codexCheck: res, codexChecking: false })
+    } catch (err) {
+      set({
+        codexCheck: { ok: false, installed: false, error: err instanceof Error ? err.message : String(err) },
+        codexChecking: false
+      })
+    }
+  },
+
   setSettingsOpen(open) {
     set({ settingsOpen: open })
   },
@@ -494,6 +604,68 @@ export const useApp = create<AppState>((set, get) => ({
     await get().saveActiveTask('running')
 
     try {
+      // ===== Codex CLI backend: delegate the whole turn to `codex exec` =====
+      if (get().provider === 'codex') {
+        const runId = crypto.randomUUID()
+        set({ streamId: runId })
+        const itemCards = new Map<string, string>() // codex item id → chat card id
+        let sawError = false
+
+        const handleEvent = (event: CodexEvent): void => {
+          if (runAborted) return
+          if (event.kind === 'thread') {
+            if (event.threadId) set({ codexThreadId: event.threadId })
+          } else if (event.kind === 'item') {
+            const it = event.item
+            if (it.type === 'reasoning') return // keep the chat focused on actions + answers
+            if (it.type === 'agent_message') {
+              if (event.phase === 'completed' && it.text?.trim()) {
+                addMsg({ id: crypto.randomUUID(), role: 'assistant', kind: 'text', text: it.text.trim() })
+              }
+              return
+            }
+            const card = codexItemToCard(it)
+            const existingId = itemCards.get(it.id)
+            if (existingId) patch(existingId, card)
+            else {
+              const cardId = crypto.randomUUID()
+              itemCards.set(it.id, cardId)
+              addMsg({ id: cardId, role: 'assistant', kind: 'tool', text: '', ...card })
+            }
+          } else if (event.kind === 'error') {
+            sawError = true
+            addMsg({ id: crypto.randomUUID(), role: 'assistant', kind: 'text', text: `⚠ ${event.message}` })
+          }
+        }
+
+        const res = await api.codex.run(
+          runId,
+          {
+            prompt: trimmed,
+            cwd: root,
+            threadId: get().codexThreadId ?? undefined,
+            model: get().codexModel || undefined,
+            sandbox: get().codexSandbox
+          },
+          handleEvent
+        )
+
+        set({ streamId: null })
+        if (res.threadId) set({ codexThreadId: res.threadId })
+        if (!res.ok && !res.aborted) {
+          finalStatus = 'error'
+          addMsg({
+            id: crypto.randomUUID(),
+            role: 'assistant',
+            kind: 'text',
+            text: `⚠ ${res.error ?? 'Codex run failed.'}`
+          })
+        } else if (sawError) {
+          finalStatus = 'error'
+        }
+        return // skip the LM Studio loop; finally still resets state + saves
+      }
+
       for (let step = 0; step < MAX_STEPS && !runAborted; step += 1) {
         // 1) Stream one model turn into a fresh assistant bubble.
         const replyId = crypto.randomUUID()
@@ -710,7 +882,10 @@ export const useApp = create<AppState>((set, get) => ({
   stopStreaming() {
     runAborted = true
     const id = get().streamId
-    if (id) void api.llm.abort(id)
+    if (id) {
+      if (get().provider === 'codex') void api.codex.abort(id)
+      else void api.llm.abort(id)
+    }
     for (const [cardId, resolve] of pendingApprovals) {
       pendingApprovals.delete(cardId)
       resolve(false)
@@ -718,6 +893,13 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   newTask() {
-    set({ messages: [], convo: [], activeTaskId: null, activeTaskTitle: '', view: 'home' })
+    set({
+      messages: [],
+      convo: [],
+      activeTaskId: null,
+      activeTaskTitle: '',
+      codexThreadId: null,
+      view: 'home'
+    })
   }
 }))

@@ -8,7 +8,8 @@ const TOOL_LABEL: Record<string, string> = {
   list_dir: 'List directory',
   read_file: 'Read file',
   write_file: 'Edit file',
-  run_command: 'Run command'
+  run_command: 'Run command',
+  apply_patch: 'Edit files'
 }
 
 function toolIcon(tool?: string): 'terminal' | 'folder' | 'file' {
@@ -77,6 +78,8 @@ function ToolCard({ m }: { m: ChatMessage }): JSX.Element {
       {(m.tool === 'list_dir' || m.tool === 'read_file') && m.output && status === 'done' && (
         <div className="tool-note">{m.output}</div>
       )}
+
+      {m.tool === 'apply_patch' && m.output && <pre className="tool-output">{m.output}</pre>}
 
       {status === 'error' && m.error && <div className="tool-error">{m.error}</div>}
 

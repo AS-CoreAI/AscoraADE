@@ -4,7 +4,9 @@ import {
   DEFAULT_LLM_CONFIG,
   type ChatParams,
   type ChatResult,
+  type CodexSandbox,
   type LlmConfig,
+  type LlmProvider,
   type ListModelsResult
 } from '@shared/ipc'
 import { getStore } from '../store'
@@ -17,8 +19,12 @@ const aborters = new Map<string, AbortController>()
 function readConfig(): LlmConfig {
   const store = getStore()
   return {
+    provider: store.getSetting<LlmProvider>('llm.provider') ?? DEFAULT_LLM_CONFIG.provider,
     baseUrl: store.getSetting<string>('llm.baseUrl') ?? DEFAULT_LLM_CONFIG.baseUrl,
-    model: store.getSetting<string>('llm.model') ?? DEFAULT_LLM_CONFIG.model
+    model: store.getSetting<string>('llm.model') ?? DEFAULT_LLM_CONFIG.model,
+    codexPath: store.getSetting<string>('codex.path') ?? DEFAULT_LLM_CONFIG.codexPath,
+    codexModel: store.getSetting<string>('codex.model') ?? DEFAULT_LLM_CONFIG.codexModel,
+    codexSandbox: store.getSetting<CodexSandbox>('codex.sandbox') ?? DEFAULT_LLM_CONFIG.codexSandbox
   }
 }
 
@@ -39,8 +45,12 @@ export function registerLlmHandlers(): void {
 
   ipcMain.handle(IPC.llm.setConfig, (_e, patch: Partial<LlmConfig>) => {
     const store = getStore()
+    if (typeof patch.provider === 'string') store.setSetting('llm.provider', patch.provider)
     if (typeof patch.baseUrl === 'string') store.setSetting('llm.baseUrl', patch.baseUrl.trim())
     if (typeof patch.model === 'string') store.setSetting('llm.model', patch.model)
+    if (typeof patch.codexPath === 'string') store.setSetting('codex.path', patch.codexPath.trim())
+    if (typeof patch.codexModel === 'string') store.setSetting('codex.model', patch.codexModel.trim())
+    if (typeof patch.codexSandbox === 'string') store.setSetting('codex.sandbox', patch.codexSandbox)
     getClient() // refresh the cached client with the new config
   })
 
