@@ -323,6 +323,7 @@ interface AppState {
   toggleWorkspaceCollapsed: (id: string) => void
   reorderWorkspaces: (draggedId: string, targetId: string) => void
   openTask: (ws: Workspace, taskId: string) => Promise<void>
+  deleteTask: (ws: Workspace, taskId: string) => Promise<void>
   saveActiveTask: (status: TaskSummary['status']) => Promise<void>
   goHome: () => void
   openAnalytics: () => void
@@ -536,6 +537,30 @@ export const useApp = create<AppState>((set, get) => ({
       claudeSessionId: null,
       glmSessionId: null,
       view: 'workspace'
+    })
+  },
+
+  async deleteTask(ws, taskId) {
+    await api.workspace.deleteTask(taskId)
+    set((state) => {
+      const tasks = state.tasksByWorkspace[ws.id] ?? []
+      const nextTasks = tasks.filter((task) => task.id !== taskId)
+      const next = { ...state.tasksByWorkspace, [ws.id]: nextTasks }
+      // If the deleted task was open, drop its draft state and return home.
+      const wasActive = state.activeTaskId === taskId
+      return wasActive
+        ? {
+            tasksByWorkspace: next,
+            messages: [],
+            convo: [],
+            activeTaskId: null,
+            activeTaskTitle: '',
+            codexThreadId: null,
+            claudeSessionId: null,
+            glmSessionId: null,
+            view: state.active ? 'home' : state.view
+          }
+        : { tasksByWorkspace: next }
     })
   },
 

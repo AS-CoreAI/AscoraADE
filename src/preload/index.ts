@@ -71,7 +71,9 @@ const api = {
     task: (taskId: string): Promise<TaskRecord | null> =>
       ipcRenderer.invoke(IPC.workspace.task, taskId),
     saveTask: (task: TaskRecord): Promise<TaskSummary> =>
-      ipcRenderer.invoke(IPC.workspace.saveTask, task)
+      ipcRenderer.invoke(IPC.workspace.saveTask, task),
+    deleteTask: (taskId: string): Promise<TaskSummary | null> =>
+      ipcRenderer.invoke(IPC.workspace.deleteTask, taskId)
   },
   llm: {
     config: (): Promise<LlmConfig> => ipcRenderer.invoke(IPC.llm.config),

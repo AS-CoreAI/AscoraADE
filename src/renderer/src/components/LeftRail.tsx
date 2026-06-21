@@ -32,6 +32,7 @@ export function LeftRail(): JSX.Element {
   const toggleWorkspaceCollapsed = useApp((s) => s.toggleWorkspaceCollapsed)
   const reorderWorkspaces = useApp((s) => s.reorderWorkspaces)
   const openTask = useApp((s) => s.openTask)
+  const deleteTask = useApp((s) => s.deleteTask)
   const newTask = useApp((s) => s.newTask)
   const [dragId, setDragId] = useState<string | null>(null)
   const [dragOverId, setDragOverId] = useState<string | null>(null)
@@ -158,16 +159,35 @@ export function LeftRail(): JSX.Element {
               </div>
               {!collapsed &&
                 tasks.map((task) => (
-                  <button
+                  <div
                     className={`task-item${activeTaskId === task.id ? ' active' : ''}`}
                     key={task.id}
+                    role="button"
+                    tabIndex={0}
                     onClick={() => openTask(ws, task.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        openTask(ws, task.id)
+                      }
+                    }}
                     title={task.title}
                   >
                     <span className={`task-dot ${task.status}`} />
                     <span className="name">{task.title}</span>
                     <span className="time">{formatTaskTime(task.updatedAt)}</span>
-                  </button>
+                    <button
+                      className="task-delete"
+                      title="Delete task"
+                      aria-label="Delete task"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        void deleteTask(ws, task.id)
+                      }}
+                    >
+                      <Icon name="trash" size={13} />
+                    </button>
+                  </div>
                 ))}
               {!collapsed && tasks.length === 0 && (
                 <div className="task-empty">No tasks yet</div>

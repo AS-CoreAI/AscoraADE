@@ -23,6 +23,8 @@ export interface Store {
   listTasks(workspaceId: string): TaskSummary[]
   getTask(taskId: string): TaskRecord | null
   saveTask(task: TaskRecord): TaskSummary
+  /** Soft-delete: stamps `deletedAt` and returns the updated summary, or null if not found. */
+  deleteTask(taskId: string): TaskSummary | null
   addUsage(event: UsageEvent): void
   listUsage(): UsageEvent[]
   close(): void
@@ -38,8 +40,8 @@ interface DbShape {
 const EMPTY: DbShape = { settings: {}, workspaces: [], tasks: [], usage: [] }
 
 function taskSummary(task: TaskRecord): TaskSummary {
-  const { id, workspaceId, title, status, updatedAt } = task
-  return { id, workspaceId, title, status, updatedAt }
+  const { id, workspaceId, title, status, updatedAt, deletedAt } = task
+  return deletedAt ? { id, workspaceId, title, status, updatedAt, deletedAt } : { id, workspaceId, title, status, updatedAt }
 }
 
 function parseArray<T>(value: string): T[] {
@@ -133,13 +135,13 @@ class JsonStore implements Store {
 
   listTasks(workspaceId: string): TaskSummary[] {
     return this.data.tasks
-      .filter((t) => t.workspaceId === workspaceId)
+      .filter((t) => t.workspaceId === workspaceId && !t.deletedAt)
       .sort((a, b) => b.updatedAt - a.updatedAt)
       .map(taskSummary)
   }
 
   getTask(taskId: string): TaskRecord | null {
-    const task = this.data.tasks.find((item) => item.id === taskId)
+    const task = this.data.tasks.find((item) => item.id === taskId && !item.deletedAt)
     return task ? structuredClone(task) : null
   }
 
@@ -150,6 +152,14 @@ class JsonStore implements Store {
     else this.data.tasks[index] = stored
     this.scheduleFlush()
     return taskSummary(stored)
+  }
+
+  deleteTask(taskId: string): TaskSummary | null {
+    const task = this.data.tasks.find((item) => item.id === taskId)
+    if (!task || task.deletedAt) return null
+    task.deletedAt = Date.now()
+    this.scheduleFlush()
+    return taskSummary(task)
   }
 
   addUsage(event: UsageEvent): void {
@@ -224,6 +234,9 @@ class SqliteStore implements Store {
     if (!columns.some((column) => column.name === 'convo_json')) {
       this.db.exec("ALTER TABLE tasks ADD COLUMN convo_json TEXT NOT NULL DEFAULT '[]'")
     }
+    if (!columns.some((column) => column.name === 'deleted_at')) {
+      this.db.exec('ALTER TABLE tasks ADD COLUMN deleted_at INTEGER')
+    }
     this.db.prepare("UPDATE tasks SET status = 'idle' WHERE status = 'running'").run()
   }
 
@@ -274,7 +287,8 @@ class SqliteStore implements Store {
   listTasks(workspaceId: string): TaskSummary[] {
     const rows = this.db
       .prepare(
-        'SELECT id, workspace_id, title, status, updated_at FROM tasks WHERE workspace_id = ? ORDER BY updated_at DESC'
+        `SELECT id, workspace_id, title, status, updated_at, deleted_at
+         FROM tasks WHERE workspace_id = ? AND deleted_at IS NULL ORDER BY updated_at DESC`
       )
       .all(workspaceId) as {
       id: string
@@ -282,6 +296,7 @@ class SqliteStore implements Store {
       title: string
       status: TaskSummary['status']
       updated_at: number
+      deleted_at: number | null
     }[]
     return rows.map((r) => ({
       id: r.id,
@@ -295,8 +310,8 @@ class SqliteStore implements Store {
   getTask(taskId: string): TaskRecord | null {
     const row = this.db
       .prepare(
-        `SELECT id, workspace_id, title, status, updated_at, messages_json, convo_json
-         FROM tasks WHERE id = ?`
+        `SELECT id, workspace_id, title, status, updated_at, deleted_at, messages_json, convo_json
+         FROM tasks WHERE id = ? AND deleted_at IS NULL`
       )
       .get(taskId) as
       | {
@@ -305,6 +320,7 @@ class SqliteStore implements Store {
           title: string
           status: TaskSummary['status']
           updated_at: number
+          deleted_at: number | null
           messages_json: string
           convo_json: string
         }
@@ -345,6 +361,32 @@ class SqliteStore implements Store {
         JSON.stringify(task.convo)
       )
     return taskSummary(task)
+  }
+
+  deleteTask(taskId: string): TaskSummary | null {
+    const now = Date.now()
+    const info = this.db
+      .prepare('UPDATE tasks SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL')
+      .run(now, taskId)
+    if (info.changes === 0) return null
+    const row = this.db
+      .prepare('SELECT id, workspace_id, title, status, updated_at, deleted_at FROM tasks WHERE id = ?')
+      .get(taskId) as {
+      id: string
+      workspace_id: string
+      title: string
+      status: TaskSummary['status']
+      updated_at: number
+      deleted_at: number
+    }
+    return {
+      id: row.id,
+      workspaceId: row.workspace_id,
+      title: row.title,
+      status: row.status,
+      updatedAt: row.updated_at,
+      deletedAt: row.deleted_at
+    }
   }
 
   addUsage(event: UsageEvent): void {

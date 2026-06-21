@@ -23,4 +23,7 @@ export function registerSettingsHandlers(): void {
   ipcMain.handle(IPC.workspace.saveTask, (_e, task: TaskRecord): TaskSummary =>
     getStore().saveTask(task)
   )
+  ipcMain.handle(IPC.workspace.deleteTask, (_e, taskId: string): TaskSummary | null =>
+    getStore().deleteTask(taskId)
+  )
 }

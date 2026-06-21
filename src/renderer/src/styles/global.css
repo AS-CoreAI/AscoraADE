@@ -349,11 +349,12 @@ button {
   display: flex;
   align-items: center;
   gap: 9px;
-  padding: 5px 14px 5px 34px;
+  padding: 5px 8px 5px 34px;
   color: var(--text-muted);
   font-size: 12.5px;
   width: 100%;
   text-align: left;
+  cursor: pointer;
 }
 .task-item:hover {
   background: var(--bg-hover);
@@ -368,11 +369,34 @@ button {
   text-overflow: ellipsis;
   white-space: nowrap;
   flex: 1;
+  min-width: 0;
 }
 .task-item .time {
   color: var(--text-faint);
   font-size: 11px;
   flex-shrink: 0;
+}
+.task-delete {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  padding: 0;
+  border-radius: var(--radius-sm);
+  color: var(--text-faint);
+  opacity: 0;
+  transition: opacity 120ms ease, color 120ms ease, background 120ms ease;
+}
+.task-item:hover .task-delete,
+.task-item.active .task-delete,
+.task-delete:focus-visible {
+  opacity: 1;
+}
+.task-delete:hover {
+  color: var(--danger);
+  background: var(--bg-hover);
 }
 .task-dot {
   width: 6px;

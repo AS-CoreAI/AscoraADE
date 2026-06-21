@@ -30,7 +30,8 @@ export const IPC = {
     add: 'workspace:add',
     tasks: 'workspace:tasks',
     task: 'workspace:task',
-    saveTask: 'workspace:saveTask'
+    saveTask: 'workspace:saveTask',
+    deleteTask: 'workspace:deleteTask'
   },
   llm: {
     config: 'llm:config',
@@ -126,6 +127,8 @@ export interface TaskSummary {
   updatedAt: number
   /** Visual status dot in the rail. */
   status: 'idle' | 'running' | 'error'
+  /** Epoch ms when the task was soft-deleted; present (and filtered out) when set. */
+  deletedAt?: number
 }
 
 /** A renderer chat entry persisted as part of a task. */
