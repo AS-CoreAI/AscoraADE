@@ -4,9 +4,16 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/png" href="/ascora-ade-favicon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+      o.alicdn.com + g.alicdn.com (script-src/style-src) are required by the
+      Aliyun CAPTCHA used for the GLM/ZCode Start Plan preflight: the SDK loads
+      from o.alicdn.com and pulls its dynamic widget JS/CSS (device fingerprint)
+      from g.alicdn.com. Without g.alicdn.com the fingerprint fails, the proof
+      degrades, and z.ai rejects the turn with `3007 captcha verify failed`.
+    -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; worker-src 'self' blob:; connect-src 'self' ws: wss: http://localhost:* http://127.0.0.1:*"
+      content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://o.alicdn.com https://g.alicdn.com; style-src 'self' 'unsafe-inline' https://g.alicdn.com; img-src 'self' data: https:; font-src 'self' data:; worker-src 'self' blob:; frame-src https:; connect-src 'self' ws: wss: https: http://localhost:* http://127.0.0.1:*"
     />
     <title>Ascora ADE</title>
   </head>

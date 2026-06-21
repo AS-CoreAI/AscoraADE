@@ -27,6 +27,7 @@ type IconName =
   | 'refresh'
   | 'settings'
   | 'check'
+  | 'copy'
   | 'trash'
   | 'barChart'
   | 'x'
@@ -156,6 +157,12 @@ const paths: Record<IconName, JSX.Element> = {
     </>
   ),
   check: <polyline points="20 6 9 17 4 12" />,
+  copy: (
+    <>
+      <rect x="8" y="8" width="11" height="11" rx="2" />
+      <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" />
+    </>
+  ),
   barChart: (
     <>
       <line x1="4" y1="20" x2="4" y2="11" />

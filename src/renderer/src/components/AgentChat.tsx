@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState, type JSX } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type JSX } from 'react'
 import { Composer } from './Composer'
 import { Icon } from './Icon'
 import { useApp, type ChatMessage, type ToolStatus } from '@/state/store'
@@ -112,6 +112,72 @@ function ReasoningBlock({ text }: { text: string }): JSX.Element {
   )
 }
 
+async function copyText(text: string): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(text)
+    return
+  } catch {
+    // Electron normally exposes the Clipboard API; keep a fallback for older builds.
+  }
+
+  const textarea = document.createElement('textarea')
+  textarea.value = text
+  textarea.setAttribute('readonly', '')
+  textarea.style.position = 'fixed'
+  textarea.style.opacity = '0'
+  document.body.appendChild(textarea)
+  textarea.select()
+  const copied = document.execCommand('copy')
+  textarea.remove()
+  if (!copied) throw new Error('Clipboard write failed')
+}
+
+function TextMessage({ m }: { m: ChatMessage }): JSX.Element {
+  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'error'>('idle')
+  const resetTimer = useRef<number | null>(null)
+
+  useEffect(
+    () => () => {
+      if (resetTimer.current !== null) window.clearTimeout(resetTimer.current)
+    },
+    []
+  )
+
+  const copy = async (): Promise<void> => {
+    if (!m.text) return
+    try {
+      await copyText(m.text)
+      setCopyState('copied')
+    } catch {
+      setCopyState('error')
+    }
+    if (resetTimer.current !== null) window.clearTimeout(resetTimer.current)
+    resetTimer.current = window.setTimeout(() => setCopyState('idle'), 1800)
+  }
+
+  return (
+    <div className={`msg ${m.role}`}>
+      <div className="msg-head">
+        <span className="role">{m.role === 'user' ? 'You' : 'Ascora'}</span>
+        {m.role === 'assistant' && (
+          <button
+            type="button"
+            className={`msg-copy ${copyState}`}
+            onClick={() => void copy()}
+            disabled={!m.text}
+            title={copyState === 'copied' ? 'Copied' : copyState === 'error' ? 'Copy failed' : 'Copy response'}
+            aria-label="Copy assistant response"
+          >
+            <Icon name={copyState === 'copied' ? 'check' : 'copy'} size={12} />
+            <span>{copyState === 'copied' ? 'Copied' : copyState === 'error' ? 'Failed' : 'Copy'}</span>
+          </button>
+        )}
+      </div>
+      <div className="bubble">{m.text}</div>
+    </div>
+  )
+}
+
 function Messages({ messages }: { messages: ChatMessage[] }): JSX.Element {
   if (messages.length === 0) {
     return (
@@ -130,10 +196,7 @@ function Messages({ messages }: { messages: ChatMessage[] }): JSX.Element {
         ) : m.reasoning ? (
           <ReasoningBlock key={m.id} text={m.text} />
         ) : (
-          <div key={m.id} className={`msg ${m.role}`}>
-            <span className="role">{m.role === 'user' ? 'You' : 'Ascora'}</span>
-            <div className="bubble">{m.text}</div>
-          </div>
+          <TextMessage key={m.id} m={m} />
         )
       )}
     </>

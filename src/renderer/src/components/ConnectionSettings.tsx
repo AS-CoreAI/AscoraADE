@@ -7,9 +7,11 @@ import {
   CODEX_REASONING_LEVELS,
   CLAUDE_MODEL_PRESETS,
   CLAUDE_PERMISSION_MODES,
+  GLM_MODES,
   type CodexReasoning,
   type CodexSandbox,
   type ClaudePermissionMode,
+  type GlmMode,
   type LlmProvider
 } from '@shared/ipc'
 
@@ -24,6 +26,13 @@ const SANDBOX_LABEL: Record<CodexSandbox, string> = {
   'read-only': 'Read-only (no edits or commands)',
   'workspace-write': 'Workspace write (edit this folder, sandboxed)',
   'danger-full-access': 'Full access (no sandbox — dangerous)'
+}
+
+const GLM_MODE_LABEL: Record<GlmMode, string> = {
+  plan: 'Plan only (read-only; proposes a plan)',
+  build: 'Build (may pause for approvals — can stall headless)',
+  edit: 'Auto-edit (may pause for command approvals)',
+  yolo: 'Full access (auto-approve everything — recommended headless)'
 }
 
 function LmStudioPanel(): JSX.Element {
@@ -322,6 +331,103 @@ function ClaudePanel(): JSX.Element {
   )
 }
 
+function GlmPanel(): JSX.Element {
+  const glmPath = useApp((s) => s.glmPath)
+  const setGlmPath = useApp((s) => s.setGlmPath)
+  const glmMode = useApp((s) => s.glmMode)
+  const setGlmMode = useApp((s) => s.setGlmMode)
+  const check = useApp((s) => s.glmCheck)
+  const checking = useApp((s) => s.glmChecking)
+  const checkGlm = useApp((s) => s.checkGlm)
+
+  const [path, setPath] = useState(glmPath)
+  const apply = async (): Promise<void> => {
+    await setGlmPath(path.trim())
+  }
+
+  return (
+    <>
+      <label className="field">
+        <span className="field-label">ZCode path</span>
+        <div className="field-row">
+          <input
+            className="text-input"
+            value={path}
+            spellCheck={false}
+            placeholder="(auto-detect installed ZCode)"
+            onChange={(e) => setPath(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && void apply()}
+          />
+          <button className="btn" onClick={() => void apply()} disabled={checking}>
+            {checking ? 'Checking…' : 'Check'}
+          </button>
+        </div>
+        <span className="field-hint">
+          Install folder, ZCode.exe, or resources/glm/zcode.cjs. Leave blank to auto-detect the
+          installed app. Ascora keeps its sessions separate and never rewrites ZCode&apos;s CLI config.
+        </span>
+      </label>
+
+      <label className="field">
+        <span className="field-label">Permission mode</span>
+        <select
+          className="text-input"
+          value={glmMode}
+          onChange={(e) => setGlmMode(e.target.value as GlmMode)}
+        >
+          {GLM_MODES.map((m) => (
+            <option key={m} value={m}>
+              {GLM_MODE_LABEL[m]}
+            </option>
+          ))}
+        </select>
+        <span className="field-hint">
+          Standalone CLI config is preferred. Desktop Coding Plan and Start Plan are detected automatically;
+          Start Plan performs its official CAPTCHA check before each request.
+        </span>
+      </label>
+
+      <div
+        className={`conn-line ${
+          checking
+            ? 'connecting'
+            : !check
+              ? 'unknown'
+              : check.installed && check.loggedIn
+                ? 'connected'
+                : 'error'
+        }`}
+      >
+        {checking && 'Checking ZCode…'}
+        {!checking && !check && 'Not checked yet.'}
+        {!checking && check && !check.installed && `✗ ${check.error ?? 'ZCode not found.'}`}
+        {!checking && check && check.installed && (
+          <>
+            {check.loggedIn ? '✓' : '⚠'} {check.version ? `zcode ${check.version}` : 'zcode'} ·{' '}
+            {check.authNote ?? 'ready'}
+            {check.path ? <div className="field-hint">{check.path}</div> : null}
+          </>
+        )}
+      </div>
+
+      {!checking && check?.installed && !check.loggedIn && (
+        <div className="field-hint">
+          Sign in and select a model in ZCode, or configure a standalone Coding Plan with the bundled CLI login.
+        </div>
+      )}
+
+      <button
+        className="btn"
+        style={{ alignSelf: 'flex-start' }}
+        onClick={() => void checkGlm()}
+        disabled={checking}
+      >
+        Re-check
+      </button>
+    </>
+  )
+}
+
 export function ConnectionSettings(): JSX.Element | null {
   const open = useApp((s) => s.settingsOpen)
   const setOpen = useApp((s) => s.setSettingsOpen)
@@ -351,6 +457,7 @@ export function ConnectionSettings(): JSX.Element | null {
               <option value="lmstudio">LM Studio (local, OpenAI-compatible)</option>
               <option value="codex">Codex CLI (OpenAI's coding agent)</option>
               <option value="claude">Claude Code (Anthropic's coding agent)</option>
+              <option value="glm">GLM / ZCode (Zhipu coding agent)</option>
             </select>
           </label>
 
@@ -358,6 +465,8 @@ export function ConnectionSettings(): JSX.Element | null {
             <CodexPanel />
           ) : provider === 'claude' ? (
             <ClaudePanel />
+          ) : provider === 'glm' ? (
+            <GlmPanel />
           ) : (
             <LmStudioPanel />
           )}

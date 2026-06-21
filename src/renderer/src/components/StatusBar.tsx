@@ -1,6 +1,6 @@
 import type { JSX } from 'react'
 import { useApp } from '@/state/store'
-import { REASONING_LABEL, PERMISSION_SHORT } from './Composer'
+import { REASONING_LABEL, PERMISSION_SHORT, GLM_MODE_SHORT } from './Composer'
 
 const CONN_LABEL: Record<string, string> = {
   unknown: 'LM Studio: —',
@@ -32,6 +32,9 @@ export function StatusBar(): JSX.Element {
   const claudeCheck = useApp((s) => s.claudeCheck)
   const claudeChecking = useApp((s) => s.claudeChecking)
   const claudePermission = useApp((s) => s.claudePermission)
+  const glmCheck = useApp((s) => s.glmCheck)
+  const glmChecking = useApp((s) => s.glmChecking)
+  const glmMode = useApp((s) => s.glmMode)
   const openFiles = useApp((s) => s.openFiles)
   const activeFile = useApp((s) => s.activeFile)
   const setSettingsOpen = useApp((s) => s.setSettingsOpen)
@@ -39,14 +42,15 @@ export function StatusBar(): JSX.Element {
 
   const isCodex = provider === 'codex'
   const isClaude = provider === 'claude'
+  const isGlm = provider === 'glm'
 
   // Status dot color + label for the active backend.
   let dotColor: string
   let label: string
-  if (isCodex || isClaude) {
-    const name = isClaude ? 'Claude' : 'Codex'
-    const check = isClaude ? claudeCheck : codexCheck
-    const checking = isClaude ? claudeChecking : codexChecking
+  if (isCodex || isClaude || isGlm) {
+    const name = isClaude ? 'Claude' : isGlm ? 'GLM' : 'Codex'
+    const check = isClaude ? claudeCheck : isGlm ? glmCheck : codexCheck
+    const checking = isClaude ? claudeChecking : isGlm ? glmChecking : codexChecking
     if (checking) {
       dotColor = CONN_COLOR.connecting
       label = `${name}: checking…`
@@ -71,19 +75,23 @@ export function StatusBar(): JSX.Element {
         : CONN_LABEL[connection]
   }
 
-  const modelLabel = isClaude
-    ? claudeModel || 'claude (default)'
-    : isCodex
-      ? codexModel || 'codex (default)'
-      : model || '(no model)'
+  const modelLabel = isGlm
+    ? 'GLM (ZCode)'
+    : isClaude
+      ? claudeModel || 'claude (default)'
+      : isCodex
+        ? codexModel || 'codex (default)'
+        : model || '(no model)'
 
   const accessLabel = isCodex
     ? `sandbox: ${codexSandbox}${codexReasoning ? ` · ${REASONING_LABEL[codexReasoning]}` : ''}`
     : isClaude
       ? `access: ${PERMISSION_SHORT[claudePermission]}`
-      : mode === 'ask'
-        ? 'Ask before changes'
-        : 'Auto-apply'
+      : isGlm
+        ? `mode: ${GLM_MODE_SHORT[glmMode]}`
+        : mode === 'ask'
+          ? 'Ask before changes'
+          : 'Auto-apply'
 
   return (
     <div className="statusbar">

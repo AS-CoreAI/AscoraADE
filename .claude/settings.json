@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ELECTRON_RUN_AS_NODE=1 /c/Users/strazewicz/AppData/Local/Programs/ZCode/ZCode.exe C:/Users/strazewicz/AppData/Local/Programs/ZCode/resources/glm/zcode.cjs --version)",
+      "Bash(echo \"=== exit: $? ===\")",
+      "Read(//c/Users/strazewicz/.zcode/**)",
+      "Read(//c/Users/strazewicz/AppData/Roaming/ZCode/**)",
+      "Read(//c/Users/strazewicz/AppData/Roaming/zcode/**)"
+    ]
+  }
+}

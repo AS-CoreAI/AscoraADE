@@ -10,12 +10,14 @@ import type {
   CodexSandbox,
   CodexReasoning,
   ClaudePermissionMode,
+  GlmMode,
   CodexEvent,
   CodexItem,
   CodexCheckResult
 } from '@shared/ipc'
 import { DEFAULT_LLM_CONFIG } from '@shared/ipc'
 import { api } from '@/lib/api'
+import { solveZCodeCaptcha } from '@/lib/zcode-captcha'
 
 export type View = 'home' | 'workspace' | 'analytics'
 /** Agent permission mode — mirrors ZCode's "Ask before changes" control. */
@@ -159,6 +161,24 @@ function taskTitle(text: string): string {
   return title.length > 72 ? `${title.slice(0, 69)}...` : title
 }
 
+/**
+ * Order workspaces by a saved id sequence. Workspaces missing from `order`
+ * (newly opened folders) float to the top by recency; everything else follows
+ * the user's manually arranged order.
+ */
+function sortWorkspaces(workspaces: Workspace[], order: string[]): Workspace[] {
+  if (order.length === 0) return workspaces
+  const rank = new Map(order.map((id, index) => [id, index]))
+  return [...workspaces].sort((a, b) => {
+    const ra = rank.get(a.id)
+    const rb = rank.get(b.id)
+    if (ra === undefined && rb === undefined) return b.lastOpenedAt - a.lastOpenedAt
+    if (ra === undefined) return -1
+    if (rb === undefined) return 1
+    return ra - rb
+  })
+}
+
 function isThemePreference(value: unknown): value is ThemePreference {
   return value === 'dark' || value === 'light' || value === 'system'
 }
@@ -239,6 +259,10 @@ function codexItemToCard(it: CodexItem): Partial<ChatMessage> {
 interface AppState {
   view: View
   workspaces: Workspace[]
+  /** User-arranged display order of workspace ids (persisted). */
+  workspaceOrder: string[]
+  /** Workspace ids whose task list is collapsed in the rail (persisted). */
+  collapsedWorkspaces: Record<string, boolean>
   active: Workspace | null
   tasksByWorkspace: Record<string, TaskSummary[]>
   activeTaskId: string | null
@@ -275,6 +299,12 @@ interface AppState {
   claudeSessionId: string | null
   claudeCheck: CodexCheckResult | null
   claudeChecking: boolean
+  // GLM / ZCode
+  glmPath: string
+  glmMode: GlmMode
+  glmSessionId: string | null
+  glmCheck: CodexCheckResult | null
+  glmChecking: boolean
   settingsOpen: boolean
   themePreference: ThemePreference
   resolvedTheme: ResolvedTheme
@@ -290,6 +320,8 @@ interface AppState {
   openFolder: () => Promise<void>
   loadWorkspaceData: (ws: Workspace) => Promise<void>
   openWorkspace: (ws: Workspace) => Promise<void>
+  toggleWorkspaceCollapsed: (id: string) => void
+  reorderWorkspaces: (draggedId: string, targetId: string) => void
   openTask: (ws: Workspace, taskId: string) => Promise<void>
   saveActiveTask: (status: TaskSummary['status']) => Promise<void>
   goHome: () => void
@@ -313,6 +345,9 @@ interface AppState {
   setClaudeModel: (m: string) => void
   setClaudePermission: (p: ClaudePermissionMode) => void
   checkClaude: () => Promise<void>
+  setGlmPath: (path: string) => Promise<void>
+  setGlmMode: (m: GlmMode) => void
+  checkGlm: () => Promise<void>
   setSettingsOpen: (open: boolean) => void
   setThemePreference: (theme: ThemePreference) => void
   syncSystemTheme: () => void
@@ -328,6 +363,8 @@ interface AppState {
 export const useApp = create<AppState>((set, get) => ({
   view: 'home',
   workspaces: [],
+  workspaceOrder: [],
+  collapsedWorkspaces: {},
   active: null,
   tasksByWorkspace: {},
   activeTaskId: null,
@@ -357,6 +394,11 @@ export const useApp = create<AppState>((set, get) => ({
   claudeSessionId: null,
   claudeCheck: null,
   claudeChecking: false,
+  glmPath: DEFAULT_LLM_CONFIG.glmPath,
+  glmMode: DEFAULT_LLM_CONFIG.glmMode,
+  glmSessionId: null,
+  glmCheck: null,
+  glmChecking: false,
   settingsOpen: false,
   themePreference: 'dark',
   resolvedTheme: 'dark',
@@ -368,18 +410,26 @@ export const useApp = create<AppState>((set, get) => ({
   streamId: null,
 
   async init() {
-    const [workspaces, cfg, savedTheme] = await Promise.all([
+    const [workspaces, cfg, savedTheme, savedOrder, savedCollapsed] = await Promise.all([
       api.workspace.list(),
       api.llm.config(),
-      api.settings.get<ThemePreference>('appearance.theme')
+      api.settings.get<ThemePreference>('appearance.theme'),
+      api.settings.get<string[]>('workspace.order'),
+      api.settings.get<Record<string, boolean>>('workspace.collapsed')
     ])
+    const workspaceOrder = Array.isArray(savedOrder) ? savedOrder : []
+    const collapsedWorkspaces =
+      savedCollapsed && typeof savedCollapsed === 'object' ? savedCollapsed : {}
+    const ordered = sortWorkspaces(workspaces, workspaceOrder)
     const themePreference = isThemePreference(savedTheme) ? savedTheme : 'dark'
     const resolvedTheme = applyTheme(themePreference)
     const taskLists = await Promise.all(
-      workspaces.map(async (workspace) => [workspace.id, await api.workspace.tasks(workspace.id)] as const)
+      ordered.map(async (workspace) => [workspace.id, await api.workspace.tasks(workspace.id)] as const)
     )
     set({
-      workspaces,
+      workspaces: ordered,
+      workspaceOrder,
+      collapsedWorkspaces,
       tasksByWorkspace: Object.fromEntries(taskLists),
       provider: cfg.provider,
       baseUrl: cfg.baseUrl,
@@ -391,13 +441,16 @@ export const useApp = create<AppState>((set, get) => ({
       claudePath: cfg.claudePath,
       claudeModel: cfg.claudeModel,
       claudePermission: cfg.claudePermission,
+      glmPath: cfg.glmPath,
+      glmMode: cfg.glmMode,
       themePreference,
       resolvedTheme
     })
-    if (workspaces.length > 0) await get().loadWorkspaceData(workspaces[0])
+    if (ordered.length > 0) await get().loadWorkspaceData(ordered[0])
     await get().refreshModels()
     if (cfg.provider === 'codex') await get().checkCodex()
     if (cfg.provider === 'claude') await get().checkClaude()
+    if (cfg.provider === 'glm') await get().checkGlm()
   },
 
   async openFolder() {
@@ -406,7 +459,7 @@ export const useApp = create<AppState>((set, get) => ({
     const workspaces = await api.workspace.list()
     const tasks = await api.workspace.tasks(ws.id)
     set((state) => ({
-      workspaces,
+      workspaces: sortWorkspaces(workspaces, state.workspaceOrder),
       tasksByWorkspace: { ...state.tasksByWorkspace, [ws.id]: tasks }
     }))
     await get().openWorkspace(ws)
@@ -437,8 +490,35 @@ export const useApp = create<AppState>((set, get) => ({
       activeTaskTitle: '',
       codexThreadId: null,
       claudeSessionId: null,
+      glmSessionId: null,
       tasksByWorkspace: { ...state.tasksByWorkspace, [ws.id]: tasks }
     }))
+  },
+
+  toggleWorkspaceCollapsed(id) {
+    set((s) => {
+      const next = { ...s.collapsedWorkspaces }
+      if (next[id]) delete next[id]
+      else next[id] = true
+      void api.settings.set('workspace.collapsed', next)
+      return { collapsedWorkspaces: next }
+    })
+  },
+
+  reorderWorkspaces(draggedId, targetId) {
+    if (draggedId === targetId) return
+    set((s) => {
+      const list = [...s.workspaces]
+      const from = list.findIndex((w) => w.id === draggedId)
+      if (from === -1) return {}
+      const [moved] = list.splice(from, 1)
+      const to = list.findIndex((w) => w.id === targetId)
+      // Drop the dragged folder just before the target row.
+      list.splice(to === -1 ? list.length : to, 0, moved)
+      const workspaceOrder = list.map((w) => w.id)
+      void api.settings.set('workspace.order', workspaceOrder)
+      return { workspaces: list, workspaceOrder }
+    })
   },
 
   async openTask(ws, taskId) {
@@ -454,6 +534,7 @@ export const useApp = create<AppState>((set, get) => ({
       convo: task.convo,
       codexThreadId: null,
       claudeSessionId: null,
+      glmSessionId: null,
       view: 'workspace'
     })
   },
@@ -569,6 +650,7 @@ export const useApp = create<AppState>((set, get) => ({
     await api.llm.setConfig({ provider })
     if (provider === 'codex') await get().checkCodex()
     else if (provider === 'claude') await get().checkClaude()
+    else if (provider === 'glm') await get().checkGlm()
     else await get().refreshModels()
   },
 
@@ -635,6 +717,30 @@ export const useApp = create<AppState>((set, get) => ({
     }
   },
 
+  async setGlmPath(path) {
+    set({ glmPath: path })
+    await api.llm.setConfig({ glmPath: path })
+    await get().checkGlm()
+  },
+
+  setGlmMode(glmMode) {
+    set({ glmMode })
+    void api.llm.setConfig({ glmMode })
+  },
+
+  async checkGlm() {
+    set({ glmChecking: true })
+    try {
+      const res = await api.glm.check()
+      set({ glmCheck: res, glmChecking: false })
+    } catch (err) {
+      set({
+        glmCheck: { ok: false, installed: false, error: err instanceof Error ? err.message : String(err) },
+        glmChecking: false
+      })
+    }
+  },
+
   setSettingsOpen(open) {
     set({ settingsOpen: open })
   },
@@ -684,10 +790,36 @@ export const useApp = create<AppState>((set, get) => ({
     await get().saveActiveTask('running')
 
     try {
-      // ===== Codex / Claude CLI backends: delegate the turn to the agent CLI =====
+      // ===== Codex / Claude / GLM CLI backends: delegate the turn to the agent CLI =====
       const agentProvider = get().provider
-      if (agentProvider === 'codex' || agentProvider === 'claude') {
+      if (agentProvider === 'codex' || agentProvider === 'claude' || agentProvider === 'glm') {
         const isClaude = agentProvider === 'claude'
+        const isGlm = agentProvider === 'glm'
+        let glmCaptcha: { captchaVerifyParam?: string; captchaRegion?: string } = {}
+        if (isGlm) {
+          try {
+            const captcha = await api.glm.captchaConfig()
+            if (captcha.error) throw new Error(captcha.error)
+            if (captcha.required) {
+              if (!captcha.config) throw new Error('ZCode CAPTCHA configuration is missing')
+              glmCaptcha = {
+                captchaVerifyParam: await solveZCodeCaptcha(captcha.config),
+                captchaRegion: captcha.config.region
+              }
+            }
+          } catch (err) {
+            finalStatus = 'error'
+            addMsg({
+              id: crypto.randomUUID(),
+              role: 'assistant',
+              kind: 'text',
+              text: `⚠ ${err instanceof Error ? err.message : String(err)}`
+            })
+            return
+          }
+        }
+        const setSession = (threadId: string): void =>
+          set(isGlm ? { glmSessionId: threadId } : isClaude ? { claudeSessionId: threadId } : { codexThreadId: threadId })
         const runId = crypto.randomUUID()
         set({ streamId: runId })
         const itemCards = new Map<string, string>() // agent item id → chat card id
@@ -696,9 +828,7 @@ export const useApp = create<AppState>((set, get) => ({
         const handleEvent = (event: CodexEvent): void => {
           if (runAborted) return
           if (event.kind === 'thread') {
-            if (event.threadId) {
-              set(isClaude ? { claudeSessionId: event.threadId } : { codexThreadId: event.threadId })
-            }
+            if (event.threadId) setSession(event.threadId)
           } else if (event.kind === 'item') {
             const it = event.item
             if (it.type === 'reasoning') {
@@ -733,35 +863,45 @@ export const useApp = create<AppState>((set, get) => ({
           }
         }
 
-        const res = isClaude
-          ? await api.claude.run(
+        const res = isGlm
+          ? await api.glm.run(
               runId,
               {
                 prompt: trimmed,
                 cwd: root,
-                sessionId: get().claudeSessionId ?? undefined,
-                model: get().claudeModel || undefined,
-                permission: get().claudePermission
+                sessionId: get().glmSessionId ?? undefined,
+                mode: get().glmMode,
+                ...glmCaptcha
               },
               handleEvent
             )
-          : await api.codex.run(
-              runId,
-              {
-                prompt: trimmed,
-                cwd: root,
-                threadId: get().codexThreadId ?? undefined,
-                model: get().codexModel || undefined,
-                sandbox: get().codexSandbox,
-                reasoning: get().codexReasoning || undefined
-              },
-              handleEvent
-            )
+          : isClaude
+            ? await api.claude.run(
+                runId,
+                {
+                  prompt: trimmed,
+                  cwd: root,
+                  sessionId: get().claudeSessionId ?? undefined,
+                  model: get().claudeModel || undefined,
+                  permission: get().claudePermission
+                },
+                handleEvent
+              )
+            : await api.codex.run(
+                runId,
+                {
+                  prompt: trimmed,
+                  cwd: root,
+                  threadId: get().codexThreadId ?? undefined,
+                  model: get().codexModel || undefined,
+                  sandbox: get().codexSandbox,
+                  reasoning: get().codexReasoning || undefined
+                },
+                handleEvent
+              )
 
         set({ streamId: null })
-        if (res.threadId) {
-          set(isClaude ? { claudeSessionId: res.threadId } : { codexThreadId: res.threadId })
-        }
+        if (res.threadId) setSession(res.threadId)
 
         // Record usage for the dashboard (real token counts when reported).
         {
@@ -772,11 +912,13 @@ export const useApp = create<AppState>((set, get) => ({
             workspaceName: active.name,
             taskId,
             provider: agentProvider,
-            model: isClaude
-              ? claudeModel && claudeModel !== 'default'
-                ? claudeModel
-                : 'claude'
-              : get().codexModel || 'codex',
+            model: isGlm
+              ? 'glm'
+              : isClaude
+                ? claudeModel && claudeModel !== 'default'
+                  ? claudeModel
+                  : 'claude'
+                : get().codexModel || 'codex',
             inputTokens: usage.inputTokens,
             outputTokens: usage.outputTokens,
             userMessages: 1,
@@ -791,7 +933,7 @@ export const useApp = create<AppState>((set, get) => ({
             id: crypto.randomUUID(),
             role: 'assistant',
             kind: 'text',
-            text: `⚠ ${res.error ?? (isClaude ? 'Claude run failed.' : 'Codex run failed.')}`
+            text: `⚠ ${res.error ?? (isGlm ? 'ZCode run failed.' : isClaude ? 'Claude run failed.' : 'Codex run failed.')}`
           })
         } else if (sawError) {
           finalStatus = 'error'
@@ -1039,6 +1181,7 @@ export const useApp = create<AppState>((set, get) => ({
       const p = get().provider
       if (p === 'codex') void api.codex.abort(id)
       else if (p === 'claude') void api.claude.abort(id)
+      else if (p === 'glm') void api.glm.abort(id)
       else void api.llm.abort(id)
     }
     for (const [cardId, resolve] of pendingApprovals) {
@@ -1055,6 +1198,7 @@ export const useApp = create<AppState>((set, get) => ({
       activeTaskTitle: '',
       codexThreadId: null,
       claudeSessionId: null,
+      glmSessionId: null,
       view: 'home'
     })
   }

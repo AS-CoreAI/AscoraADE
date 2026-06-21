@@ -14,7 +14,8 @@ import {
 const PROVIDER_LABEL: Record<string, string> = {
   lmstudio: 'LM Studio',
   codex: 'Codex',
-  claude: 'Claude Code'
+  claude: 'Claude Code',
+  glm: 'GLM (ZCode)'
 }
 const providerLabel = (p: string): string => PROVIDER_LABEL[p] ?? p
 

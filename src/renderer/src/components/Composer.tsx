@@ -5,10 +5,12 @@ import {
   CODEX_REASONING_LEVELS,
   CLAUDE_MODEL_PRESETS,
   CLAUDE_PERMISSION_MODES,
+  GLM_MODES,
   type LlmProvider,
   type CodexReasoning,
   type CodexSandbox,
-  type ClaudePermissionMode
+  type ClaudePermissionMode,
+  type GlmMode
 } from '@shared/ipc'
 
 const MODE_LABEL: Record<AgentMode, string> = {
@@ -29,6 +31,14 @@ export const PERMISSION_SHORT: Record<ClaudePermissionMode, string> = {
   default: 'Ask',
   acceptEdits: 'Auto-edit',
   bypassPermissions: 'Full access'
+}
+
+/** Short access labels for the GLM / ZCode permission-mode selector. */
+export const GLM_MODE_SHORT: Record<GlmMode, string> = {
+  plan: 'Plan only',
+  build: 'Build',
+  edit: 'Auto-edit',
+  yolo: 'Full access'
 }
 
 /**
@@ -64,6 +74,8 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
   const setClaudeModel = useApp((s) => s.setClaudeModel)
   const claudePermission = useApp((s) => s.claudePermission)
   const setClaudePermission = useApp((s) => s.setClaudePermission)
+  const glmMode = useApp((s) => s.glmMode)
+  const setGlmMode = useApp((s) => s.setGlmMode)
   const mode = useApp((s) => s.mode)
   const setMode = useApp((s) => s.setMode)
   const submitTask = useApp((s) => s.submitTask)
@@ -156,6 +168,21 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
               ))}
             </select>
           </div>
+        ) : provider === 'glm' ? (
+          <div className="composer-tool" title="GLM (ZCode) permission mode">
+            <Icon name="hand" size={15} />
+            <select
+              className="composer-tool-select"
+              value={glmMode}
+              onChange={(e) => setGlmMode(e.target.value as GlmMode)}
+            >
+              {GLM_MODES.map((m) => (
+                <option key={m} value={m}>
+                  {GLM_MODE_SHORT[m]}
+                </option>
+              ))}
+            </select>
+          </div>
         ) : (
           <button
             className="composer-tool"
@@ -179,6 +206,7 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
           <option value="lmstudio">LM Studio</option>
           <option value="codex">Codex</option>
           <option value="claude">Claude</option>
+          <option value="glm">GLM (ZCode)</option>
         </select>
 
         {provider === 'codex' ? (
@@ -228,6 +256,15 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
             {claudeModel && !CLAUDE_MODEL_PRESETS.includes(claudeModel) && (
               <option value={claudeModel}>{claudeModel}</option>
             )}
+          </select>
+        ) : provider === 'glm' ? (
+          <select
+            className="composer-select"
+            value="glm"
+            disabled
+            title="GLM model comes from standalone ZCode CLI config or a compatible desktop Coding Plan"
+          >
+            <option value="glm">GLM · ZCode</option>
           </select>
         ) : (
           <select

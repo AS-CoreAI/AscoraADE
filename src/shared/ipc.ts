@@ -52,6 +52,13 @@ export const IPC = {
     abort: 'claude:abort',
     event: 'claude:event'
   },
+  glm: {
+    check: 'glm:check',
+    captchaConfig: 'glm:captchaConfig',
+    run: 'glm:run',
+    abort: 'glm:abort',
+    event: 'glm:event'
+  },
   analytics: {
     record: 'analytics:record',
     list: 'analytics:list'
@@ -150,7 +157,7 @@ export interface TaskRecord extends TaskSummary {
 // ---------- LLM (provider-agnostic; LM Studio or Codex CLI) ----------
 
 /** Which backend drives the agent chat. */
-export type LlmProvider = 'lmstudio' | 'codex' | 'claude'
+export type LlmProvider = 'lmstudio' | 'codex' | 'claude' | 'glm'
 
 export type LlmRole = 'system' | 'user' | 'assistant' | 'tool'
 
@@ -209,6 +216,17 @@ export const CLAUDE_PERMISSION_MODES: ClaudePermissionMode[] = [
 /** Suggested Claude model aliases (empty → Claude Code's own default). */
 export const CLAUDE_MODEL_PRESETS = ['default', 'opus', 'sonnet', 'haiku']
 
+/**
+ * Permission mode for the GLM / ZCode CLI (`zcode --prompt … --mode <mode>`).
+ * `plan` is read-only; `yolo` auto-approves everything (the CLI's own default
+ * for `--prompt`). `build`/`edit` may prompt for approval, which can stall a
+ * headless run, so `yolo` (autonomous) is our default.
+ */
+export type GlmMode = 'plan' | 'build' | 'edit' | 'yolo'
+
+/** Selectable GLM permission modes, from most to least restrictive. */
+export const GLM_MODES: GlmMode[] = ['plan', 'build', 'edit', 'yolo']
+
 export interface LlmConfig {
   /** Active backend for the agent chat. */
   provider: LlmProvider
@@ -230,6 +248,14 @@ export interface LlmConfig {
   claudeModel: string
   /** Permission mode Claude Code runs under. */
   claudePermission: ClaudePermissionMode
+  /**
+   * Path to the ZCode install (folder, `ZCode.exe`, or `zcode.cjs`); empty →
+   * auto-detect the per-user install. The bundled `zcode.cjs` is driven via
+   * `ZCode.exe` with `ELECTRON_RUN_AS_NODE=1`.
+   */
+  glmPath: string
+  /** Permission mode the GLM/ZCode agent runs under (`--mode`). */
+  glmMode: GlmMode
 }
 
 export const DEFAULT_LLM_CONFIG: LlmConfig = {
@@ -242,7 +268,9 @@ export const DEFAULT_LLM_CONFIG: LlmConfig = {
   codexReasoning: '',
   claudePath: '',
   claudeModel: '',
-  claudePermission: 'acceptEdits'
+  claudePermission: 'acceptEdits',
+  glmPath: '',
+  glmMode: 'yolo'
 }
 
 export interface ChatParams {
@@ -380,6 +408,40 @@ export interface ClaudeRunParams {
   model?: string
   /** Overrides the configured permission mode (`--permission-mode`). */
   permission?: ClaudePermissionMode
+}
+
+// ---------- GLM / ZCode (`zcode --prompt … --json`) ----------
+// The GLM backend drives ZCode's bundled `zcode.cjs` headless CLI (an OpenCode
+// fork that runs GLM/Zhipu & other Chinese models). It reuses Codex's
+// normalized CodexEvent / CodexItem / CodexRunResult / CodexCheckResult shapes
+// so the renderer drives all CLI backends with one code path.
+
+export interface GlmRunParams {
+  prompt: string
+  /** Working root the spawned `zcode` runs in (`--cwd`). */
+  cwd: string
+  /** Resume a persisted ZCode session (`--resume sess_…`). */
+  sessionId?: string
+  /** Permission mode (`--mode`); defaults to the configured one. */
+  mode?: GlmMode
+  /** One-use Aliyun verification proof required by ZCode Start Plan. */
+  captchaVerifyParam?: string
+  /** Aliyun verification region paired with `captchaVerifyParam`. */
+  captchaRegion?: string
+}
+
+export interface GlmCaptchaConfig {
+  region: string
+  prefix: string
+  sceneId: string
+  mode?: string
+}
+
+export interface GlmCaptchaConfigResult {
+  /** True only for the desktop Start Plan provider. */
+  required: boolean
+  config?: GlmCaptchaConfig
+  error?: string
 }
 
 // ---------- Usage analytics ----------

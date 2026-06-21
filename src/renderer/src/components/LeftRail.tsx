@@ -26,10 +26,15 @@ export function LeftRail(): JSX.Element {
   const active = useApp((s) => s.active)
   const tasksByWorkspace = useApp((s) => s.tasksByWorkspace)
   const activeTaskId = useApp((s) => s.activeTaskId)
+  const collapsedWorkspaces = useApp((s) => s.collapsedWorkspaces)
   const openFolder = useApp((s) => s.openFolder)
   const openWorkspace = useApp((s) => s.openWorkspace)
+  const toggleWorkspaceCollapsed = useApp((s) => s.toggleWorkspaceCollapsed)
+  const reorderWorkspaces = useApp((s) => s.reorderWorkspaces)
   const openTask = useApp((s) => s.openTask)
   const newTask = useApp((s) => s.newTask)
+  const [dragId, setDragId] = useState<string | null>(null)
+  const [dragOverId, setDragOverId] = useState<string | null>(null)
   const view = useApp((s) => s.view)
   const openAnalytics = useApp((s) => s.openAnalytics)
   const closeAnalytics = useApp((s) => s.closeAnalytics)
@@ -106,29 +111,67 @@ export function LeftRail(): JSX.Element {
 
         {workspaces.map((ws) => {
           const tasks = tasksByWorkspace[ws.id] ?? []
+          const collapsed = !!collapsedWorkspaces[ws.id]
           return (
             <div className="ws-group" key={ws.id}>
-              <button
-                className={`ws-item${active?.id === ws.id ? ' active' : ''}`}
+              <div
+                className={`ws-item${active?.id === ws.id ? ' active' : ''}${
+                  dragId === ws.id ? ' dragging' : ''
+                }${dragOverId === ws.id && dragId !== ws.id ? ' drag-over' : ''}`}
+                draggable
+                onDragStart={(e) => {
+                  setDragId(ws.id)
+                  e.dataTransfer.effectAllowed = 'move'
+                }}
+                onDragOver={(e) => {
+                  e.preventDefault()
+                  e.dataTransfer.dropEffect = 'move'
+                  if (dragId && dragOverId !== ws.id) setDragOverId(ws.id)
+                }}
+                onDrop={(e) => {
+                  e.preventDefault()
+                  if (dragId) reorderWorkspaces(dragId, ws.id)
+                  setDragId(null)
+                  setDragOverId(null)
+                }}
+                onDragEnd={() => {
+                  setDragId(null)
+                  setDragOverId(null)
+                }}
                 onClick={() => openWorkspace(ws)}
                 title={ws.path}
               >
+                <span
+                  className="ws-twisty"
+                  role="button"
+                  aria-label={collapsed ? 'Expand folder' : 'Collapse folder'}
+                  title={collapsed ? 'Expand' : 'Collapse'}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    toggleWorkspaceCollapsed(ws.id)
+                  }}
+                >
+                  <Icon name={collapsed ? 'chevronRight' : 'chevronDown'} size={12} />
+                </span>
                 <Icon name="folder" size={15} />
                 <span className="name">{ws.name}</span>
-              </button>
-              {tasks.map((task) => (
-                <button
-                  className={`task-item${activeTaskId === task.id ? ' active' : ''}`}
-                  key={task.id}
-                  onClick={() => openTask(ws, task.id)}
-                  title={task.title}
-                >
-                  <span className={`task-dot ${task.status}`} />
-                  <span className="name">{task.title}</span>
-                  <span className="time">{formatTaskTime(task.updatedAt)}</span>
-                </button>
-              ))}
-              {tasks.length === 0 && <div className="task-empty">No tasks yet</div>}
+              </div>
+              {!collapsed &&
+                tasks.map((task) => (
+                  <button
+                    className={`task-item${activeTaskId === task.id ? ' active' : ''}`}
+                    key={task.id}
+                    onClick={() => openTask(ws, task.id)}
+                    title={task.title}
+                  >
+                    <span className={`task-dot ${task.status}`} />
+                    <span className="name">{task.title}</span>
+                    <span className="time">{formatTaskTime(task.updatedAt)}</span>
+                  </button>
+                ))}
+              {!collapsed && tasks.length === 0 && (
+                <div className="task-empty">No tasks yet</div>
+              )}
             </div>
           )
         })}

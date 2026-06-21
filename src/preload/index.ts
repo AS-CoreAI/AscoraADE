@@ -17,6 +17,8 @@ import {
   type CodexEvent,
   type CodexEventPayload,
   type ClaudeRunParams,
+  type GlmRunParams,
+  type GlmCaptchaConfigResult,
   type UsageEvent,
   type UsageEventInput,
   type GitStatusResult,
@@ -123,6 +125,25 @@ const api = {
         .finally(() => ipcRenderer.removeListener(IPC.claude.event, listener))
     },
     abort: (id: string): Promise<void> => ipcRenderer.invoke(IPC.claude.abort, id)
+  },
+  glm: {
+    check: (): Promise<CodexCheckResult> => ipcRenderer.invoke(IPC.glm.check),
+    captchaConfig: (): Promise<GlmCaptchaConfigResult> => ipcRenderer.invoke(IPC.glm.captchaConfig),
+    /** Runs a GLM/ZCode turn; `onEvent` fires per normalized stream event. */
+    run: (
+      id: string,
+      params: GlmRunParams,
+      onEvent: (event: CodexEvent) => void
+    ): Promise<CodexRunResult> => {
+      const listener = (_e: IpcRendererEvent, payload: CodexEventPayload): void => {
+        if (payload.id === id) onEvent(payload.event)
+      }
+      ipcRenderer.on(IPC.glm.event, listener)
+      return ipcRenderer
+        .invoke(IPC.glm.run, id, params)
+        .finally(() => ipcRenderer.removeListener(IPC.glm.event, listener))
+    },
+    abort: (id: string): Promise<void> => ipcRenderer.invoke(IPC.glm.abort, id)
   },
   analytics: {
     record: (event: UsageEventInput): Promise<UsageEvent> =>
