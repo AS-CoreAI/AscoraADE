@@ -1,9 +1,24 @@
 import { useState, type JSX } from 'react'
 import { Icon } from './Icon'
+import { REASONING_LABEL, CODEX_MODEL_PRESETS } from './Composer'
 import { useApp } from '@/state/store'
-import { DEFAULT_LLM_CONFIG, type CodexSandbox, type LlmProvider } from '@shared/ipc'
+import {
+  DEFAULT_LLM_CONFIG,
+  CODEX_REASONING_LEVELS,
+  CLAUDE_MODEL_PRESETS,
+  CLAUDE_PERMISSION_MODES,
+  type CodexReasoning,
+  type CodexSandbox,
+  type ClaudePermissionMode,
+  type LlmProvider
+} from '@shared/ipc'
 
-const CODEX_MODEL_PRESETS = ['gpt-5-codex', 'gpt-5', 'o4-mini']
+const PERMISSION_LABEL: Record<ClaudePermissionMode, string> = {
+  plan: 'Plan only (read-only; proposes a plan)',
+  default: 'Ask (default; some tools auto-denied in print mode)',
+  acceptEdits: 'Auto-accept edits (sandboxed to workspace)',
+  bypassPermissions: 'Full access (skip all permission checks)'
+}
 
 const SANDBOX_LABEL: Record<CodexSandbox, string> = {
   'read-only': 'Read-only (no edits or commands)',
@@ -86,6 +101,8 @@ function CodexPanel(): JSX.Element {
   const setCodexModel = useApp((s) => s.setCodexModel)
   const codexSandbox = useApp((s) => s.codexSandbox)
   const setCodexSandbox = useApp((s) => s.setCodexSandbox)
+  const codexReasoning = useApp((s) => s.codexReasoning)
+  const setCodexReasoning = useApp((s) => s.setCodexReasoning)
   const check = useApp((s) => s.codexCheck)
   const checking = useApp((s) => s.codexChecking)
   const checkCodex = useApp((s) => s.checkCodex)
@@ -153,6 +170,26 @@ function CodexPanel(): JSX.Element {
         </span>
       </label>
 
+      <label className="field">
+        <span className="field-label">Reasoning effort</span>
+        <select
+          className="text-input"
+          value={codexReasoning}
+          onChange={(e) => setCodexReasoning(e.target.value as CodexReasoning | '')}
+        >
+          <option value="">Auto (Codex default)</option>
+          {CODEX_REASONING_LEVELS.map((r) => (
+            <option key={r} value={r}>
+              {REASONING_LABEL[r]}
+            </option>
+          ))}
+        </select>
+        <span className="field-hint">
+          Higher effort = deeper reasoning, slower and more tokens. Applies to Codex reasoning
+          models (gpt-5.5, gpt-5.4, …).
+        </span>
+      </label>
+
       <div
         className={`conn-line ${
           checking ? 'connecting' : !check ? 'unknown' : check.installed ? 'connected' : 'error'
@@ -177,6 +214,108 @@ function CodexPanel(): JSX.Element {
       )}
 
       <button className="btn" style={{ alignSelf: 'flex-start' }} onClick={() => void checkCodex()} disabled={checking}>
+        Re-check
+      </button>
+    </>
+  )
+}
+
+function ClaudePanel(): JSX.Element {
+  const claudePath = useApp((s) => s.claudePath)
+  const setClaudePath = useApp((s) => s.setClaudePath)
+  const claudeModel = useApp((s) => s.claudeModel)
+  const setClaudeModel = useApp((s) => s.setClaudeModel)
+  const claudePermission = useApp((s) => s.claudePermission)
+  const setClaudePermission = useApp((s) => s.setClaudePermission)
+  const check = useApp((s) => s.claudeCheck)
+  const checking = useApp((s) => s.claudeChecking)
+  const checkClaude = useApp((s) => s.checkClaude)
+
+  const [path, setPath] = useState(claudePath)
+  const apply = async (): Promise<void> => {
+    await setClaudePath(path.trim())
+  }
+
+  return (
+    <>
+      <label className="field">
+        <span className="field-label">Claude binary</span>
+        <div className="field-row">
+          <input
+            className="text-input"
+            value={path}
+            spellCheck={false}
+            placeholder="(auto-detect: PATH or Claude Code VS Code extension)"
+            onChange={(e) => setPath(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && void apply()}
+          />
+          <button className="btn" onClick={() => void apply()} disabled={checking}>
+            {checking ? 'Checking…' : 'Check'}
+          </button>
+        </div>
+        <span className="field-hint">
+          Leave blank to use `claude` from PATH or the bundled "Claude Code" VS Code extension. Uses
+          your existing Claude subscription / login.
+        </span>
+      </label>
+
+      <label className="field">
+        <span className="field-label">Model</span>
+        <input
+          className="text-input"
+          list="claude-model-presets"
+          value={claudeModel}
+          spellCheck={false}
+          placeholder="Claude default (opus / sonnet / haiku or a full id)"
+          onChange={(e) => setClaudeModel(e.target.value)}
+        />
+        <datalist id="claude-model-presets">
+          {CLAUDE_MODEL_PRESETS.map((m) => (
+            <option key={m} value={m} />
+          ))}
+        </datalist>
+      </label>
+
+      <label className="field">
+        <span className="field-label">Permission mode</span>
+        <select
+          className="text-input"
+          value={claudePermission}
+          onChange={(e) => setClaudePermission(e.target.value as ClaudePermissionMode)}
+        >
+          {CLAUDE_PERMISSION_MODES.map((p) => (
+            <option key={p} value={p}>
+              {PERMISSION_LABEL[p]}
+            </option>
+          ))}
+        </select>
+        <span className="field-hint">
+          Claude Code runs its own agent loop and applies edits autonomously within this policy.
+        </span>
+      </label>
+
+      <div
+        className={`conn-line ${
+          checking ? 'connecting' : !check ? 'unknown' : check.installed ? 'connected' : 'error'
+        }`}
+      >
+        {checking && 'Checking Claude…'}
+        {!checking && !check && 'Not checked yet.'}
+        {!checking && check && !check.installed && `✗ ${check.error ?? 'Claude Code CLI not found.'}`}
+        {!checking && check && check.installed && (
+          <>
+            ✓ {check.version ?? 'claude'} · {check.authNote ?? 'ready'}
+            {check.path ? <div className="field-hint">{check.path}</div> : null}
+          </>
+        )}
+      </div>
+
+      <button
+        className="btn"
+        style={{ alignSelf: 'flex-start' }}
+        onClick={() => void checkClaude()}
+        disabled={checking}
+      >
         Re-check
       </button>
     </>
@@ -211,10 +350,17 @@ export function ConnectionSettings(): JSX.Element | null {
             >
               <option value="lmstudio">LM Studio (local, OpenAI-compatible)</option>
               <option value="codex">Codex CLI (OpenAI's coding agent)</option>
+              <option value="claude">Claude Code (Anthropic's coding agent)</option>
             </select>
           </label>
 
-          {provider === 'codex' ? <CodexPanel /> : <LmStudioPanel />}
+          {provider === 'codex' ? (
+            <CodexPanel />
+          ) : provider === 'claude' ? (
+            <ClaudePanel />
+          ) : (
+            <LmStudioPanel />
+          )}
         </div>
       </div>
     </div>

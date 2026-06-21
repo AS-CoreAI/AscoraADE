@@ -3,6 +3,7 @@ import {
   IPC,
   DEFAULT_LLM_CONFIG,
   type CodexCheckResult,
+  type CodexReasoning,
   type CodexRunParams,
   type CodexRunResult,
   type CodexSandbox
@@ -10,12 +11,19 @@ import {
 import { getStore } from '../store'
 import { checkCodex, killRun, runCodex } from '../codex/runner'
 
-function readCodexConfig(): { codexPath: string; codexModel: string; codexSandbox: CodexSandbox } {
+function readCodexConfig(): {
+  codexPath: string
+  codexModel: string
+  codexSandbox: CodexSandbox
+  codexReasoning: CodexReasoning | ''
+} {
   const store = getStore()
   return {
     codexPath: store.getSetting<string>('codex.path') ?? DEFAULT_LLM_CONFIG.codexPath,
     codexModel: store.getSetting<string>('codex.model') ?? DEFAULT_LLM_CONFIG.codexModel,
-    codexSandbox: store.getSetting<CodexSandbox>('codex.sandbox') ?? DEFAULT_LLM_CONFIG.codexSandbox
+    codexSandbox: store.getSetting<CodexSandbox>('codex.sandbox') ?? DEFAULT_LLM_CONFIG.codexSandbox,
+    codexReasoning:
+      store.getSetting<CodexReasoning | ''>('codex.reasoning') ?? DEFAULT_LLM_CONFIG.codexReasoning
   }
 }
 

@@ -46,6 +46,16 @@ export const IPC = {
     abort: 'codex:abort',
     event: 'codex:event'
   },
+  claude: {
+    check: 'claude:check',
+    run: 'claude:run',
+    abort: 'claude:abort',
+    event: 'claude:event'
+  },
+  analytics: {
+    record: 'analytics:record',
+    list: 'analytics:list'
+  },
   git: {
     status: 'git:status',
     diff: 'git:diff',
@@ -138,7 +148,7 @@ export interface TaskRecord extends TaskSummary {
 // ---------- LLM (provider-agnostic; LM Studio or Codex CLI) ----------
 
 /** Which backend drives the agent chat. */
-export type LlmProvider = 'lmstudio' | 'codex'
+export type LlmProvider = 'lmstudio' | 'codex' | 'claude'
 
 export type LlmRole = 'system' | 'user' | 'assistant' | 'tool'
 
@@ -177,6 +187,26 @@ export interface LlmModel {
 /** Sandbox policy passed to `codex exec -s`. */
 export type CodexSandbox = 'read-only' | 'workspace-write' | 'danger-full-access'
 
+/** Reasoning effort for Codex models (`-c model_reasoning_effort`). */
+export type CodexReasoning = 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'
+
+/** Selectable reasoning levels, in ascending order of effort. */
+export const CODEX_REASONING_LEVELS: CodexReasoning[] = ['minimal', 'low', 'medium', 'high', 'xhigh']
+
+/** Claude Code permission mode (`claude --permission-mode`). */
+export type ClaudePermissionMode = 'plan' | 'default' | 'acceptEdits' | 'bypassPermissions'
+
+/** Selectable Claude permission modes, from most to least restrictive. */
+export const CLAUDE_PERMISSION_MODES: ClaudePermissionMode[] = [
+  'plan',
+  'default',
+  'acceptEdits',
+  'bypassPermissions'
+]
+
+/** Suggested Claude model aliases (empty → Claude Code's own default). */
+export const CLAUDE_MODEL_PRESETS = ['default', 'opus', 'sonnet', 'haiku']
+
 export interface LlmConfig {
   /** Active backend for the agent chat. */
   provider: LlmProvider
@@ -190,6 +220,14 @@ export interface LlmConfig {
   codexModel: string
   /** Sandbox policy Codex runs commands under. */
   codexSandbox: CodexSandbox
+  /** Reasoning effort for Codex; empty → use Codex's own default. */
+  codexReasoning: CodexReasoning | ''
+  /** Path to the `claude` binary; empty → auto-detect (PATH / bundled extension). */
+  claudePath: string
+  /** Model passed to `claude --model`; empty → Claude Code's own default. */
+  claudeModel: string
+  /** Permission mode Claude Code runs under. */
+  claudePermission: ClaudePermissionMode
 }
 
 export const DEFAULT_LLM_CONFIG: LlmConfig = {
@@ -198,7 +236,11 @@ export const DEFAULT_LLM_CONFIG: LlmConfig = {
   model: '',
   codexPath: '',
   codexModel: '',
-  codexSandbox: 'workspace-write'
+  codexSandbox: 'workspace-write',
+  codexReasoning: '',
+  claudePath: '',
+  claudeModel: '',
+  claudePermission: 'acceptEdits'
 }
 
 export interface ChatParams {
@@ -215,6 +257,12 @@ export interface ChatChunkPayload {
   delta: string
 }
 
+/** Token counts for a single turn, when the backend reports them. */
+export interface TokenUsage {
+  inputTokens: number
+  outputTokens: number
+}
+
 export interface ChatResult {
   ok: boolean
   content: string
@@ -222,6 +270,8 @@ export interface ChatResult {
   toolCalls?: ToolCall[]
   /** OpenAI finish_reason for the turn (e.g. 'stop', 'tool_calls'). */
   finishReason?: string
+  /** Token usage for the turn, if the server returned it. */
+  usage?: TokenUsage
   error?: string
   aborted?: boolean
 }
@@ -260,6 +310,8 @@ export interface CodexRunParams {
   model?: string
   /** Overrides the configured sandbox policy (`-s`). */
   sandbox?: CodexSandbox
+  /** Overrides the configured reasoning effort (`-c model_reasoning_effort`). */
+  reasoning?: CodexReasoning | ''
 }
 
 /**
@@ -305,9 +357,54 @@ export interface CodexRunResult {
   code?: number | null
   /** Session id captured from the run, for a later resume. */
   threadId?: string
+  /** Summed token usage across the run's turns, if reported. */
+  usage?: TokenUsage
   aborted?: boolean
   error?: string
 }
+
+// ---------- Claude Code (`claude -p --output-format stream-json`) ----------
+// The Claude backend reuses Codex's normalized CodexEvent / CodexItem /
+// CodexRunResult / CodexCheckResult shapes so the renderer drives both with one
+// code path (see runClaude, which maps Claude's stream-json onto CodexEvent).
+
+export interface ClaudeRunParams {
+  prompt: string
+  /** Working root the spawned `claude` runs in. */
+  cwd: string
+  /** Resume this Claude session instead of starting fresh (`--resume`). */
+  sessionId?: string
+  /** Overrides the configured model (`--model`); empty → config/default. */
+  model?: string
+  /** Overrides the configured permission mode (`--permission-mode`). */
+  permission?: ClaudePermissionMode
+}
+
+// ---------- Usage analytics ----------
+
+/** One recorded model turn, the atom the analytics dashboard aggregates over. */
+export interface UsageEvent {
+  id: string
+  /** When the turn completed (ms epoch). */
+  ts: number
+  workspaceId: string
+  workspaceName: string
+  taskId: string
+  /** Which backend / "router" served the turn. */
+  provider: LlmProvider
+  model: string
+  inputTokens: number
+  outputTokens: number
+  /** New user messages attributable to this turn. */
+  userMessages: number
+  /** New assistant messages attributable to this turn. */
+  assistantMessages: number
+  /** True when token counts are estimated (server didn't report usage). */
+  estimated?: boolean
+}
+
+/** Payload to record a usage event; the main process fills in id + ts. */
+export type UsageEventInput = Omit<UsageEvent, 'id' | 'ts'> & { ts?: number }
 
 // ---------- Git / Source Control ----------
 

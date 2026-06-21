@@ -8,6 +8,8 @@ import type {
   ToolDef,
   LlmProvider,
   CodexSandbox,
+  CodexReasoning,
+  ClaudePermissionMode,
   CodexEvent,
   CodexItem,
   CodexCheckResult
@@ -15,7 +17,7 @@ import type {
 import { DEFAULT_LLM_CONFIG } from '@shared/ipc'
 import { api } from '@/lib/api'
 
-export type View = 'home' | 'workspace'
+export type View = 'home' | 'workspace' | 'analytics'
 /** Agent permission mode — mirrors ZCode's "Ask before changes" control. */
 export type AgentMode = 'ask' | 'auto'
 export type Connection = 'unknown' | 'connecting' | 'connected' | 'error'
@@ -147,6 +149,11 @@ function truncate(s: string, n: number): string {
   return s.length > n ? `${s.slice(0, n)}\n…(${s.length - n} more chars truncated)` : s
 }
 
+/** Rough token estimate (~4 chars/token) for backends that don't report usage. */
+function estTokens(text: string): number {
+  return Math.max(0, Math.round((text?.length ?? 0) / 4))
+}
+
 function taskTitle(text: string): string {
   const title = text.replace(/\s+/g, ' ').trim()
   return title.length > 72 ? `${title.slice(0, 69)}...` : title
@@ -224,8 +231,9 @@ function codexItemToCard(it: CodexItem): Partial<ChatMessage> {
       output: changes.map((c) => `${c.kind} ${baseName(c.path)}`).join('\n')
     }
   }
-  // Unknown item type — show it generically rather than dropping it.
-  return { tool: it.type, args: {}, status, output: it.text }
+  // Unknown / other item type (incl. Claude's read_file/list_dir/etc.) — show
+  // it generically with a short summary in the header.
+  return { tool: it.type, args: { path: it.text ?? '' }, status }
 }
 
 interface AppState {
@@ -256,9 +264,17 @@ interface AppState {
   codexPath: string
   codexModel: string
   codexSandbox: CodexSandbox
+  codexReasoning: CodexReasoning | ''
   codexThreadId: string | null
   codexCheck: CodexCheckResult | null
   codexChecking: boolean
+  // Claude Code
+  claudePath: string
+  claudeModel: string
+  claudePermission: ClaudePermissionMode
+  claudeSessionId: string | null
+  claudeCheck: CodexCheckResult | null
+  claudeChecking: boolean
   settingsOpen: boolean
   themePreference: ThemePreference
   resolvedTheme: ResolvedTheme
@@ -277,6 +293,8 @@ interface AppState {
   openTask: (ws: Workspace, taskId: string) => Promise<void>
   saveActiveTask: (status: TaskSummary['status']) => Promise<void>
   goHome: () => void
+  openAnalytics: () => void
+  closeAnalytics: () => void
   toggleDir: (node: TreeNode) => Promise<void>
   openFile: (node: TreeNode) => Promise<void>
   closeFile: (path: string) => void
@@ -289,7 +307,12 @@ interface AppState {
   setCodexPath: (path: string) => Promise<void>
   setCodexModel: (m: string) => void
   setCodexSandbox: (s: CodexSandbox) => void
+  setCodexReasoning: (r: CodexReasoning | '') => void
   checkCodex: () => Promise<void>
+  setClaudePath: (path: string) => Promise<void>
+  setClaudeModel: (m: string) => void
+  setClaudePermission: (p: ClaudePermissionMode) => void
+  checkClaude: () => Promise<void>
   setSettingsOpen: (open: boolean) => void
   setThemePreference: (theme: ThemePreference) => void
   syncSystemTheme: () => void
@@ -324,9 +347,16 @@ export const useApp = create<AppState>((set, get) => ({
   codexPath: DEFAULT_LLM_CONFIG.codexPath,
   codexModel: DEFAULT_LLM_CONFIG.codexModel,
   codexSandbox: DEFAULT_LLM_CONFIG.codexSandbox,
+  codexReasoning: DEFAULT_LLM_CONFIG.codexReasoning,
   codexThreadId: null,
   codexCheck: null,
   codexChecking: false,
+  claudePath: DEFAULT_LLM_CONFIG.claudePath,
+  claudeModel: DEFAULT_LLM_CONFIG.claudeModel,
+  claudePermission: DEFAULT_LLM_CONFIG.claudePermission,
+  claudeSessionId: null,
+  claudeCheck: null,
+  claudeChecking: false,
   settingsOpen: false,
   themePreference: 'dark',
   resolvedTheme: 'dark',
@@ -357,12 +387,17 @@ export const useApp = create<AppState>((set, get) => ({
       codexPath: cfg.codexPath,
       codexModel: cfg.codexModel,
       codexSandbox: cfg.codexSandbox,
+      codexReasoning: cfg.codexReasoning,
+      claudePath: cfg.claudePath,
+      claudeModel: cfg.claudeModel,
+      claudePermission: cfg.claudePermission,
       themePreference,
       resolvedTheme
     })
     if (workspaces.length > 0) await get().loadWorkspaceData(workspaces[0])
     await get().refreshModels()
     if (cfg.provider === 'codex') await get().checkCodex()
+    if (cfg.provider === 'claude') await get().checkClaude()
   },
 
   async openFolder() {
@@ -401,6 +436,7 @@ export const useApp = create<AppState>((set, get) => ({
       activeTaskId: null,
       activeTaskTitle: '',
       codexThreadId: null,
+      claudeSessionId: null,
       tasksByWorkspace: { ...state.tasksByWorkspace, [ws.id]: tasks }
     }))
   },
@@ -417,6 +453,7 @@ export const useApp = create<AppState>((set, get) => ({
       messages: task.messages,
       convo: task.convo,
       codexThreadId: null,
+      claudeSessionId: null,
       view: 'workspace'
     })
   },
@@ -450,6 +487,14 @@ export const useApp = create<AppState>((set, get) => ({
 
   goHome() {
     set({ view: 'home' })
+  },
+
+  openAnalytics() {
+    set({ view: 'analytics' })
+  },
+
+  closeAnalytics() {
+    set({ view: get().active ? 'workspace' : 'home' })
   },
 
   async toggleDir(node) {
@@ -523,6 +568,7 @@ export const useApp = create<AppState>((set, get) => ({
     set({ provider })
     await api.llm.setConfig({ provider })
     if (provider === 'codex') await get().checkCodex()
+    else if (provider === 'claude') await get().checkClaude()
     else await get().refreshModels()
   },
 
@@ -542,6 +588,11 @@ export const useApp = create<AppState>((set, get) => ({
     void api.llm.setConfig({ codexSandbox })
   },
 
+  setCodexReasoning(codexReasoning) {
+    set({ codexReasoning })
+    void api.llm.setConfig({ codexReasoning })
+  },
+
   async checkCodex() {
     set({ codexChecking: true })
     try {
@@ -551,6 +602,35 @@ export const useApp = create<AppState>((set, get) => ({
       set({
         codexCheck: { ok: false, installed: false, error: err instanceof Error ? err.message : String(err) },
         codexChecking: false
+      })
+    }
+  },
+
+  async setClaudePath(path) {
+    set({ claudePath: path })
+    await api.llm.setConfig({ claudePath: path })
+    await get().checkClaude()
+  },
+
+  setClaudeModel(claudeModel) {
+    set({ claudeModel })
+    void api.llm.setConfig({ claudeModel })
+  },
+
+  setClaudePermission(claudePermission) {
+    set({ claudePermission })
+    void api.llm.setConfig({ claudePermission })
+  },
+
+  async checkClaude() {
+    set({ claudeChecking: true })
+    try {
+      const res = await api.claude.check()
+      set({ claudeCheck: res, claudeChecking: false })
+    } catch (err) {
+      set({
+        claudeCheck: { ok: false, installed: false, error: err instanceof Error ? err.message : String(err) },
+        claudeChecking: false
       })
     }
   },
@@ -604,17 +684,21 @@ export const useApp = create<AppState>((set, get) => ({
     await get().saveActiveTask('running')
 
     try {
-      // ===== Codex CLI backend: delegate the whole turn to `codex exec` =====
-      if (get().provider === 'codex') {
+      // ===== Codex / Claude CLI backends: delegate the turn to the agent CLI =====
+      const agentProvider = get().provider
+      if (agentProvider === 'codex' || agentProvider === 'claude') {
+        const isClaude = agentProvider === 'claude'
         const runId = crypto.randomUUID()
         set({ streamId: runId })
-        const itemCards = new Map<string, string>() // codex item id → chat card id
+        const itemCards = new Map<string, string>() // agent item id → chat card id
         let sawError = false
 
         const handleEvent = (event: CodexEvent): void => {
           if (runAborted) return
           if (event.kind === 'thread') {
-            if (event.threadId) set({ codexThreadId: event.threadId })
+            if (event.threadId) {
+              set(isClaude ? { claudeSessionId: event.threadId } : { codexThreadId: event.threadId })
+            }
           } else if (event.kind === 'item') {
             const it = event.item
             if (it.type === 'reasoning') return // keep the chat focused on actions + answers
@@ -638,27 +722,65 @@ export const useApp = create<AppState>((set, get) => ({
           }
         }
 
-        const res = await api.codex.run(
-          runId,
-          {
-            prompt: trimmed,
-            cwd: root,
-            threadId: get().codexThreadId ?? undefined,
-            model: get().codexModel || undefined,
-            sandbox: get().codexSandbox
-          },
-          handleEvent
-        )
+        const res = isClaude
+          ? await api.claude.run(
+              runId,
+              {
+                prompt: trimmed,
+                cwd: root,
+                sessionId: get().claudeSessionId ?? undefined,
+                model: get().claudeModel || undefined,
+                permission: get().claudePermission
+              },
+              handleEvent
+            )
+          : await api.codex.run(
+              runId,
+              {
+                prompt: trimmed,
+                cwd: root,
+                threadId: get().codexThreadId ?? undefined,
+                model: get().codexModel || undefined,
+                sandbox: get().codexSandbox,
+                reasoning: get().codexReasoning || undefined
+              },
+              handleEvent
+            )
 
         set({ streamId: null })
-        if (res.threadId) set({ codexThreadId: res.threadId })
+        if (res.threadId) {
+          set(isClaude ? { claudeSessionId: res.threadId } : { codexThreadId: res.threadId })
+        }
+
+        // Record usage for the dashboard (real token counts when reported).
+        {
+          const usage = res.usage ?? { inputTokens: estTokens(trimmed), outputTokens: 0 }
+          const claudeModel = get().claudeModel
+          void api.analytics.record({
+            workspaceId: active.id,
+            workspaceName: active.name,
+            taskId,
+            provider: agentProvider,
+            model: isClaude
+              ? claudeModel && claudeModel !== 'default'
+                ? claudeModel
+                : 'claude'
+              : get().codexModel || 'codex',
+            inputTokens: usage.inputTokens,
+            outputTokens: usage.outputTokens,
+            userMessages: 1,
+            assistantMessages: 1,
+            estimated: !res.usage
+          })
+        }
+
         if (!res.ok && !res.aborted) {
           finalStatus = 'error'
           addMsg({
             id: crypto.randomUUID(),
             role: 'assistant',
             kind: 'text',
-            text: `⚠ ${res.error ?? 'Codex run failed.'}`
+            text: `⚠ ${res.error ?? (isClaude ? 'Claude run failed.' : 'Codex run failed.')}`
           })
         } else if (sawError) {
           finalStatus = 'error'
@@ -687,6 +809,26 @@ export const useApp = create<AppState>((set, get) => ({
           const prev = get().messages.find((m) => m.id === replyId)?.text ?? ''
           patch(replyId, { text: prev ? `${prev}\n\n⚠ ${result.error}` : `⚠ ${result.error}` })
           break
+        }
+
+        // Record usage for the dashboard (real tokens when the server reports them).
+        {
+          const usage = result.usage ?? {
+            inputTokens: estTokens(messages.map((m) => m.content).join('\n')),
+            outputTokens: estTokens(result.content)
+          }
+          void api.analytics.record({
+            workspaceId: active.id,
+            workspaceName: active.name,
+            taskId,
+            provider: 'lmstudio',
+            model: get().model || 'local-model',
+            inputTokens: usage.inputTokens,
+            outputTokens: usage.outputTokens,
+            userMessages: step === 0 ? 1 : 0,
+            assistantMessages: 1,
+            estimated: !result.usage
+          })
         }
 
         // 2) Resolve tool calls — native first, then the text fallback.
@@ -883,7 +1025,9 @@ export const useApp = create<AppState>((set, get) => ({
     runAborted = true
     const id = get().streamId
     if (id) {
-      if (get().provider === 'codex') void api.codex.abort(id)
+      const p = get().provider
+      if (p === 'codex') void api.codex.abort(id)
+      else if (p === 'claude') void api.claude.abort(id)
       else void api.llm.abort(id)
     }
     for (const [cardId, resolve] of pendingApprovals) {
@@ -899,6 +1043,7 @@ export const useApp = create<AppState>((set, get) => ({
       activeTaskId: null,
       activeTaskTitle: '',
       codexThreadId: null,
+      claudeSessionId: null,
       view: 'home'
     })
   }

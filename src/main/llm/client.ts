@@ -1,9 +1,11 @@
-import type { ChatParams, LlmConfig, LlmModel, ToolCall } from '@shared/ipc'
+import type { ChatParams, LlmConfig, LlmModel, ToolCall, TokenUsage } from '@shared/ipc'
 
 /** What `streamChat` resolves to once the stream ends (its generator return). */
 export interface StreamReturn {
   toolCalls: ToolCall[]
   finishReason?: string
+  /** Token usage from the final stream frame, when the server reports it. */
+  usage?: TokenUsage
 }
 
 /** Partial tool_call fragment as it streams in (OpenAI delta shape). */
@@ -112,6 +114,8 @@ export class LmStudioClient {
       messages: params.messages,
       temperature: params.temperature ?? 0.7,
       stream: true,
+      // Ask OpenAI-compatible servers to append a final usage frame.
+      stream_options: { include_usage: true },
       ...(params.tools && params.tools.length > 0 ? { tools: params.tools } : {})
     })
 
@@ -136,13 +140,15 @@ export class LmStudioClient {
     // Tool calls stream in fragments keyed by index; assemble them in order.
     const toolAcc = new Map<number, { id: string; name: string; arguments: string }>()
     let finishReason: string | undefined
+    let usage: TokenUsage | undefined
 
     const assembled = (): StreamReturn => ({
       toolCalls: [...toolAcc.entries()]
         .sort(([a], [b]) => a - b)
         .map(([, t]) => ({ id: t.id, name: t.name, arguments: t.arguments }))
         .filter((t) => t.name),
-      finishReason
+      finishReason,
+      usage
     })
 
     try {
@@ -177,6 +183,16 @@ export class LmStudioClient {
             }
 
             if (typeof choice?.finish_reason === 'string') finishReason = choice.finish_reason
+
+            const rawUsage = json?.usage as
+              | { prompt_tokens?: number; completion_tokens?: number }
+              | undefined
+            if (rawUsage && typeof rawUsage === 'object') {
+              usage = {
+                inputTokens: rawUsage.prompt_tokens ?? 0,
+                outputTokens: rawUsage.completion_tokens ?? 0
+              }
+            }
           } catch {
             /* keep-alive or partial frame — ignore */
           }

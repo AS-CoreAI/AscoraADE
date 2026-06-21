@@ -1,5 +1,6 @@
 import type { JSX } from 'react'
 import { useApp } from '@/state/store'
+import { REASONING_LABEL, PERMISSION_SHORT } from './Composer'
 
 const CONN_LABEL: Record<string, string> = {
   unknown: 'LM Studio: —',
@@ -26,32 +27,41 @@ export function StatusBar(): JSX.Element {
   const codexCheck = useApp((s) => s.codexCheck)
   const codexChecking = useApp((s) => s.codexChecking)
   const codexSandbox = useApp((s) => s.codexSandbox)
+  const codexReasoning = useApp((s) => s.codexReasoning)
+  const claudeModel = useApp((s) => s.claudeModel)
+  const claudeCheck = useApp((s) => s.claudeCheck)
+  const claudeChecking = useApp((s) => s.claudeChecking)
+  const claudePermission = useApp((s) => s.claudePermission)
   const openFiles = useApp((s) => s.openFiles)
   const activeFile = useApp((s) => s.activeFile)
   const setSettingsOpen = useApp((s) => s.setSettingsOpen)
   const current = openFiles.find((f) => f.path === activeFile)
 
   const isCodex = provider === 'codex'
+  const isClaude = provider === 'claude'
 
   // Status dot color + label for the active backend.
   let dotColor: string
   let label: string
-  if (isCodex) {
-    if (codexChecking) {
+  if (isCodex || isClaude) {
+    const name = isClaude ? 'Claude' : 'Codex'
+    const check = isClaude ? claudeCheck : codexCheck
+    const checking = isClaude ? claudeChecking : codexChecking
+    if (checking) {
       dotColor = CONN_COLOR.connecting
-      label = 'Codex: checking…'
-    } else if (!codexCheck) {
+      label = `${name}: checking…`
+    } else if (!check) {
       dotColor = CONN_COLOR.unknown
-      label = 'Codex: —'
-    } else if (!codexCheck.installed) {
+      label = `${name}: —`
+    } else if (!check.installed) {
       dotColor = CONN_COLOR.error
-      label = 'Codex: not found'
-    } else if (!codexCheck.loggedIn) {
+      label = `${name}: not found`
+    } else if (isCodex && !check.loggedIn) {
       dotColor = CONN_COLOR.error
       label = 'Codex: sign in needed'
     } else {
       dotColor = CONN_COLOR.connected
-      label = 'Codex: ready'
+      label = `${name}: ready`
     }
   } else {
     dotColor = CONN_COLOR[connection]
@@ -61,7 +71,19 @@ export function StatusBar(): JSX.Element {
         : CONN_LABEL[connection]
   }
 
-  const modelLabel = isCodex ? codexModel || 'codex (default)' : model || '(no model)'
+  const modelLabel = isClaude
+    ? claudeModel || 'claude (default)'
+    : isCodex
+      ? codexModel || 'codex (default)'
+      : model || '(no model)'
+
+  const accessLabel = isCodex
+    ? `sandbox: ${codexSandbox}${codexReasoning ? ` · ${REASONING_LABEL[codexReasoning]}` : ''}`
+    : isClaude
+      ? `access: ${PERMISSION_SHORT[claudePermission]}`
+      : mode === 'ask'
+        ? 'Ask before changes'
+        : 'Auto-apply'
 
   return (
     <div className="statusbar">
@@ -73,9 +95,7 @@ export function StatusBar(): JSX.Element {
         <span style={{ color: dotColor }}>●</span> {label}
       </button>
       <span className="seg">{modelLabel}</span>
-      <span className="seg">
-        {isCodex ? `sandbox: ${codexSandbox}` : mode === 'ask' ? 'Ask before changes' : 'Auto-apply'}
-      </span>
+      <span className="seg">{accessLabel}</span>
       <span className="spacer" />
       {current && <span className="seg">{current.language}</span>}
       <span className="seg">{active ? active.path : 'No folder open'}</span>

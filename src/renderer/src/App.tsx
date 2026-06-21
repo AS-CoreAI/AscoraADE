@@ -5,6 +5,7 @@ import { StatusBar } from '@/components/StatusBar'
 import { ConnectionSettings } from '@/components/ConnectionSettings'
 import { HomeView } from '@/views/HomeView'
 import { WorkspaceView } from '@/views/WorkspaceView'
+import { AnalyticsView } from '@/views/AnalyticsView'
 import { useApp } from '@/state/store'
 
 export function App(): JSX.Element {
@@ -32,7 +33,13 @@ export function App(): JSX.Element {
       <div className="body">
         <LeftRail />
         <div className="main">
-          {view === 'home' ? <HomeView /> : <WorkspaceView />}
+          {view === 'analytics' ? (
+            <AnalyticsView />
+          ) : view === 'home' ? (
+            <HomeView />
+          ) : (
+            <WorkspaceView />
+          )}
           <StatusBar />
         </div>
       </div>

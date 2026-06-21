@@ -9,6 +9,7 @@ import {
   type CodexEvent,
   type CodexEventPayload,
   type CodexItem,
+  type CodexReasoning,
   type CodexRunParams,
   type CodexRunResult,
   type CodexSandbox
@@ -258,7 +259,12 @@ export function runCodex(
   id: string,
   sender: WebContents,
   params: CodexRunParams,
-  config: { codexPath?: string; codexModel?: string; codexSandbox?: CodexSandbox }
+  config: {
+    codexPath?: string
+    codexModel?: string
+    codexSandbox?: CodexSandbox
+    codexReasoning?: CodexReasoning | ''
+  }
 ): Promise<CodexRunResult> {
   killRun(id) // replace any previous run on this id
 
@@ -273,11 +279,13 @@ export function runCodex(
 
   const sandbox: CodexSandbox = params.sandbox ?? config.codexSandbox ?? 'workspace-write'
   const model = (params.model ?? config.codexModel ?? '').trim()
+  const reasoning = params.reasoning ?? config.codexReasoning ?? ''
 
   const args = ['exec']
   if (params.threadId) args.push('resume', params.threadId)
   args.push('--json', '--skip-git-repo-check', '-s', sandbox)
   if (model) args.push('-m', model)
+  if (reasoning) args.push('-c', `model_reasoning_effort="${reasoning}"`)
   args.push('-C', params.cwd, '-') // '-' → read the prompt from stdin
 
   const emit = (event: CodexEvent): void => {
@@ -301,6 +309,9 @@ export function runCodex(
     let threadId: string | undefined
     let stdoutBuf = ''
     let stderrBuf = ''
+    let inputTokens = 0
+    let outputTokens = 0
+    let sawUsage = false
 
     child.stdout.setEncoding('utf8')
     child.stderr.setEncoding('utf8')
@@ -314,6 +325,16 @@ export function runCodex(
         if (!line) continue
         try {
           const obj = JSON.parse(line) as Record<string, unknown>
+          if (obj.type === 'turn.completed') {
+            const u = obj.usage as Record<string, unknown> | undefined
+            if (u) {
+              sawUsage = true
+              inputTokens += typeof u.input_tokens === 'number' ? u.input_tokens : 0
+              outputTokens +=
+                (typeof u.output_tokens === 'number' ? u.output_tokens : 0) +
+                (typeof u.reasoning_output_tokens === 'number' ? u.reasoning_output_tokens : 0)
+            }
+          }
           const event = toEvent(obj)
           if (!event) continue
           if (event.kind === 'thread') threadId = event.threadId
@@ -340,15 +361,16 @@ export function runCodex(
 
     child.on('close', (code) => {
       if (runs.get(id) === run) runs.delete(id)
+      const usage = sawUsage ? { inputTokens, outputTokens } : undefined
       if (run.killed) {
-        resolve({ ok: true, code, threadId, aborted: true })
+        resolve({ ok: true, code, threadId, usage, aborted: true })
         return
       }
       if (code === 0) {
-        resolve({ ok: true, code, threadId })
+        resolve({ ok: true, code, threadId, usage })
       } else {
         const tail = stderrBuf.trim() || `codex exited with code ${code}`
-        resolve({ ok: false, code, threadId, error: tail })
+        resolve({ ok: false, code, threadId, usage, error: tail })
       }
     })
 

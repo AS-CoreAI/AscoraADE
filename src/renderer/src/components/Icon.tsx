@@ -28,6 +28,7 @@ type IconName =
   | 'settings'
   | 'check'
   | 'trash'
+  | 'barChart'
   | 'x'
 
 const paths: Record<IconName, JSX.Element> = {
@@ -155,6 +156,13 @@ const paths: Record<IconName, JSX.Element> = {
     </>
   ),
   check: <polyline points="20 6 9 17 4 12" />,
+  barChart: (
+    <>
+      <line x1="4" y1="20" x2="4" y2="11" />
+      <line x1="12" y1="20" x2="12" y2="4" />
+      <line x1="20" y1="20" x2="20" y2="14" />
+    </>
+  ),
   trash: (
     <>
       <polyline points="3 6 5 6 21 6" />

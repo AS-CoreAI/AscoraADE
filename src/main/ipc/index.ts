@@ -4,6 +4,8 @@ import { registerFsHandlers } from './fs'
 import { registerSettingsHandlers } from './settings'
 import { registerLlmHandlers } from './llm'
 import { registerCodexHandlers } from './codex'
+import { registerClaudeHandlers } from './claude'
+import { registerAnalyticsHandlers } from './analytics'
 import { registerGitHandlers } from './git'
 import { registerTerminalHandlers } from './terminal'
 import { registerAgentHandlers } from './agent'
@@ -16,6 +18,8 @@ export function registerIpc(): void {
   registerSettingsHandlers()
   registerLlmHandlers()
   registerCodexHandlers()
+  registerClaudeHandlers()
+  registerAnalyticsHandlers()
   registerGitHandlers()
   registerTerminalHandlers()
   registerAgentHandlers()

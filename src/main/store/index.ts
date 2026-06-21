@@ -2,7 +2,7 @@ import { app } from 'electron'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { readFileSync, writeFileSync, renameSync, existsSync } from 'node:fs'
-import type { Workspace, TaskRecord, TaskSummary } from '@shared/ipc'
+import type { Workspace, TaskRecord, TaskSummary, UsageEvent } from '@shared/ipc'
 
 /**
  * Local persistence for settings, workspaces and task history (spec: SQLite).
@@ -23,6 +23,8 @@ export interface Store {
   listTasks(workspaceId: string): TaskSummary[]
   getTask(taskId: string): TaskRecord | null
   saveTask(task: TaskRecord): TaskSummary
+  addUsage(event: UsageEvent): void
+  listUsage(): UsageEvent[]
   close(): void
 }
 
@@ -30,9 +32,10 @@ interface DbShape {
   settings: Record<string, unknown>
   workspaces: Workspace[]
   tasks: TaskRecord[]
+  usage: UsageEvent[]
 }
 
-const EMPTY: DbShape = { settings: {}, workspaces: [], tasks: [] }
+const EMPTY: DbShape = { settings: {}, workspaces: [], tasks: [], usage: [] }
 
 function taskSummary(task: TaskRecord): TaskSummary {
   const { id, workspaceId, title, status, updatedAt } = task
@@ -71,7 +74,8 @@ class JsonStore implements Store {
               convo: Array.isArray(task.convo) ? task.convo : []
             }))
           : []
-        return { ...EMPTY, ...parsed, tasks }
+        const usage = Array.isArray(parsed.usage) ? parsed.usage : []
+        return { ...EMPTY, ...parsed, tasks, usage }
       }
     } catch (err) {
       console.warn('[store] failed to read store file, starting fresh:', err)
@@ -148,6 +152,15 @@ class JsonStore implements Store {
     return taskSummary(stored)
   }
 
+  addUsage(event: UsageEvent): void {
+    this.data.usage.push(event)
+    this.scheduleFlush()
+  }
+
+  listUsage(): UsageEvent[] {
+    return [...this.data.usage].sort((a, b) => a.ts - b.ts)
+  }
+
   close(): void {
     this.flush()
   }
@@ -187,6 +200,21 @@ class SqliteStore implements Store {
         convo_json    TEXT NOT NULL DEFAULT '[]',
         FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
       );
+      CREATE TABLE IF NOT EXISTS usage (
+        id                 TEXT PRIMARY KEY,
+        ts                 INTEGER NOT NULL,
+        workspace_id       TEXT NOT NULL,
+        workspace_name     TEXT NOT NULL,
+        task_id            TEXT NOT NULL,
+        provider           TEXT NOT NULL,
+        model              TEXT NOT NULL,
+        input_tokens       INTEGER NOT NULL DEFAULT 0,
+        output_tokens      INTEGER NOT NULL DEFAULT 0,
+        user_messages      INTEGER NOT NULL DEFAULT 0,
+        assistant_messages INTEGER NOT NULL DEFAULT 0,
+        estimated          INTEGER NOT NULL DEFAULT 0
+      );
+      CREATE INDEX IF NOT EXISTS usage_ts ON usage(ts);
     `)
 
     const columns = this.db.prepare('PRAGMA table_info(tasks)').all() as { name: string }[]
@@ -317,6 +345,67 @@ class SqliteStore implements Store {
         JSON.stringify(task.convo)
       )
     return taskSummary(task)
+  }
+
+  addUsage(event: UsageEvent): void {
+    this.db
+      .prepare(
+        `INSERT INTO usage
+           (id, ts, workspace_id, workspace_name, task_id, provider, model,
+            input_tokens, output_tokens, user_messages, assistant_messages, estimated)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        event.id,
+        event.ts,
+        event.workspaceId,
+        event.workspaceName,
+        event.taskId,
+        event.provider,
+        event.model,
+        event.inputTokens,
+        event.outputTokens,
+        event.userMessages,
+        event.assistantMessages,
+        event.estimated ? 1 : 0
+      )
+  }
+
+  listUsage(): UsageEvent[] {
+    const rows = this.db
+      .prepare(
+        `SELECT id, ts, workspace_id, workspace_name, task_id, provider, model,
+                input_tokens, output_tokens, user_messages, assistant_messages, estimated
+         FROM usage ORDER BY ts ASC`
+      )
+      .all() as {
+      id: string
+      ts: number
+      workspace_id: string
+      workspace_name: string
+      task_id: string
+      provider: string
+      model: string
+      input_tokens: number
+      output_tokens: number
+      user_messages: number
+      assistant_messages: number
+      estimated: number
+    }[]
+    return rows.map((r) => ({
+      id: r.id,
+      ts: r.ts,
+      workspaceId: r.workspace_id,
+      workspaceName: r.workspace_name,
+      taskId: r.task_id,
+      provider: r.provider as UsageEvent['provider'],
+      model: r.model,
+      inputTokens: r.input_tokens,
+      outputTokens: r.output_tokens,
+      userMessages: r.user_messages,
+      assistantMessages: r.assistant_messages,
+      estimated: r.estimated === 1
+    }))
   }
 
   close(): void {

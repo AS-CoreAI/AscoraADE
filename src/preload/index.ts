@@ -16,6 +16,9 @@ import {
   type CodexRunResult,
   type CodexEvent,
   type CodexEventPayload,
+  type ClaudeRunParams,
+  type UsageEvent,
+  type UsageEventInput,
   type GitStatusResult,
   type GitDiffRequest,
   type GitDiffResult,
@@ -102,6 +105,29 @@ const api = {
         .finally(() => ipcRenderer.removeListener(IPC.codex.event, listener))
     },
     abort: (id: string): Promise<void> => ipcRenderer.invoke(IPC.codex.abort, id)
+  },
+  claude: {
+    check: (): Promise<CodexCheckResult> => ipcRenderer.invoke(IPC.claude.check),
+    /** Runs a Claude Code turn; `onEvent` fires per normalized stream event. */
+    run: (
+      id: string,
+      params: ClaudeRunParams,
+      onEvent: (event: CodexEvent) => void
+    ): Promise<CodexRunResult> => {
+      const listener = (_e: IpcRendererEvent, payload: CodexEventPayload): void => {
+        if (payload.id === id) onEvent(payload.event)
+      }
+      ipcRenderer.on(IPC.claude.event, listener)
+      return ipcRenderer
+        .invoke(IPC.claude.run, id, params)
+        .finally(() => ipcRenderer.removeListener(IPC.claude.event, listener))
+    },
+    abort: (id: string): Promise<void> => ipcRenderer.invoke(IPC.claude.abort, id)
+  },
+  analytics: {
+    record: (event: UsageEventInput): Promise<UsageEvent> =>
+      ipcRenderer.invoke(IPC.analytics.record, event),
+    list: (): Promise<UsageEvent[]> => ipcRenderer.invoke(IPC.analytics.list)
   },
   git: {
     status: (cwd: string): Promise<GitStatusResult> => ipcRenderer.invoke(IPC.git.status, cwd),

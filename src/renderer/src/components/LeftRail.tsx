@@ -30,6 +30,9 @@ export function LeftRail(): JSX.Element {
   const openWorkspace = useApp((s) => s.openWorkspace)
   const openTask = useApp((s) => s.openTask)
   const newTask = useApp((s) => s.newTask)
+  const view = useApp((s) => s.view)
+  const openAnalytics = useApp((s) => s.openAnalytics)
+  const closeAnalytics = useApp((s) => s.closeAnalytics)
   const themePreference = useApp((s) => s.themePreference)
   const setThemePreference = useApp((s) => s.setThemePreference)
   const [themeMenuOpen, setThemeMenuOpen] = useState(false)
@@ -152,6 +155,14 @@ export function LeftRail(): JSX.Element {
             ))}
           </div>
         )}
+        <button
+          className={`rail-settings${view === 'analytics' ? ' active' : ''}`}
+          title="Analytics"
+          aria-label="Analytics"
+          onClick={() => (view === 'analytics' ? closeAnalytics() : openAnalytics())}
+        >
+          <Icon name="barChart" size={17} />
+        </button>
         <button
           className={`rail-settings${themeMenuOpen ? ' active' : ''}`}
           title="Appearance settings"

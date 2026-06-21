@@ -4,6 +4,8 @@ import {
   DEFAULT_LLM_CONFIG,
   type ChatParams,
   type ChatResult,
+  type ClaudePermissionMode,
+  type CodexReasoning,
   type CodexSandbox,
   type LlmConfig,
   type LlmProvider,
@@ -24,7 +26,13 @@ function readConfig(): LlmConfig {
     model: store.getSetting<string>('llm.model') ?? DEFAULT_LLM_CONFIG.model,
     codexPath: store.getSetting<string>('codex.path') ?? DEFAULT_LLM_CONFIG.codexPath,
     codexModel: store.getSetting<string>('codex.model') ?? DEFAULT_LLM_CONFIG.codexModel,
-    codexSandbox: store.getSetting<CodexSandbox>('codex.sandbox') ?? DEFAULT_LLM_CONFIG.codexSandbox
+    codexSandbox: store.getSetting<CodexSandbox>('codex.sandbox') ?? DEFAULT_LLM_CONFIG.codexSandbox,
+    codexReasoning:
+      store.getSetting<CodexReasoning | ''>('codex.reasoning') ?? DEFAULT_LLM_CONFIG.codexReasoning,
+    claudePath: store.getSetting<string>('claude.path') ?? DEFAULT_LLM_CONFIG.claudePath,
+    claudeModel: store.getSetting<string>('claude.model') ?? DEFAULT_LLM_CONFIG.claudeModel,
+    claudePermission:
+      store.getSetting<ClaudePermissionMode>('claude.permission') ?? DEFAULT_LLM_CONFIG.claudePermission
   }
 }
 
@@ -51,6 +59,10 @@ export function registerLlmHandlers(): void {
     if (typeof patch.codexPath === 'string') store.setSetting('codex.path', patch.codexPath.trim())
     if (typeof patch.codexModel === 'string') store.setSetting('codex.model', patch.codexModel.trim())
     if (typeof patch.codexSandbox === 'string') store.setSetting('codex.sandbox', patch.codexSandbox)
+    if (typeof patch.codexReasoning === 'string') store.setSetting('codex.reasoning', patch.codexReasoning)
+    if (typeof patch.claudePath === 'string') store.setSetting('claude.path', patch.claudePath.trim())
+    if (typeof patch.claudeModel === 'string') store.setSetting('claude.model', patch.claudeModel.trim())
+    if (typeof patch.claudePermission === 'string') store.setSetting('claude.permission', patch.claudePermission)
     getClient() // refresh the cached client with the new config
   })
 
@@ -80,7 +92,8 @@ export function registerLlmHandlers(): void {
               ok: true,
               content,
               toolCalls: value.toolCalls,
-              finishReason: value.finishReason
+              finishReason: value.finishReason,
+              usage: value.usage
             }
           }
           content += value
