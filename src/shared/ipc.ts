@@ -127,6 +127,8 @@ export interface TaskMessage {
   role: 'user' | 'assistant'
   kind: 'text' | 'tool'
   text: string
+  /** True for a `text` message that holds the agent's reasoning/thinking. */
+  reasoning?: boolean
   tool?: string
   args?: Record<string, unknown>
   status?: 'awaiting' | 'running' | 'done' | 'rejected' | 'error'

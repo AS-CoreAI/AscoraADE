@@ -289,7 +289,13 @@ export function runClaude(
         } else if (type === 'assistant') {
           const content = ((obj.message as Record<string, unknown>)?.content ?? []) as Record<string, unknown>[]
           for (const block of Array.isArray(content) ? content : []) {
-            if (block.type === 'text' && str(block.text).trim()) {
+            if (block.type === 'thinking' && str(block.thinking).trim()) {
+              emit({
+                kind: 'item',
+                phase: 'completed',
+                item: { id: `think_${Math.random().toString(36).slice(2)}`, type: 'reasoning', text: str(block.thinking) }
+              })
+            } else if (block.type === 'text' && str(block.text).trim()) {
               emit({
                 kind: 'item',
                 phase: 'completed',

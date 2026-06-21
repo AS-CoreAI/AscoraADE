@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, type JSX } from 'react'
+import { useLayoutEffect, useRef, useState, type JSX } from 'react'
 import { Composer } from './Composer'
 import { Icon } from './Icon'
 import { useApp, type ChatMessage, type ToolStatus } from '@/state/store'
@@ -97,6 +97,21 @@ function ToolCard({ m }: { m: ChatMessage }): JSX.Element {
   )
 }
 
+function ReasoningBlock({ text }: { text: string }): JSX.Element {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className={`reasoning-block${open ? ' open' : ''}`}>
+      <button className="reasoning-head" onClick={() => setOpen((o) => !o)}>
+        <Icon name="sparkles" size={13} />
+        <span>Thought process</span>
+        <span className="spacer" />
+        <Icon name={open ? 'chevronDown' : 'chevronRight'} size={13} />
+      </button>
+      {open && <div className="reasoning-body">{text}</div>}
+    </div>
+  )
+}
+
 function Messages({ messages }: { messages: ChatMessage[] }): JSX.Element {
   if (messages.length === 0) {
     return (
@@ -112,6 +127,8 @@ function Messages({ messages }: { messages: ChatMessage[] }): JSX.Element {
       {messages.map((m) =>
         m.kind === 'tool' ? (
           <ToolCard key={m.id} m={m} />
+        ) : m.reasoning ? (
+          <ReasoningBlock key={m.id} text={m.text} />
         ) : (
           <div key={m.id} className={`msg ${m.role}`}>
             <span className="role">{m.role === 'user' ? 'You' : 'Ascora'}</span>

@@ -284,6 +284,9 @@ export function runCodex(
   const args = ['exec']
   if (params.threadId) args.push('resume', params.threadId)
   args.push('--json', '--skip-git-repo-check', '-s', sandbox)
+  // Surface reasoning summaries as `reasoning` items so the UI can show them
+  // ("detailed" reliably emits them; "auto" often stays silent on short tasks).
+  args.push('-c', 'model_reasoning_summary="detailed"')
   if (model) args.push('-m', model)
   if (reasoning) args.push('-c', `model_reasoning_effort="${reasoning}"`)
   args.push('-C', params.cwd, '-') // '-' → read the prompt from stdin

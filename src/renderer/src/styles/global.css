@@ -1468,6 +1468,43 @@ button {
   background: var(--bg-hover);
 }
 
+/* ---------- Agent reasoning (collapsible) ---------- */
+.reasoning-block {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-rail);
+  overflow: hidden;
+}
+.reasoning-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  padding: 7px 10px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-style: italic;
+}
+.reasoning-head:hover {
+  color: var(--text);
+}
+.reasoning-head .spacer {
+  flex: 1;
+}
+.reasoning-head svg {
+  color: var(--text-faint);
+}
+.reasoning-body {
+  padding: 8px 11px 10px;
+  border-top: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
+}
+
 /* ---------- Analytics dashboard ---------- */
 .analytics {
   flex: 1;

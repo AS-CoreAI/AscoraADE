@@ -701,7 +701,18 @@ export const useApp = create<AppState>((set, get) => ({
             }
           } else if (event.kind === 'item') {
             const it = event.item
-            if (it.type === 'reasoning') return // keep the chat focused on actions + answers
+            if (it.type === 'reasoning') {
+              const text = (it.text ?? '').trim()
+              if (!text) return
+              const existingId = itemCards.get(it.id)
+              if (existingId) patch(existingId, { text })
+              else {
+                const cardId = crypto.randomUUID()
+                itemCards.set(it.id, cardId)
+                addMsg({ id: cardId, role: 'assistant', kind: 'text', reasoning: true, text })
+              }
+              return
+            }
             if (it.type === 'agent_message') {
               if (event.phase === 'completed' && it.text?.trim()) {
                 addMsg({ id: crypto.randomUUID(), role: 'assistant', kind: 'text', text: it.text.trim() })
