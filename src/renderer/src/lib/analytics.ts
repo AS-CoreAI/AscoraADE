@@ -221,7 +221,9 @@ export function aggregate(
     const key = dateKey(date)
     heatmap.push({ day: key, date, count: tokensByDay.get(key) ?? 0 })
   }
-  const maxDay = Math.max(0, ...[...tokensByDay.values()])
+  // Scale only against the visible window. Old outlier days must not flatten the
+  // colour contrast of every cell the user can currently see.
+  const maxDay = Math.max(0, ...heatmap.map((cell) => cell.count))
   const heatLevels: [number, number, number, number] =
     maxDay > 0
       ? [maxDay * 0.05, maxDay * 0.25, maxDay * 0.5, maxDay * 0.75]

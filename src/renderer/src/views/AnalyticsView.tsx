@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type JSX } from 'react'
+import { useEffect, useMemo, useState, type FocusEvent, type JSX, type MouseEvent } from 'react'
 import type { UsageEvent } from '@shared/ipc'
 import { api } from '@/lib/api'
 import { Icon } from '@/components/Icon'
@@ -19,6 +19,12 @@ const PROVIDER_LABEL: Record<string, string> = {
 const providerLabel = (p: string): string => PROVIDER_LABEL[p] ?? p
 
 const dateFmt = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' })
+const heatmapDateFmt = new Intl.DateTimeFormat(undefined, {
+  weekday: 'long',
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric'
+})
 
 function StatCard({
   icon,
@@ -47,6 +53,38 @@ function Heatmap({ data }: { data: Analytics }): JSX.Element {
   const cells = data.heatmap
   const firstWeekday = cells.length > 0 ? cells[0].date.getDay() : 0
   const placeholders = Array.from({ length: firstWeekday })
+  const [tooltip, setTooltip] = useState<{
+    day: string
+    tokens: number
+    left: number
+    top: number
+  } | null>(null)
+
+  const showTooltip = (
+    cell: (typeof cells)[number],
+    target: HTMLElement
+  ): void => {
+    const rect = target.getBoundingClientRect()
+    const halfTooltipWidth = 105
+    const left = Math.min(
+      Math.max(rect.left + rect.width / 2, halfTooltipWidth + 8),
+      window.innerWidth - halfTooltipWidth - 8
+    )
+    setTooltip({
+      day: heatmapDateFmt.format(cell.date),
+      tokens: cell.count,
+      left,
+      top: rect.top - 8
+    })
+  }
+
+  const handleMouseEnter =
+    (cell: (typeof cells)[number]) => (event: MouseEvent<HTMLSpanElement>): void =>
+      showTooltip(cell, event.currentTarget)
+
+  const handleFocus =
+    (cell: (typeof cells)[number]) => (event: FocusEvent<HTMLSpanElement>): void =>
+      showTooltip(cell, event.currentTarget)
 
   return (
     <div className="an-panel">
@@ -69,10 +107,30 @@ function Heatmap({ data }: { data: Analytics }): JSX.Element {
             key={c.day}
             className="an-heat-cell"
             data-level={heatLevel(c.count, data.heatLevels)}
-            title={`${c.day}: ${formatTokens(c.count)} tokens`}
+            role="img"
+            tabIndex={0}
+            aria-label={`${heatmapDateFmt.format(c.date)}: ${c.count.toLocaleString()} tokens`}
+            onMouseEnter={handleMouseEnter(c)}
+            onMouseLeave={() => setTooltip(null)}
+            onFocus={handleFocus(c)}
+            onBlur={() => setTooltip(null)}
           />
         ))}
       </div>
+      {tooltip && (
+        <div
+          className="an-heat-tooltip"
+          role="tooltip"
+          style={{ left: tooltip.left, top: tooltip.top }}
+        >
+          <span>{tooltip.day}</span>
+          <strong>
+            {tooltip.tokens > 0
+              ? `${tooltip.tokens.toLocaleString()} tokens`
+              : 'No activity'}
+          </strong>
+        </div>
+      )}
     </div>
   )
 }
