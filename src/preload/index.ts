@@ -33,8 +33,11 @@ import {
   type TerminalDataPayload,
   type TerminalExitPayload,
   type AgentListResult,
+  type AgentReadRange,
   type AgentReadResult,
   type AgentWriteResult,
+  type AgentEditResult,
+  type AgentSearchResult,
   type AgentRunResult
 } from '@shared/ipc'
 
@@ -198,10 +201,20 @@ const api = {
   agent: {
     listDir: (root: string, path: string): Promise<AgentListResult> =>
       ipcRenderer.invoke(IPC.agent.listDir, root, path),
-    readFile: (root: string, path: string): Promise<AgentReadResult> =>
-      ipcRenderer.invoke(IPC.agent.readFile, root, path),
+    readFile: (root: string, path: string, range?: AgentReadRange): Promise<AgentReadResult> =>
+      ipcRenderer.invoke(IPC.agent.readFile, root, path, range),
     writeFile: (root: string, path: string, content: string): Promise<AgentWriteResult> =>
       ipcRenderer.invoke(IPC.agent.writeFile, root, path, content),
+    editFile: (
+      root: string,
+      path: string,
+      oldString: string,
+      newString: string,
+      replaceAll: boolean
+    ): Promise<AgentEditResult> =>
+      ipcRenderer.invoke(IPC.agent.editFile, root, path, oldString, newString, replaceAll),
+    search: (root: string, query: string, path?: string): Promise<AgentSearchResult> =>
+      ipcRenderer.invoke(IPC.agent.search, root, query, path),
     runCommand: (root: string, command: string): Promise<AgentRunResult> =>
       ipcRenderer.invoke(IPC.agent.runCommand, root, command)
   },

@@ -88,6 +88,8 @@ export const IPC = {
     listDir: 'agent:listDir',
     readFile: 'agent:readFile',
     writeFile: 'agent:writeFile',
+    editFile: 'agent:editFile',
+    search: 'agent:search',
     runCommand: 'agent:runCommand'
   }
 } as const
@@ -137,6 +139,9 @@ export interface TaskMessage {
   role: 'user' | 'assistant'
   kind: 'text' | 'tool'
   text: string
+  /** Display name of the model that produced this assistant turn, stamped at
+   *  creation so a mid-chat model switch leaves earlier messages untouched. */
+  model?: string
   /** True for a `text` message that holds the agent's reasoning/thinking. */
   reasoning?: boolean
   tool?: string
@@ -603,11 +608,50 @@ export interface AgentListResult {
   error?: string
 }
 
+/** Optional 1-based, inclusive line slice for a ranged read. */
+export interface AgentReadRange {
+  startLine?: number
+  endLine?: number
+}
+
 export interface AgentReadResult {
   ok: boolean
   path?: string
   content?: string
   /** True when the file was binary/too large and content was withheld. */
+  truncated?: boolean
+  /** First line returned (1-based), present only when a slice was requested. */
+  startLine?: number
+  /** Last line returned (1-based), present only when a slice was requested. */
+  endLine?: number
+  /** Total line count of the whole file (so the model can page through it). */
+  totalLines?: number
+  error?: string
+}
+
+export interface AgentEditResult {
+  ok: boolean
+  path?: string
+  /** How many occurrences of `oldString` were replaced. */
+  replacements?: number
+  error?: string
+}
+
+/** A single line that matched an `agent.search` query. */
+export interface AgentSearchMatch {
+  /** Repo-relative path using forward slashes. */
+  path: string
+  /** 1-based line number of the match. */
+  line: number
+  /** The matching line, trimmed and length-capped for token budgets. */
+  text: string
+}
+
+export interface AgentSearchResult {
+  ok: boolean
+  query?: string
+  matches?: AgentSearchMatch[]
+  /** True when the match list hit the cap and more results exist. */
   truncated?: boolean
   error?: string
 }

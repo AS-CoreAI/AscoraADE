@@ -40,7 +40,14 @@ export type ChatMessage = TaskMessage
 /** How many tool round-trips a single task may take before we stop. */
 const MAX_STEPS = 16
 
-const TOOL_NAMES = ['list_dir', 'read_file', 'write_file', 'run_command'] as const
+const TOOL_NAMES = [
+  'list_dir',
+  'read_file',
+  'search_files',
+  'write_file',
+  'edit_file',
+  'run_command'
+] as const
 type ToolName = (typeof TOOL_NAMES)[number]
 
 const TOOLS: ToolDef[] = [
@@ -60,10 +67,16 @@ const TOOLS: ToolDef[] = [
     type: 'function',
     function: {
       name: 'read_file',
-      description: 'Read a UTF-8 text file from the workspace.',
+      description:
+        'Read a UTF-8 text file. Omit the line range to read the whole file, or pass ' +
+        'start_line/end_line (1-based, inclusive) to read just a slice of a large file.',
       parameters: {
         type: 'object',
-        properties: { path: { type: 'string', description: 'Workspace-relative file path.' } },
+        properties: {
+          path: { type: 'string', description: 'Workspace-relative file path.' },
+          start_line: { type: 'integer', description: 'Optional first line to read (1-based).' },
+          end_line: { type: 'integer', description: 'Optional last line to read (1-based, inclusive).' }
+        },
         required: ['path']
       }
     }
@@ -71,8 +84,27 @@ const TOOLS: ToolDef[] = [
   {
     type: 'function',
     function: {
+      name: 'search_files',
+      description:
+        'Search the workspace for a literal, case-insensitive text and return matching ' +
+        'file:line locations. Use this to find code instead of reading files one by one.',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: 'Text to search for (case-insensitive substring).' },
+          path: { type: 'string', description: 'Optional subdirectory to scope the search to.' }
+        },
+        required: ['query']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
       name: 'write_file',
-      description: 'Create or overwrite a workspace file with the given full content.',
+      description:
+        'Create a new file, or overwrite an existing one with its FULL new content. ' +
+        'For small changes to an existing file prefer edit_file.',
       parameters: {
         type: 'object',
         properties: {
@@ -80,6 +112,29 @@ const TOOLS: ToolDef[] = [
           content: { type: 'string', description: 'The complete new file content.' }
         },
         required: ['path', 'content']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'edit_file',
+      description:
+        'Replace an exact snippet in an existing file without rewriting the whole file. ' +
+        'old_string must match the current text exactly and (unless replace_all is true) ' +
+        'be unique — include a few surrounding lines for context.',
+      parameters: {
+        type: 'object',
+        properties: {
+          path: { type: 'string', description: 'Workspace-relative file path.' },
+          old_string: { type: 'string', description: 'Exact text to find (with enough context to be unique).' },
+          new_string: { type: 'string', description: 'Text to replace it with.' },
+          replace_all: {
+            type: 'boolean',
+            description: 'Replace every occurrence instead of the single unique one. Default false.'
+          }
+        },
+        required: ['path', 'old_string', 'new_string']
       }
     }
   },
@@ -97,27 +152,41 @@ const TOOLS: ToolDef[] = [
   }
 ]
 
-const SYSTEM_PROMPT = [
-  'You are Ascora, an AI coding agent embedded in a desktop IDE, working inside the',
-  "user's open project folder via a local LLM (LM Studio).",
-  '',
-  'You can use tools to inspect and change the project:',
-  '- list_dir(path): list a directory ("." is the project root)',
-  '- read_file(path): read a text file',
-  '- write_file(path, content): create/overwrite a file with its FULL new content',
-  '- run_command(command): run a shell command in the project root and read its output',
-  '',
-  'All paths are relative to the project root. Work step by step: call one tool at a',
-  'time, wait for its result, then decide the next step. Read a file before editing it,',
-  'and always write back the complete file (these tools do not apply patches). When the',
-  'task is done, reply with a short plain-text summary and NO tool call.',
-  '',
-  'If you cannot emit native tool calls, request a tool by replying with ONLY a fenced',
-  'block in this exact format (no prose around it):',
-  '```tool_call',
-  '{"tool": "read_file", "args": {"path": "package.json"}}',
-  '```'
-].join('\n')
+/** Build the system prompt for the local (LM Studio) agent loop. */
+function buildSystemPrompt(): string {
+  const onWin = api.system.platform === 'win32'
+  const shellNote = onWin
+    ? 'Commands run in Windows PowerShell. Chain steps with `;` (PowerShell also accepts ' +
+      '`&&`/`||`, which are translated for you) and use PowerShell/Windows-friendly commands.'
+    : 'Commands run in a POSIX shell (sh).'
+  return [
+    'You are a capable AI coding agent operating inside ASCORA ADE, a desktop IDE, with',
+    "direct access to the user's open project folder. Keep your own identity: if asked who",
+    'you are, answer as the underlying model you actually are — do not claim to be "Ascora".',
+    'ASCORA ADE is only the environment you run in.',
+    '',
+    'You can use tools to inspect and change the project:',
+    '- list_dir(path): list a directory ("." is the project root)',
+    '- read_file(path, [start_line], [end_line]): read a whole file or just a line range',
+    '- search_files(query, [path]): find where text appears across the project',
+    '- write_file(path, content): create or fully overwrite a file',
+    '- edit_file(path, old_string, new_string, [replace_all]): change part of a file in place',
+    '- run_command(command): run a shell command in the project root and read its output',
+    '',
+    'All paths are relative to the project root. Work step by step: call one tool at a time,',
+    'wait for its result, then decide the next step. Prefer search_files to locate code and',
+    'edit_file for surgical changes; reach for write_file only for new files or full rewrites.',
+    'Always read a snippet before editing it so old_string matches exactly.',
+    shellNote,
+    'When the task is done, reply with a short plain-text summary and NO tool call.',
+    '',
+    'If you cannot emit native tool calls, request a tool by replying with ONLY a fenced',
+    'block in this exact format (no prose around it):',
+    '```tool_call',
+    '{"tool": "read_file", "args": {"path": "package.json"}}',
+    '```'
+  ].join('\n')
+}
 
 // ---- agent-loop helpers (module scope; one task runs at a time) ----
 
@@ -133,6 +202,37 @@ interface ParsedCall {
 }
 
 const asStr = (v: unknown): string => (typeof v === 'string' ? v : '')
+
+/** Coerce a tool arg to a positive integer line number, or undefined. */
+function asLine(v: unknown): number | undefined {
+  const n = typeof v === 'number' ? v : typeof v === 'string' ? Number(v) : NaN
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : undefined
+}
+
+/**
+ * Apply an edit_file replacement locally so the approval card can preview the
+ * diff before the main process performs the real write. Mirrors editFileTool's
+ * rules (unique match unless replaceAll) so preview and result agree.
+ */
+function applyEdit(
+  content: string,
+  oldStr: string,
+  newStr: string,
+  replaceAll: boolean
+): { ok: true; content: string } | { ok: false; error: string } {
+  if (!oldStr) return { ok: false, error: 'old_string is required.' }
+  if (replaceAll) {
+    const parts = content.split(oldStr)
+    if (parts.length === 1) return { ok: false, error: 'old_string was not found.' }
+    return { ok: true, content: parts.join(newStr) }
+  }
+  const idx = content.indexOf(oldStr)
+  if (idx === -1) return { ok: false, error: 'old_string was not found.' }
+  if (content.indexOf(oldStr, idx + oldStr.length) !== -1) {
+    return { ok: false, error: 'old_string is not unique.' }
+  }
+  return { ok: true, content: content.slice(0, idx) + newStr + content.slice(idx + oldStr.length) }
+}
 
 function safeArgs(json: string): Record<string, unknown> {
   try {
@@ -153,12 +253,42 @@ function truncate(s: string, n: number): string {
 
 /** Rough token estimate (~4 chars/token) for backends that don't report usage. */
 function estTokens(text: string): number {
-  return Math.max(0, Math.round((text?.length ?? 0) / 4))
+  return tokensFromChars(text?.length ?? 0)
+}
+
+/** Same ~4 chars/token estimate, from a running character count. */
+function tokensFromChars(chars: number): number {
+  return Math.max(0, Math.round(chars / 4))
 }
 
 function taskTitle(text: string): string {
   const title = text.replace(/\s+/g, ' ').trim()
   return title.length > 72 ? `${title.slice(0, 69)}...` : title
+}
+
+/**
+ * Display name for the model behind the active provider, stamped onto each
+ * assistant message so the chat shows the real model (and keeps older messages
+ * under their original model after a mid-chat switch).
+ */
+function modelLabel(s: {
+  provider: LlmProvider
+  model: string
+  codexModel: string
+  claudeModel: string
+}): string {
+  switch (s.provider) {
+    case 'lmstudio':
+      return s.model || 'local model'
+    case 'codex':
+      return s.codexModel || 'Codex'
+    case 'claude':
+      return s.claudeModel && s.claudeModel !== 'default' ? s.claudeModel : 'Claude'
+    case 'glm':
+      return 'GLM'
+    default:
+      return 'Assistant'
+  }
 }
 
 /**
@@ -315,6 +445,12 @@ interface AppState {
   convo: LlmMessage[]
   streaming: boolean
   streamId: string | null
+  /** True while a model turn is actively generating (drives the Thinking… indicator). */
+  thinking: boolean
+  /** Running output-token estimate for the active turn(s), shown while thinking. */
+  thinkingTokens: number
+  /** Epoch ms when the current run started, for the Thinking… elapsed timer. */
+  thinkingStartedAt: number | null
 
   init: () => Promise<void>
   openFolder: () => Promise<void>
@@ -409,6 +545,9 @@ export const useApp = create<AppState>((set, get) => ({
   convo: [],
   streaming: false,
   streamId: null,
+  thinking: false,
+  thinkingTokens: 0,
+  thinkingStartedAt: null,
 
   async init() {
     const [workspaces, cfg, savedTheme, savedOrder, savedCollapsed] = await Promise.all([
@@ -797,6 +936,11 @@ export const useApp = create<AppState>((set, get) => ({
     let finalStatus: TaskSummary['status'] = 'idle'
 
     runAborted = false
+    // Model name stamped on this turn's assistant messages (captured now so a
+    // later model switch leaves these messages labelled with their real model).
+    const assistantModel = modelLabel(get())
+    // Cumulative streamed output length → live token estimate for the Thinking… badge.
+    let streamedChars = 0
     const patch = (id: string, p: Partial<ChatMessage>): void =>
       set((s) => ({ messages: s.messages.map((m) => (m.id === id ? { ...m, ...p } : m)) }))
     const addMsg = (m: ChatMessage): void => set((s) => ({ messages: [...s.messages, m] }))
@@ -807,6 +951,9 @@ export const useApp = create<AppState>((set, get) => ({
     set((s) => ({
       view: 'workspace',
       streaming: true,
+      thinking: true,
+      thinkingTokens: 0,
+      thinkingStartedAt: Date.now(),
       activeTaskId: taskId,
       activeTaskTitle: title,
       messages: [...s.messages, { id: crypto.randomUUID(), role: 'user', kind: 'text', text: trimmed }],
@@ -838,6 +985,7 @@ export const useApp = create<AppState>((set, get) => ({
               id: crypto.randomUUID(),
               role: 'assistant',
               kind: 'text',
+              model: assistantModel,
               text: `⚠ ${err instanceof Error ? err.message : String(err)}`
             })
             return
@@ -848,7 +996,18 @@ export const useApp = create<AppState>((set, get) => ({
         const runId = crypto.randomUUID()
         set({ streamId: runId })
         const itemCards = new Map<string, string>() // agent item id → chat card id
+        const itemChars = new Map<string, number>() // agent item id → chars already counted
         let sawError = false
+
+        // Grow the live token estimate as generated text arrives (without
+        // double-counting an item that streams in via successive updates).
+        const countText = (key: string, text: string): void => {
+          const prev = itemChars.get(key) ?? 0
+          if (text.length <= prev) return
+          streamedChars += text.length - prev
+          itemChars.set(key, text.length)
+          set({ thinkingTokens: tokensFromChars(streamedChars) })
+        }
 
         const handleEvent = (event: CodexEvent): void => {
           if (runAborted) return
@@ -859,6 +1018,7 @@ export const useApp = create<AppState>((set, get) => ({
             if (it.type === 'reasoning') {
               const text = (it.text ?? '').trim()
               if (!text) return
+              countText(it.id, text)
               const existingId = itemCards.get(it.id)
               if (existingId) patch(existingId, { text })
               else {
@@ -870,7 +1030,8 @@ export const useApp = create<AppState>((set, get) => ({
             }
             if (it.type === 'agent_message') {
               if (event.phase === 'completed' && it.text?.trim()) {
-                addMsg({ id: crypto.randomUUID(), role: 'assistant', kind: 'text', text: it.text.trim() })
+                countText(it.id, it.text.trim())
+                addMsg({ id: crypto.randomUUID(), role: 'assistant', kind: 'text', model: assistantModel, text: it.text.trim() })
               }
               return
             }
@@ -884,7 +1045,7 @@ export const useApp = create<AppState>((set, get) => ({
             }
           } else if (event.kind === 'error') {
             sawError = true
-            addMsg({ id: crypto.randomUUID(), role: 'assistant', kind: 'text', text: `⚠ ${event.message}` })
+            addMsg({ id: crypto.randomUUID(), role: 'assistant', kind: 'text', model: assistantModel, text: `⚠ ${event.message}` })
           }
         }
 
@@ -925,7 +1086,7 @@ export const useApp = create<AppState>((set, get) => ({
                 handleEvent
               )
 
-        set({ streamId: null })
+        set({ streamId: null, thinking: false })
         if (res.threadId) setSession(res.threadId)
 
         // Record usage for the dashboard (real token counts when reported).
@@ -958,6 +1119,7 @@ export const useApp = create<AppState>((set, get) => ({
             id: crypto.randomUUID(),
             role: 'assistant',
             kind: 'text',
+            model: assistantModel,
             text: `⚠ ${res.error ?? (isGlm ? 'ZCode run failed.' : isClaude ? 'Claude run failed.' : 'Codex run failed.')}`
           })
         } else if (sawError) {
@@ -969,18 +1131,21 @@ export const useApp = create<AppState>((set, get) => ({
       for (let step = 0; step < MAX_STEPS && !runAborted; step += 1) {
         // 1) Stream one model turn into a fresh assistant bubble.
         const replyId = crypto.randomUUID()
-        addMsg({ id: replyId, role: 'assistant', kind: 'text', text: '' })
-        set({ streamId: replyId })
-        const messages: LlmMessage[] = [{ role: 'system', content: SYSTEM_PROMPT }, ...get().convo]
+        addMsg({ id: replyId, role: 'assistant', kind: 'text', model: assistantModel, text: '' })
+        set({ streamId: replyId, thinking: true })
+        const messages: LlmMessage[] = [{ role: 'system', content: buildSystemPrompt() }, ...get().convo]
         const result = await api.llm.chat(
           crypto.randomUUID(),
           { model: get().model, messages, tools: TOOLS },
-          (delta) =>
+          (delta) => {
+            streamedChars += delta.length
             set((s) => ({
+              thinkingTokens: tokensFromChars(streamedChars),
               messages: s.messages.map((m) => (m.id === replyId ? { ...m, text: m.text + delta } : m))
             }))
+          }
         )
-        set({ streamId: null, connection: result.ok ? 'connected' : get().connection })
+        set({ streamId: null, thinking: false, connection: result.ok ? 'connected' : get().connection })
 
         if (!result.ok) {
           finalStatus = 'error'
@@ -1067,13 +1232,26 @@ export const useApp = create<AppState>((set, get) => ({
           }
 
           const cardId = crypto.randomUUID()
-          const mutating = call.name === 'write_file' || call.name === 'run_command'
+          const mutating =
+            call.name === 'write_file' || call.name === 'edit_file' || call.name === 'run_command'
 
-          // For edits, read the current file first so the card can show a diff.
+          // For file changes, read the current file first so the card can show a diff.
           let oldContent = ''
-          if (call.name === 'write_file' && asStr(call.args.path)) {
+          let newContent = ''
+          if ((call.name === 'write_file' || call.name === 'edit_file') && asStr(call.args.path)) {
             const cur = await api.agent.readFile(root, asStr(call.args.path))
             oldContent = cur.ok && !cur.truncated ? (cur.content ?? '') : ''
+          }
+          if (call.name === 'write_file') {
+            newContent = asStr(call.args.content)
+          } else if (call.name === 'edit_file') {
+            const preview = applyEdit(
+              oldContent,
+              asStr(call.args.old_string),
+              asStr(call.args.new_string),
+              call.args.replace_all === true
+            )
+            newContent = preview.ok ? preview.content : oldContent
           }
 
           const needsApproval = mutating && get().mode === 'ask'
@@ -1081,8 +1259,8 @@ export const useApp = create<AppState>((set, get) => ({
             id: cardId, role: 'assistant', kind: 'tool', text: '',
             tool: call.name, args: call.args,
             status: needsApproval ? 'awaiting' : 'running',
-            ...(call.name === 'write_file'
-              ? { oldContent, newContent: asStr(call.args.content) }
+            ...(call.name === 'write_file' || call.name === 'edit_file'
+              ? { oldContent, newContent }
               : {})
           })
 
@@ -1124,13 +1302,19 @@ export const useApp = create<AppState>((set, get) => ({
                 : `Error: ${r.error}`
             )
           } else if (call.name === 'read_file') {
-            const r = await api.agent.readFile(root, asStr(call.args.path))
+            const startLine = asLine(call.args.start_line)
+            const endLine = asLine(call.args.end_line)
+            const range = startLine || endLine ? { startLine, endLine } : undefined
+            const r = await api.agent.readFile(root, asStr(call.args.path), range)
+            const ranged = r.ok && r.startLine != null && r.endLine != null
             patch(cardId, {
               status: r.ok ? 'done' : 'error',
               output: r.ok
                 ? r.truncated
                   ? 'binary or too large'
-                  : `${(r.content ?? '').split('\n').length} lines`
+                  : ranged
+                    ? `lines ${r.startLine}-${r.endLine} of ${r.totalLines}`
+                    : `${r.totalLines ?? (r.content ?? '').split('\n').length} lines`
                 : undefined,
               error: r.error
             })
@@ -1139,7 +1323,50 @@ export const useApp = create<AppState>((set, get) => ({
               r.ok
                 ? r.truncated
                   ? `(${r.path} is binary or too large to read)`
-                  : `Contents of ${r.path}:\n${r.content}`
+                  : ranged
+                    ? `Contents of ${r.path} (lines ${r.startLine}-${r.endLine} of ${r.totalLines}):\n${r.content}`
+                    : `Contents of ${r.path}:\n${r.content}`
+                : `Error: ${r.error}`
+            )
+          } else if (call.name === 'search_files') {
+            const r = await api.agent.search(
+              root,
+              asStr(call.args.query),
+              asStr(call.args.path) || undefined
+            )
+            const hits = r.matches ?? []
+            patch(cardId, {
+              status: r.ok ? 'done' : 'error',
+              output: r.ok
+                ? hits.length
+                  ? hits.map((mt) => `${mt.path}:${mt.line}: ${mt.text}`).join('\n')
+                  : 'No matches.'
+                : undefined,
+              error: r.error
+            })
+            appendResult(
+              call,
+              r.ok
+                ? hits.length
+                  ? `${hits.length}${r.truncated ? '+' : ''} match(es) for "${asStr(call.args.query)}":\n` +
+                    hits.map((mt) => `${mt.path}:${mt.line}: ${mt.text}`).join('\n') +
+                    (r.truncated ? '\n…(more matches truncated)' : '')
+                  : `No matches for "${asStr(call.args.query)}".`
+                : `Error: ${r.error}`
+            )
+          } else if (call.name === 'edit_file') {
+            const r = await api.agent.editFile(
+              root,
+              asStr(call.args.path),
+              asStr(call.args.old_string),
+              asStr(call.args.new_string),
+              call.args.replace_all === true
+            )
+            patch(cardId, { status: r.ok ? 'done' : 'error', error: r.error })
+            appendResult(
+              call,
+              r.ok
+                ? `Edited ${r.path} (${r.replacements} replacement${r.replacements === 1 ? '' : 's'}).`
                 : `Error: ${r.error}`
             )
           } else if (call.name === 'write_file') {
@@ -1172,13 +1399,13 @@ export const useApp = create<AppState>((set, get) => ({
         const last = get().messages.at(-1)
         if (last?.kind === 'tool') {
           addMsg({
-            id: crypto.randomUUID(), role: 'assistant', kind: 'text',
+            id: crypto.randomUUID(), role: 'assistant', kind: 'text', model: assistantModel,
             text: '_Reached the tool-step limit for this task._'
           })
         }
       }
     } finally {
-      set({ streaming: false, streamId: null })
+      set({ streaming: false, streamId: null, thinking: false, thinkingStartedAt: null })
       await get().saveActiveTask(finalStatus)
     }
   },
@@ -1201,6 +1428,7 @@ export const useApp = create<AppState>((set, get) => ({
 
   stopStreaming() {
     runAborted = true
+    set({ thinking: false })
     const id = get().streamId
     if (id) {
       const p = get().provider

@@ -7,19 +7,23 @@ import { lineDiff } from '@/lib/diff'
 const TOOL_LABEL: Record<string, string> = {
   list_dir: 'List directory',
   read_file: 'Read file',
-  write_file: 'Edit file',
+  search_files: 'Search',
+  write_file: 'Write file',
+  edit_file: 'Edit file',
   run_command: 'Run command',
   apply_patch: 'Edit files'
 }
 
-function toolIcon(tool?: string): 'terminal' | 'folder' | 'file' {
+function toolIcon(tool?: string): 'terminal' | 'folder' | 'file' | 'search' {
   if (tool === 'run_command') return 'terminal'
   if (tool === 'list_dir') return 'folder'
+  if (tool === 'search_files') return 'search'
   return 'file'
 }
 
 function toolSummary(m: ChatMessage): string {
   if (m.tool === 'run_command') return String(m.args?.command ?? '')
+  if (m.tool === 'search_files') return String(m.args?.query ?? '')
   return String(m.args?.path ?? '')
 }
 
@@ -61,9 +65,10 @@ function ToolCard({ m }: { m: ChatMessage }): JSX.Element {
         <span className={`tool-status ${status}`}>{STATUS_TEXT[status]}</span>
       </div>
 
-      {m.tool === 'write_file' && (status === 'awaiting' || status === 'running' || status === 'done') && (
-        <Diff oldText={m.oldContent ?? ''} newText={m.newContent ?? ''} />
-      )}
+      {(m.tool === 'write_file' || m.tool === 'edit_file') &&
+        (status === 'awaiting' || status === 'running' || status === 'done') && (
+          <Diff oldText={m.oldContent ?? ''} newText={m.newContent ?? ''} />
+        )}
 
       {m.tool === 'run_command' && (m.output?.trim() || m.stderr?.trim()) && (
         <pre className="tool-output">
@@ -73,6 +78,10 @@ function ToolCard({ m }: { m: ChatMessage }): JSX.Element {
             <span className="tool-stderr">{`\n[exit ${m.exitCode}]`}</span>
           ) : null}
         </pre>
+      )}
+
+      {m.tool === 'search_files' && status === 'done' && m.output && (
+        <pre className="tool-output">{m.output}</pre>
       )}
 
       {(m.tool === 'list_dir' || m.tool === 'read_file') && m.output && status === 'done' && (
@@ -158,7 +167,9 @@ function TextMessage({ m }: { m: ChatMessage }): JSX.Element {
   return (
     <div className={`msg ${m.role}`}>
       <div className="msg-head">
-        <span className="role">{m.role === 'user' ? 'You' : 'Ascora'}</span>
+        <span className="role" title={m.role === 'assistant' ? m.model || undefined : undefined}>
+          {m.role === 'user' ? 'You' : m.model || 'Assistant'}
+        </span>
         {m.role === 'assistant' && (
           <button
             type="button"
@@ -203,14 +214,49 @@ function Messages({ messages }: { messages: ChatMessage[] }): JSX.Element {
   )
 }
 
+/** Compact token count: 942 → "942", 1240 → "1.2k", 23000 → "23k". */
+function formatTokenCount(n: number): string {
+  if (n < 1000) return String(n)
+  const k = n / 1000
+  return `${k < 10 ? k.toFixed(1) : Math.round(k)}k`
+}
+
+/** Blinking "Thinking… (N tokens · Ms)" badge shown while a model turn generates. */
+function ThinkingIndicator(): JSX.Element | null {
+  const thinking = useApp((s) => s.thinking)
+  const tokens = useApp((s) => s.thinkingTokens)
+  const startedAt = useApp((s) => s.thinkingStartedAt)
+  const [elapsed, setElapsed] = useState(0)
+
+  useEffect(() => {
+    if (!thinking || startedAt == null) return
+    const tick = (): void => setElapsed(Math.max(0, Math.round((Date.now() - startedAt) / 1000)))
+    tick()
+    const timer = window.setInterval(tick, 1000)
+    return () => window.clearInterval(timer)
+  }, [thinking, startedAt])
+
+  if (!thinking) return null
+  return (
+    <div className="thinking" aria-live="polite">
+      <span className="thinking-dot" />
+      <span className="thinking-label">Thinking…</span>
+      <span className="thinking-meta">
+        {formatTokenCount(tokens)} tokens{elapsed > 0 ? ` · ${elapsed}s` : ''}
+      </span>
+    </div>
+  )
+}
+
 export function AgentChat({ full = false }: { full?: boolean }): JSX.Element {
   const messages = useApp((s) => s.messages)
+  const thinking = useApp((s) => s.thinking)
   const scrollRef = useRef<HTMLDivElement>(null)
 
   useLayoutEffect(() => {
     const container = scrollRef.current
     if (container) container.scrollTop = container.scrollHeight
-  }, [messages])
+  }, [messages, thinking])
 
   if (full) {
     return (
@@ -218,6 +264,7 @@ export function AgentChat({ full = false }: { full?: boolean }): JSX.Element {
         <div className="chat-full-scroll" ref={scrollRef}>
           <div className="chat-col chat-messages-col">
             <Messages messages={messages} />
+            <ThinkingIndicator />
           </div>
         </div>
         <div className="chat-full-composer">
@@ -240,6 +287,7 @@ export function AgentChat({ full = false }: { full?: boolean }): JSX.Element {
       <div className="chat">
         <div className="chat-messages" ref={scrollRef}>
           <Messages messages={messages} />
+          <ThinkingIndicator />
         </div>
         <div className="chat-composer">
           <Composer showFolder={false} />
