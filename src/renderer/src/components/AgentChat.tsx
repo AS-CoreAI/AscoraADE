@@ -62,6 +62,12 @@ function ToolCard({ m }: { m: ChatMessage }): JSX.Element {
         <span className="tool-name">{TOOL_LABEL[m.tool ?? ''] ?? m.tool}</span>
         <code className="tool-arg">{toolSummary(m)}</code>
         <span className="spacer" />
+        {m.addedLines || m.removedLines ? (
+          <span className="tool-stat">
+            {m.addedLines ? <span className="stat-add">+{m.addedLines}</span> : null}
+            {m.removedLines ? <span className="stat-del">-{m.removedLines}</span> : null}
+          </span>
+        ) : null}
         <span className={`tool-status ${status}`}>{STATUS_TEXT[status]}</span>
       </div>
 
@@ -305,25 +311,47 @@ function countChanges(messages: ChatMessage[]): {
   return { added, modified, removed }
 }
 
+/** Sum the added/removed *lines* across every applied edit in this task branch. */
+function countLines(messages: ChatMessage[]): { added: number; removed: number } {
+  let added = 0
+  let removed = 0
+  for (const m of messages) {
+    if (m.kind !== 'tool' || m.status !== 'done') continue
+    if (m.tool === 'write_file' || m.tool === 'edit_file' || m.tool === 'apply_patch') {
+      added += m.addedLines ?? 0
+      removed += m.removedLines ?? 0
+    }
+  }
+  return { added, removed }
+}
+
 /**
- * "Changes +N -M" pill summarising the files edited so far in this task branch.
- * Green counts files added or modified; red counts deletions. Hidden until the
- * agent has actually changed something.
+ * "N files +A -R" pill summarising what the agent changed in this task branch:
+ * the file count plus added/removed line totals (lines shown only when known —
+ * shell/PowerShell edits carry no line counts). Hidden until something changed.
  */
 function ChangesBadge({ floating = false }: { floating?: boolean }): JSX.Element | null {
   const messages = useApp((s) => s.messages)
-  const { added, modified, removed } = countChanges(messages)
-  const changed = added + modified
-  if (changed === 0 && removed === 0) return null
+  const files = countChanges(messages)
+  const lines = countLines(messages)
+  const fileCount = files.added + files.modified + files.removed
+  if (fileCount === 0) return null
+  const hasLines = lines.added > 0 || lines.removed > 0
   return (
     <div
       className={`changes-badge${floating ? ' floating' : ''}`}
-      title={`${added} added · ${modified} modified · ${removed} removed`}
+      title={`${files.added} added · ${files.modified} modified · ${files.removed} removed`}
     >
       <Icon name="file" size={12} />
-      <span className="changes-label">Changes</span>
-      <span className="changes-add">+{changed}</span>
-      <span className="changes-del">-{removed}</span>
+      <span className="changes-label">
+        {fileCount} file{fileCount === 1 ? '' : 's'}
+      </span>
+      {hasLines && (
+        <>
+          <span className="changes-add">+{lines.added}</span>
+          <span className="changes-del">-{lines.removed}</span>
+        </>
+      )}
     </div>
   )
 }

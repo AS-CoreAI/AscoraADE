@@ -3,6 +3,7 @@ import { TitleBar } from '@/components/TitleBar'
 import { LeftRail } from '@/components/LeftRail'
 import { StatusBar } from '@/components/StatusBar'
 import { ConnectionSettings } from '@/components/ConnectionSettings'
+import { SkillsModal } from '@/components/SkillsModal'
 import { HomeView } from '@/views/HomeView'
 import { WorkspaceView } from '@/views/WorkspaceView'
 import { AnalyticsView } from '@/views/AnalyticsView'
@@ -45,6 +46,7 @@ export function App(): JSX.Element {
         </div>
       </div>
       <ConnectionSettings />
+      <SkillsModal />
     </div>
   )
 }

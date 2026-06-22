@@ -17,6 +17,7 @@ import type {
 } from '@shared/ipc'
 import { DEFAULT_LLM_CONFIG } from '@shared/ipc'
 import { api } from '@/lib/api'
+import { diffStat } from '@/lib/diff'
 import { solveZCodeCaptcha } from '@/lib/zcode-captcha'
 
 export type View = 'home' | 'workspace' | 'analytics'
@@ -374,11 +375,19 @@ function codexItemToCard(it: CodexItem): Partial<ChatMessage> {
   }
   if (it.type === 'file_change') {
     const changes = it.changes ?? []
+    // Codex reports per-file line counts on some builds; surface them when present.
+    const hasCounts = changes.some((c) => c.added != null || c.removed != null)
     return {
       tool: 'apply_patch',
       args: { path: `${changes.length} file${changes.length === 1 ? '' : 's'}` },
       status,
-      output: changes.map((c) => `${c.kind} ${baseName(c.path)}`).join('\n')
+      output: changes.map((c) => `${c.kind} ${baseName(c.path)}`).join('\n'),
+      ...(hasCounts
+        ? {
+            addedLines: changes.reduce((sum, c) => sum + (c.added ?? 0), 0),
+            removedLines: changes.reduce((sum, c) => sum + (c.removed ?? 0), 0)
+          }
+        : {})
     }
   }
   // Unknown / other item type (incl. Claude's read_file/list_dir/etc.) — show
@@ -423,6 +432,60 @@ function snapshotLlm(s: {
     claudePermission: s.claudePermission,
     glmMode: s.glmMode
   }
+}
+
+// ---- Skills: reusable instruction snippets the user can toggle on ----
+
+/** A reusable instruction set the user can enable to steer the agent. */
+export interface Skill {
+  id: string
+  name: string
+  description: string
+  /** Guidance injected into the agent while the skill is enabled. */
+  instructions: string
+  enabled: boolean
+}
+
+/** Seeded on first run; "Careful coding" is active by default. */
+const DEFAULT_SKILLS: Skill[] = [
+  {
+    id: 'careful-coding',
+    name: 'Careful coding',
+    description: 'Read before editing; keep changes minimal and consistent.',
+    instructions:
+      'Before editing a file, read the relevant section so your change matches the ' +
+      'surrounding style and naming. Make the smallest change that solves the task, avoid ' +
+      'unrelated refactors, and prefer editing existing code over adding new files. After ' +
+      'changing code, re-check that it still fits the project conventions.',
+    enabled: true
+  },
+  {
+    id: 'concise-answers',
+    name: 'Concise answers',
+    description: 'Reply briefly and let the code speak.',
+    instructions:
+      'Keep prose short and skip filler. Lead with the answer or the change, show code ' +
+      'rather than describing it at length, and only explain what is non-obvious.',
+    enabled: false
+  },
+  {
+    id: 'conventional-commits',
+    name: 'Conventional commits',
+    description: 'Use Conventional Commits when committing.',
+    instructions:
+      'When asked to commit, write the message in Conventional Commits style (feat:, fix:, ' +
+      'chore:, refactor:, docs:, …) with a concise imperative summary line and an optional ' +
+      'short body explaining the why.',
+    enabled: false
+  }
+]
+
+/** Build the instruction block injected into the agent for the enabled skills. */
+function skillsToPrompt(skills: Skill[]): string {
+  const active = skills.filter((s) => s.enabled && s.instructions.trim())
+  if (active.length === 0) return ''
+  const body = active.map((s) => `## ${s.name}\n${s.instructions.trim()}`).join('\n\n')
+  return `The user enabled these skills — follow them throughout this task:\n\n${body}`
 }
 
 interface AppState {
@@ -481,6 +544,9 @@ interface AppState {
   resolvedTheme: ResolvedTheme
   /** Whether the left sidebar (rail) is collapsed out of view (persisted). */
   sidebarCollapsed: boolean
+  /** Reusable instruction snippets that steer the agent (persisted). */
+  skills: Skill[]
+  skillsOpen: boolean
 
   mode: AgentMode
   messages: ChatMessage[]
@@ -539,6 +605,15 @@ interface AppState {
   setThemePreference: (theme: ThemePreference) => void
   syncSystemTheme: () => void
   toggleSidebar: () => void
+  setSkillsOpen: (open: boolean) => void
+  toggleSkill: (id: string) => void
+  /** Append a blank skill and return its id (so the UI can open it for editing). */
+  addSkill: () => string
+  updateSkill: (
+    id: string,
+    patch: Partial<Pick<Skill, 'name' | 'description' | 'instructions'>>
+  ) => void
+  deleteSkill: (id: string) => void
 
   setMode: (m: AgentMode) => void
   submitTask: (text: string) => Promise<void>
@@ -592,6 +667,8 @@ export const useApp = create<AppState>((set, get) => ({
   themePreference: 'dark',
   resolvedTheme: 'dark',
   sidebarCollapsed: false,
+  skills: DEFAULT_SKILLS,
+  skillsOpen: false,
 
   mode: 'ask',
   messages: [],
@@ -603,7 +680,7 @@ export const useApp = create<AppState>((set, get) => ({
   thinkingStartedAt: null,
 
   async init() {
-    const [workspaces, cfg, savedTheme, savedOrder, savedCollapsed, savedLlm, savedSidebar] =
+    const [workspaces, cfg, savedTheme, savedOrder, savedCollapsed, savedLlm, savedSidebar, savedSkills] =
       await Promise.all([
         api.workspace.list(),
         api.llm.config(),
@@ -611,7 +688,8 @@ export const useApp = create<AppState>((set, get) => ({
         api.settings.get<string[]>('workspace.order'),
         api.settings.get<Record<string, boolean>>('workspace.collapsed'),
         api.settings.get<Record<string, WorkspaceLlm>>('workspace.llm'),
-        api.settings.get<boolean>('sidebar.collapsed')
+        api.settings.get<boolean>('sidebar.collapsed'),
+        api.settings.get<Skill[]>('skills')
       ])
     const workspaceOrder = Array.isArray(savedOrder) ? savedOrder : []
     const collapsedWorkspaces =
@@ -630,6 +708,9 @@ export const useApp = create<AppState>((set, get) => ({
       workspaceLlm,
       tasksByWorkspace: Object.fromEntries(taskLists),
       sidebarCollapsed: savedSidebar === true,
+      // First run (no saved value) seeds the defaults; an empty saved array is
+      // respected (the user removed every skill).
+      skills: Array.isArray(savedSkills) ? savedSkills : DEFAULT_SKILLS,
       provider: cfg.provider,
       baseUrl: cfg.baseUrl,
       model: cfg.model,
@@ -1075,6 +1156,47 @@ export const useApp = create<AppState>((set, get) => ({
     })
   },
 
+  setSkillsOpen(open) {
+    set({ skillsOpen: open })
+  },
+
+  toggleSkill(id) {
+    set((s) => {
+      const skills = s.skills.map((sk) => (sk.id === id ? { ...sk, enabled: !sk.enabled } : sk))
+      void api.settings.set('skills', skills)
+      return { skills }
+    })
+  },
+
+  addSkill() {
+    const id = crypto.randomUUID()
+    set((s) => {
+      const skills = [
+        ...s.skills,
+        { id, name: 'New skill', description: '', instructions: '', enabled: true }
+      ]
+      void api.settings.set('skills', skills)
+      return { skills }
+    })
+    return id
+  },
+
+  updateSkill(id, patch) {
+    set((s) => {
+      const skills = s.skills.map((sk) => (sk.id === id ? { ...sk, ...patch } : sk))
+      void api.settings.set('skills', skills)
+      return { skills }
+    })
+  },
+
+  deleteSkill(id) {
+    set((s) => {
+      const skills = s.skills.filter((sk) => sk.id !== id)
+      void api.settings.set('skills', skills)
+      return { skills }
+    })
+  },
+
   setMode(mode) {
     set({ mode })
   },
@@ -1092,6 +1214,9 @@ export const useApp = create<AppState>((set, get) => ({
     // Model name stamped on this turn's assistant messages (captured now so a
     // later model switch leaves these messages labelled with their real model).
     const assistantModel = modelLabel(get())
+    // Enabled skills injected into the agent (system prompt for LM Studio; once
+    // per CLI session, since those keep their own server-side context).
+    const skillsBlock = skillsToPrompt(get().skills)
     // Cumulative streamed output length → live token estimate for the Thinking… badge.
     let streamedChars = 0
     const patch = (id: string, p: Partial<ChatMessage>): void =>
@@ -1202,11 +1327,16 @@ export const useApp = create<AppState>((set, get) => ({
           }
         }
 
+        // Prepend the enabled skills only when starting a fresh CLI session;
+        // a resumed session already carries them from its first turn.
+        const skillsPrompt = (hasSession: boolean): string =>
+          !hasSession && skillsBlock ? `${skillsBlock}\n\n${trimmed}` : trimmed
+
         const res = isGlm
           ? await api.glm.run(
               runId,
               {
-                prompt: trimmed,
+                prompt: skillsPrompt(!!get().glmSessionId),
                 cwd: root,
                 sessionId: get().glmSessionId ?? undefined,
                 mode: get().glmMode,
@@ -1218,7 +1348,7 @@ export const useApp = create<AppState>((set, get) => ({
             ? await api.claude.run(
                 runId,
                 {
-                  prompt: trimmed,
+                  prompt: skillsPrompt(!!get().claudeSessionId),
                   cwd: root,
                   sessionId: get().claudeSessionId ?? undefined,
                   model: get().claudeModel || undefined,
@@ -1229,7 +1359,7 @@ export const useApp = create<AppState>((set, get) => ({
             : await api.codex.run(
                 runId,
                 {
-                  prompt: trimmed,
+                  prompt: skillsPrompt(!!get().codexThreadId),
                   cwd: root,
                   threadId: get().codexThreadId ?? undefined,
                   model: get().codexModel || undefined,
@@ -1286,7 +1416,8 @@ export const useApp = create<AppState>((set, get) => ({
         const replyId = crypto.randomUUID()
         addMsg({ id: replyId, role: 'assistant', kind: 'text', model: assistantModel, text: '' })
         set({ streamId: replyId, thinking: true })
-        const messages: LlmMessage[] = [{ role: 'system', content: buildSystemPrompt() }, ...get().convo]
+        const systemPrompt = skillsBlock ? `${buildSystemPrompt()}\n\n${skillsBlock}` : buildSystemPrompt()
+        const messages: LlmMessage[] = [{ role: 'system', content: systemPrompt }, ...get().convo]
         const result = await api.llm.chat(
           crypto.randomUUID(),
           { model: get().model, messages, tools: TOOLS },
@@ -1407,13 +1538,15 @@ export const useApp = create<AppState>((set, get) => ({
             newContent = preview.ok ? preview.content : oldContent
           }
 
+          const isEdit = call.name === 'write_file' || call.name === 'edit_file'
+          const stat = isEdit ? diffStat(oldContent, newContent) : null
           const needsApproval = mutating && get().mode === 'ask'
           addMsg({
             id: cardId, role: 'assistant', kind: 'tool', text: '',
             tool: call.name, args: call.args,
             status: needsApproval ? 'awaiting' : 'running',
-            ...(call.name === 'write_file' || call.name === 'edit_file'
-              ? { oldContent, newContent }
+            ...(isEdit && stat
+              ? { oldContent, newContent, addedLines: stat.added, removedLines: stat.removed }
               : {})
           })
 

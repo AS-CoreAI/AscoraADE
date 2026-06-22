@@ -36,3 +36,21 @@ export function lineDiff(oldText: string, newText: string): DiffLine[] {
   }
   return out
 }
+
+/**
+ * Count added/removed lines between two file versions, using the same
+ * prefix/suffix trimming as `lineDiff` (but with no display cap) so the badge
+ * numbers match the rendered diff. Drives the "+N -M" stat on edit cards.
+ */
+export function diffStat(oldText: string, newText: string): { added: number; removed: number } {
+  if (oldText === newText) return { added: 0, removed: 0 }
+  const o = oldText.length ? oldText.split('\n') : []
+  const n = newText.length ? newText.split('\n') : []
+
+  let p = 0
+  while (p < o.length && p < n.length && o[p] === n[p]) p += 1
+  let s = 0
+  while (s < o.length - p && s < n.length - p && o[o.length - 1 - s] === n[n.length - 1 - s]) s += 1
+
+  return { removed: o.length - p - s, added: n.length - p - s }
+}

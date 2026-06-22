@@ -153,6 +153,10 @@ export interface TaskMessage {
   oldContent?: string
   newContent?: string
   created?: boolean
+  /** Lines added by this edit (write_file/edit_file/apply_patch), for the +N stat. */
+  addedLines?: number
+  /** Lines removed by this edit, for the -M stat. */
+  removedLines?: number
   error?: string
 }
 
@@ -368,8 +372,8 @@ export interface CodexItem {
   output?: string
   /** command_execution: exit code (null while running / when killed). */
   exitCode?: number | null
-  /** file_change: the files touched and how. */
-  changes?: { path: string; kind: string }[]
+  /** file_change: the files touched and how (with per-file line counts when Codex reports them). */
+  changes?: { path: string; kind: string; added?: number; removed?: number }[]
   /** "in_progress" | "completed" | "failed". */
   status?: string
 }

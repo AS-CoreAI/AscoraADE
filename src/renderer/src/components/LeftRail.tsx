@@ -50,6 +50,7 @@ export function LeftRail(): JSX.Element {
   const view = useApp((s) => s.view)
   const openAnalytics = useApp((s) => s.openAnalytics)
   const closeAnalytics = useApp((s) => s.closeAnalytics)
+  const setSkillsOpen = useApp((s) => s.setSkillsOpen)
   const themePreference = useApp((s) => s.themePreference)
   const setThemePreference = useApp((s) => s.setThemePreference)
   const [themeMenuOpen, setThemeMenuOpen] = useState(false)
@@ -121,7 +122,7 @@ export function LeftRail(): JSX.Element {
           Search
           <span className="kbd">Ctrl+K</span>
         </button>
-        <button className="rail-action">
+        <button className="rail-action" onClick={() => setSkillsOpen(true)}>
           <Icon name="sparkles" size={16} />
           Skills
         </button>

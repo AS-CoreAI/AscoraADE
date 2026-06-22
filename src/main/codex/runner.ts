@@ -203,12 +203,20 @@ function killTree(child: ChildProcessWithoutNullStreams): void {
 const asNum = (v: unknown): number | null | undefined =>
   typeof v === 'number' ? v : v === null ? null : undefined
 
+/** First finite number among the given values, else undefined (for varied codex field names). */
+const firstNum = (...vs: unknown[]): number | undefined => {
+  for (const v of vs) if (typeof v === 'number' && Number.isFinite(v)) return v
+  return undefined
+}
+
 /** Normalise the raw `item` object from a codex event into our `CodexItem`. */
 function normalizeItem(raw: Record<string, unknown>): CodexItem {
   const changes = Array.isArray(raw.changes)
     ? (raw.changes as Record<string, unknown>[]).map((c) => ({
         path: String(c.path ?? ''),
-        kind: String(c.kind ?? 'edit')
+        kind: String(c.kind ?? 'edit'),
+        added: firstNum(c.added, c.additions, c.insertions),
+        removed: firstNum(c.removed, c.deletions)
       }))
     : undefined
   return {
@@ -281,15 +289,17 @@ export function runCodex(
   const model = (params.model ?? config.codexModel ?? '').trim()
   const reasoning = params.reasoning ?? config.codexReasoning ?? ''
 
-  const args = ['exec']
-  if (params.threadId) args.push('resume', params.threadId)
-  args.push('--json', '--skip-git-repo-check', '-s', sandbox)
+  // `resume` is an `exec` subcommand. Options owned by `exec` (notably `-s`
+  // and `-C`) must precede it; placing them after `resume` makes Codex exit 2.
+  const args = ['exec', '--json', '--skip-git-repo-check', '-s', sandbox]
   // Surface reasoning summaries as `reasoning` items so the UI can show them
   // ("detailed" reliably emits them; "auto" often stays silent on short tasks).
   args.push('-c', 'model_reasoning_summary="detailed"')
   if (model) args.push('-m', model)
   if (reasoning) args.push('-c', `model_reasoning_effort="${reasoning}"`)
-  args.push('-C', params.cwd, '-') // '-' → read the prompt from stdin
+  args.push('-C', params.cwd)
+  if (params.threadId) args.push('resume', params.threadId)
+  args.push('-') // read the prompt from stdin
 
   const emit = (event: CodexEvent): void => {
     if (!sender.isDestroyed()) {
@@ -312,6 +322,7 @@ export function runCodex(
     let threadId: string | undefined
     let stdoutBuf = ''
     let stderrBuf = ''
+    let stderrText = ''
     let inputTokens = 0
     let outputTokens = 0
     let sawUsage = false
@@ -349,6 +360,7 @@ export function runCodex(
     })
 
     child.stderr.on('data', (chunk: string) => {
+      stderrText += chunk
       stderrBuf += chunk
       let nl: number
       while ((nl = stderrBuf.indexOf('\n')) >= 0) {
@@ -372,7 +384,7 @@ export function runCodex(
       if (code === 0) {
         resolve({ ok: true, code, threadId, usage })
       } else {
-        const tail = stderrBuf.trim() || `codex exited with code ${code}`
+        const tail = stderrText.trim() || `codex exited with code ${code}`
         resolve({ ok: false, code, threadId, usage, error: tail })
       }
     })
