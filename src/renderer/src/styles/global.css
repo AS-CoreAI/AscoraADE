@@ -399,19 +399,34 @@ button {
   background: var(--bg-hover);
 }
 .task-dot {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   flex-shrink: 0;
+  box-sizing: border-box;
 }
 .task-dot.error {
   background: var(--danger);
 }
+/* Running task: a small spinning ring instead of a static dot. */
 .task-dot.running {
-  background: var(--accent);
+  background: transparent;
+  border: 1.5px solid var(--accent-dim);
+  border-top-color: var(--accent);
+  animation: task-spin 0.7s linear infinite;
 }
 .task-dot.idle {
   background: transparent;
+}
+@keyframes task-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .task-dot.running {
+    animation: none;
+  }
 }
 .task-empty {
   padding: 5px 14px 5px 34px;

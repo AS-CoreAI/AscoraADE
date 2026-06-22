@@ -386,6 +386,45 @@ function codexItemToCard(it: CodexItem): Partial<ChatMessage> {
   return { tool: it.type, args: { path: it.text ?? '' }, status }
 }
 
+/**
+ * Per-workspace agent backend selection, persisted so each project remembers its
+ * own model/provider independently. Connection-level fields (base URL, binary
+ * paths) stay global — they describe one local install, not a per-project choice.
+ */
+interface WorkspaceLlm {
+  provider: LlmProvider
+  model: string
+  codexModel: string
+  codexSandbox: CodexSandbox
+  codexReasoning: CodexReasoning | ''
+  claudeModel: string
+  claudePermission: ClaudePermissionMode
+  glmMode: GlmMode
+}
+
+/** Snapshot the active backend selection for persisting against a workspace. */
+function snapshotLlm(s: {
+  provider: LlmProvider
+  model: string
+  codexModel: string
+  codexSandbox: CodexSandbox
+  codexReasoning: CodexReasoning | ''
+  claudeModel: string
+  claudePermission: ClaudePermissionMode
+  glmMode: GlmMode
+}): WorkspaceLlm {
+  return {
+    provider: s.provider,
+    model: s.model,
+    codexModel: s.codexModel,
+    codexSandbox: s.codexSandbox,
+    codexReasoning: s.codexReasoning,
+    claudeModel: s.claudeModel,
+    claudePermission: s.claudePermission,
+    glmMode: s.glmMode
+  }
+}
+
 interface AppState {
   view: View
   workspaces: Workspace[]
@@ -408,6 +447,8 @@ interface AppState {
 
   // LLM provider
   provider: LlmProvider
+  /** Per-workspace saved backend selections (workspace id → choice). */
+  workspaceLlm: Record<string, WorkspaceLlm>
   // LM Studio
   baseUrl: string
   model: string
@@ -485,6 +526,10 @@ interface AppState {
   setGlmPath: (path: string) => Promise<void>
   setGlmMode: (m: GlmMode) => void
   checkGlm: () => Promise<void>
+  /** Save the current backend selection against the active workspace. */
+  persistWorkspaceLlm: () => void
+  /** Load a workspace's saved backend selection and re-check the connection. */
+  syncWorkspaceLlm: (workspaceId: string) => Promise<void>
   setSettingsOpen: (open: boolean) => void
   setThemePreference: (theme: ThemePreference) => void
   syncSystemTheme: () => void
@@ -514,6 +559,7 @@ export const useApp = create<AppState>((set, get) => ({
   activeFile: null,
 
   provider: DEFAULT_LLM_CONFIG.provider,
+  workspaceLlm: {},
   baseUrl: DEFAULT_LLM_CONFIG.baseUrl,
   model: '',
   models: [],
@@ -550,16 +596,18 @@ export const useApp = create<AppState>((set, get) => ({
   thinkingStartedAt: null,
 
   async init() {
-    const [workspaces, cfg, savedTheme, savedOrder, savedCollapsed] = await Promise.all([
+    const [workspaces, cfg, savedTheme, savedOrder, savedCollapsed, savedLlm] = await Promise.all([
       api.workspace.list(),
       api.llm.config(),
       api.settings.get<ThemePreference>('appearance.theme'),
       api.settings.get<string[]>('workspace.order'),
-      api.settings.get<Record<string, boolean>>('workspace.collapsed')
+      api.settings.get<Record<string, boolean>>('workspace.collapsed'),
+      api.settings.get<Record<string, WorkspaceLlm>>('workspace.llm')
     ])
     const workspaceOrder = Array.isArray(savedOrder) ? savedOrder : []
     const collapsedWorkspaces =
       savedCollapsed && typeof savedCollapsed === 'object' ? savedCollapsed : {}
+    const workspaceLlm = savedLlm && typeof savedLlm === 'object' ? savedLlm : {}
     const ordered = sortWorkspaces(workspaces, workspaceOrder)
     const themePreference = isThemePreference(savedTheme) ? savedTheme : 'dark'
     const resolvedTheme = applyTheme(themePreference)
@@ -570,6 +618,7 @@ export const useApp = create<AppState>((set, get) => ({
       workspaces: ordered,
       workspaceOrder,
       collapsedWorkspaces,
+      workspaceLlm,
       tasksByWorkspace: Object.fromEntries(taskLists),
       provider: cfg.provider,
       baseUrl: cfg.baseUrl,
@@ -586,11 +635,16 @@ export const useApp = create<AppState>((set, get) => ({
       themePreference,
       resolvedTheme
     })
-    if (ordered.length > 0) await get().loadWorkspaceData(ordered[0])
-    await get().refreshModels()
-    if (cfg.provider === 'codex') await get().checkCodex()
-    if (cfg.provider === 'claude') await get().checkClaude()
-    if (cfg.provider === 'glm') await get().checkGlm()
+    if (ordered.length > 0) {
+      await get().loadWorkspaceData(ordered[0])
+      // Apply that workspace's saved model/provider and check the connection.
+      await get().syncWorkspaceLlm(ordered[0].id)
+    } else {
+      await get().refreshModels()
+      if (cfg.provider === 'codex') await get().checkCodex()
+      if (cfg.provider === 'claude') await get().checkClaude()
+      if (cfg.provider === 'glm') await get().checkGlm()
+    }
   },
 
   async openFolder() {
@@ -620,6 +674,13 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   async openWorkspace(ws) {
+    // Don't reset a streaming conversation when the workspace is re-selected in
+    // the rail: re-selecting the active one returns to the live view; switching
+    // to another mid-stream is suppressed so the running turn isn't orphaned.
+    if (get().streaming) {
+      if (get().active?.id === ws.id) set({ view: 'workspace' })
+      return
+    }
     await get().loadWorkspaceData(ws)
     const tasks = await api.workspace.tasks(ws.id)
     set((state) => ({
@@ -633,6 +694,8 @@ export const useApp = create<AppState>((set, get) => ({
       glmSessionId: null,
       tasksByWorkspace: { ...state.tasksByWorkspace, [ws.id]: tasks }
     }))
+    // Switch to this project's saved model/provider.
+    await get().syncWorkspaceLlm(ws.id)
   },
 
   toggleWorkspaceCollapsed(id) {
@@ -662,10 +725,19 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   async openTask(ws, taskId) {
+    // Re-selecting the task that's already open (e.g. coming back from Analytics
+    // while it's still streaming) just returns to it — never reload it from disk,
+    // which would clobber the in-flight messages/convo. Switching to a *different*
+    // task is still suppressed mid-stream to protect the running turn.
+    if (get().activeTaskId === taskId) {
+      set({ view: 'workspace' })
+      return
+    }
     if (get().streaming) return
     const task = await api.workspace.task(taskId)
     if (!task || task.workspaceId !== ws.id) return
-    if (get().active?.id !== ws.id) await get().loadWorkspaceData(ws)
+    const switchingWorkspace = get().active?.id !== ws.id
+    if (switchingWorkspace) await get().loadWorkspaceData(ws)
     set({
       active: ws,
       activeTaskId: task.id,
@@ -677,6 +749,8 @@ export const useApp = create<AppState>((set, get) => ({
       glmSessionId: null,
       view: 'workspace'
     })
+    // Opening a task in a different project switches to that project's model.
+    if (switchingWorkspace) await get().syncWorkspaceLlm(ws.id)
   },
 
   async deleteTask(ws, taskId) {
@@ -801,6 +875,7 @@ export const useApp = create<AppState>((set, get) => ({
   setModel(model) {
     set({ model })
     void api.llm.setConfig({ model })
+    get().persistWorkspaceLlm()
   },
 
   async setBaseUrl(url) {
@@ -812,6 +887,7 @@ export const useApp = create<AppState>((set, get) => ({
   async setProvider(provider) {
     set({ provider })
     await api.llm.setConfig({ provider })
+    get().persistWorkspaceLlm()
     if (provider === 'codex') await get().checkCodex()
     else if (provider === 'claude') await get().checkClaude()
     else if (provider === 'glm') await get().checkGlm()
@@ -827,16 +903,19 @@ export const useApp = create<AppState>((set, get) => ({
   setCodexModel(codexModel) {
     set({ codexModel })
     void api.llm.setConfig({ codexModel })
+    get().persistWorkspaceLlm()
   },
 
   setCodexSandbox(codexSandbox) {
     set({ codexSandbox })
     void api.llm.setConfig({ codexSandbox })
+    get().persistWorkspaceLlm()
   },
 
   setCodexReasoning(codexReasoning) {
     set({ codexReasoning })
     void api.llm.setConfig({ codexReasoning })
+    get().persistWorkspaceLlm()
   },
 
   async checkCodex() {
@@ -861,11 +940,13 @@ export const useApp = create<AppState>((set, get) => ({
   setClaudeModel(claudeModel) {
     set({ claudeModel })
     void api.llm.setConfig({ claudeModel })
+    get().persistWorkspaceLlm()
   },
 
   setClaudePermission(claudePermission) {
     set({ claudePermission })
     void api.llm.setConfig({ claudePermission })
+    get().persistWorkspaceLlm()
   },
 
   async checkClaude() {
@@ -890,6 +971,7 @@ export const useApp = create<AppState>((set, get) => ({
   setGlmMode(glmMode) {
     set({ glmMode })
     void api.llm.setConfig({ glmMode })
+    get().persistWorkspaceLlm()
   },
 
   async checkGlm() {
@@ -903,6 +985,37 @@ export const useApp = create<AppState>((set, get) => ({
         glmChecking: false
       })
     }
+  },
+
+  persistWorkspaceLlm() {
+    const id = get().active?.id
+    if (!id) return
+    const workspaceLlm = { ...get().workspaceLlm, [id]: snapshotLlm(get()) }
+    set({ workspaceLlm })
+    void api.settings.set('workspace.llm', workspaceLlm)
+  },
+
+  async syncWorkspaceLlm(workspaceId) {
+    const saved = get().workspaceLlm[workspaceId]
+    // No saved choice yet → keep the current selection (it becomes this
+    // workspace's pinned choice the first time the user picks a model here).
+    if (saved) {
+      set({
+        provider: saved.provider,
+        model: saved.model,
+        codexModel: saved.codexModel,
+        codexSandbox: saved.codexSandbox,
+        codexReasoning: saved.codexReasoning,
+        claudeModel: saved.claudeModel,
+        claudePermission: saved.claudePermission,
+        glmMode: saved.glmMode
+      })
+    }
+    const provider = get().provider
+    if (provider === 'codex') await get().checkCodex()
+    else if (provider === 'claude') await get().checkClaude()
+    else if (provider === 'glm') await get().checkGlm()
+    else await get().refreshModels()
   },
 
   setSettingsOpen(open) {
