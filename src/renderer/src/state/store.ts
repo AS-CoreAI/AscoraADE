@@ -508,6 +508,19 @@ interface AppState {
   openFiles: OpenFile[]
   activeFile: string | null
 
+  // Live Server (built-in HTML preview)
+  /** Base URL of the running Live Server, e.g. http://127.0.0.1:5500; null when off. */
+  liveUrl: string | null
+  livePort: number | null
+  /** Workspace root the server is currently serving. */
+  liveRoot: string | null
+  /** Full URL shown in the preview; null when the preview is closed. */
+  previewUrl: string | null
+  /** Where the preview lives: docked panel in the layout, or a separate OS window. */
+  previewMode: 'docked' | 'window'
+  /** Serialized dockview layout; kept so the panel arrangement survives view switches. */
+  dockLayout: unknown
+
   // LLM provider
   provider: LlmProvider
   /** Per-workspace saved backend selections (workspace id → choice). */
@@ -585,6 +598,21 @@ interface AppState {
   closeAllFiles: () => void
   setActiveFile: (path: string) => void
 
+  /** Start (or reuse) the Live Server and show the active HTML file docked. */
+  goLive: () => Promise<void>
+  /** Stop the Live Server and close the preview (docked or windowed). */
+  stopLive: () => Promise<void>
+  /** Close the preview (the server keeps running). */
+  closePreview: () => void
+  /** Pop the docked preview out into a separate OS window. */
+  detachPreview: () => void
+  /** React to the user closing the detached preview window. */
+  handlePreviewWindowClosed: () => void
+  /** Open the current preview URL in the system browser. */
+  openPreviewInBrowser: () => void
+  /** Persist the current dockview panel arrangement. */
+  setDockLayout: (layout: unknown) => void
+
   refreshModels: () => Promise<void>
   setModel: (m: string) => void
   setBaseUrl: (url: string) => Promise<void>
@@ -642,6 +670,13 @@ export const useApp = create<AppState>((set, get) => ({
   treeLoading: false,
   openFiles: [],
   activeFile: null,
+
+  liveUrl: null,
+  livePort: null,
+  liveRoot: null,
+  previewUrl: null,
+  previewMode: 'docked',
+  dockLayout: null,
 
   provider: DEFAULT_LLM_CONFIG.provider,
   workspaceLlm: {},
@@ -1024,6 +1059,68 @@ export const useApp = create<AppState>((set, get) => ({
 
   setActiveFile(path) {
     set({ activeFile: path })
+  },
+
+  async goLive() {
+    const { active, openFiles, activeFile, liveUrl, liveRoot } = get()
+    if (!active) return
+    const file = openFiles.find((f) => f.path === activeFile)
+    if (!file || !/\.html?$/i.test(file.name)) return
+
+    let base = liveUrl
+    if (!base || liveRoot !== active.path) {
+      const result = await api.live.start(active.path)
+      if (!result.ok || !result.url) {
+        window.alert(result.error ?? 'Failed to start Live Server.')
+        return
+      }
+      base = result.url
+      set({ liveUrl: result.url, livePort: result.port ?? null, liveRoot: active.path })
+    }
+
+    // URL of the active file relative to the workspace root the server serves.
+    const root = active.path.replace(/\\/g, '/').replace(/\/+$/, '')
+    const full = file.path.replace(/\\/g, '/')
+    const rel = full.toLowerCase().startsWith(`${root.toLowerCase()}/`)
+      ? full.slice(root.length + 1)
+      : (full.split('/').pop() ?? '')
+    const encoded = rel.split('/').map(encodeURIComponent).join('/')
+    // The status bar "Live" button always brings the preview back docked.
+    const wasWindow = get().previewMode === 'window'
+    set({ previewUrl: `${base}/${encoded}`, previewMode: 'docked' })
+    if (wasWindow) void api.live.closeWindow()
+  },
+
+  async stopLive() {
+    await api.live.stop()
+    set({ liveUrl: null, livePort: null, liveRoot: null, previewUrl: null, previewMode: 'docked' })
+  },
+
+  closePreview() {
+    const wasWindow = get().previewMode === 'window'
+    set({ previewUrl: null, previewMode: 'docked' })
+    if (wasWindow) void api.live.closeWindow()
+  },
+
+  detachPreview() {
+    const url = get().previewUrl
+    if (!url) return
+    set({ previewMode: 'window' })
+    void api.live.openWindow(url)
+  },
+
+  handlePreviewWindowClosed() {
+    // User closed the detached window → drop the preview (server keeps running).
+    if (get().previewMode === 'window') set({ previewUrl: null, previewMode: 'docked' })
+  },
+
+  openPreviewInBrowser() {
+    const url = get().previewUrl
+    if (url) void api.live.openExternal(url)
+  },
+
+  setDockLayout(layout) {
+    set({ dockLayout: layout })
   },
 
   async refreshModels() {

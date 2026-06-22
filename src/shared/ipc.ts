@@ -27,6 +27,14 @@ export const IPC = {
     renameDirectory: 'fs:renameDirectory',
     deleteDirectory: 'fs:deleteDirectory'
   },
+  live: {
+    start: 'live:start',
+    stop: 'live:stop',
+    openExternal: 'live:openExternal',
+    openWindow: 'live:openWindow',
+    closeWindow: 'live:closeWindow',
+    windowClosed: 'live:windowClosed'
+  },
   settings: {
     get: 'settings:get',
     set: 'settings:set',
@@ -574,6 +582,17 @@ export interface GitActionResult {
 export interface FileActionResult {
   ok: boolean
   path?: string
+  error?: string
+}
+
+/** Result of starting (or reusing) the built-in Live Server for HTML preview. */
+export interface LiveServerResult {
+  ok: boolean
+  /** Base URL of the running server, e.g. http://127.0.0.1:5500. */
+  url?: string
+  port?: number
+  /** Absolute workspace root the server is serving. */
+  root?: string
   error?: string
 }
 

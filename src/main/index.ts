@@ -2,6 +2,7 @@ import { app, BrowserWindow } from 'electron'
 import { createMainWindow } from './window'
 import { registerIpc } from './ipc'
 import { getStore, closeStore } from './store'
+import { stopLiveServer } from './ipc/live'
 
 // Single-instance lock: focus the existing window instead of opening a second.
 if (!app.requestSingleInstanceLock()) {
@@ -30,5 +31,8 @@ if (!app.requestSingleInstanceLock()) {
     if (process.platform !== 'darwin') app.quit()
   })
 
-  app.on('before-quit', () => closeStore())
+  app.on('before-quit', () => {
+    stopLiveServer()
+    closeStore()
+  })
 }

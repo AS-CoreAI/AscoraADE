@@ -1,5 +1,6 @@
 import type { JSX } from 'react'
 import { useApp } from '@/state/store'
+import { Icon } from './Icon'
 import { REASONING_LABEL, PERMISSION_SHORT, GLM_MODE_SHORT } from './Composer'
 
 const CONN_LABEL: Record<string, string> = {
@@ -38,7 +39,12 @@ export function StatusBar(): JSX.Element {
   const openFiles = useApp((s) => s.openFiles)
   const activeFile = useApp((s) => s.activeFile)
   const setSettingsOpen = useApp((s) => s.setSettingsOpen)
+  const liveUrl = useApp((s) => s.liveUrl)
+  const livePort = useApp((s) => s.livePort)
+  const goLive = useApp((s) => s.goLive)
+  const stopLive = useApp((s) => s.stopLive)
   const current = openFiles.find((f) => f.path === activeFile)
+  const isHtml = !!current && /\.html?$/i.test(current.name)
 
   const isCodex = provider === 'codex'
   const isClaude = provider === 'claude'
@@ -105,6 +111,33 @@ export function StatusBar(): JSX.Element {
       <span className="seg">{modelLabel}</span>
       <span className="seg">{accessLabel}</span>
       <span className="spacer" />
+      {isHtml &&
+        (liveUrl ? (
+          <>
+            <button
+              className="seg seg-btn live-on"
+              onClick={() => void goLive()}
+              title="Open the Live preview window"
+            >
+              <Icon name="globe" size={12} /> Live{livePort ? ` :${livePort}` : ''}
+            </button>
+            <button
+              className="seg seg-btn"
+              onClick={() => void stopLive()}
+              title="Stop Live Server"
+            >
+              <Icon name="x" size={12} />
+            </button>
+          </>
+        ) : (
+          <button
+            className="seg seg-btn"
+            onClick={() => void goLive()}
+            title="Start Live Server and preview this HTML file"
+          >
+            <Icon name="globe" size={12} /> Go Live
+          </button>
+        ))}
       {current && <span className="seg">{current.language}</span>}
       <span className="seg">{active ? active.path : 'No folder open'}</span>
     </div>

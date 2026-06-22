@@ -10,6 +10,7 @@ import { registerAnalyticsHandlers } from './analytics'
 import { registerGitHandlers } from './git'
 import { registerTerminalHandlers } from './terminal'
 import { registerAgentHandlers } from './agent'
+import { registerLiveHandlers } from './live'
 
 /** Register every IPC handler. Called once after the app is ready. */
 export function registerIpc(): void {
@@ -25,4 +26,5 @@ export function registerIpc(): void {
   registerGitHandlers()
   registerTerminalHandlers()
   registerAgentHandlers()
+  registerLiveHandlers()
 }

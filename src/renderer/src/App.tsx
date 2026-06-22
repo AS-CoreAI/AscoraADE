@@ -8,6 +8,7 @@ import { HomeView } from '@/views/HomeView'
 import { WorkspaceView } from '@/views/WorkspaceView'
 import { AnalyticsView } from '@/views/AnalyticsView'
 import { useApp } from '@/state/store'
+import { api } from '@/lib/api'
 
 export function App(): JSX.Element {
   const view = useApp((s) => s.view)
@@ -15,10 +16,14 @@ export function App(): JSX.Element {
   const themePreference = useApp((s) => s.themePreference)
   const syncSystemTheme = useApp((s) => s.syncSystemTheme)
   const sidebarCollapsed = useApp((s) => s.sidebarCollapsed)
+  const handlePreviewWindowClosed = useApp((s) => s.handlePreviewWindowClosed)
 
   useEffect(() => {
     void init()
   }, [init])
+
+  // Keep store state in sync when the user closes the detached preview window.
+  useEffect(() => api.live.onWindowClosed(handlePreviewWindowClosed), [handlePreviewWindowClosed])
 
   useEffect(() => {
     if (themePreference !== 'system') return

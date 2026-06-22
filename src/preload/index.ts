@@ -4,6 +4,7 @@ import {
   type TreeNode,
   type FileContent,
   type FileActionResult,
+  type LiveServerResult,
   type Workspace,
   type TaskSummary,
   type TaskRecord,
@@ -73,6 +74,19 @@ const api = {
       ipcRenderer.invoke(IPC.fs.renameDirectory, dir, newName),
     deleteDirectory: (dir: string): Promise<FileActionResult> =>
       ipcRenderer.invoke(IPC.fs.deleteDirectory, dir)
+  },
+  live: {
+    start: (root: string): Promise<LiveServerResult> => ipcRenderer.invoke(IPC.live.start, root),
+    stop: (): Promise<{ ok: boolean }> => ipcRenderer.invoke(IPC.live.stop),
+    openExternal: (url: string): Promise<void> => ipcRenderer.invoke(IPC.live.openExternal, url),
+    openWindow: (url: string): Promise<void> => ipcRenderer.invoke(IPC.live.openWindow, url),
+    closeWindow: (): Promise<void> => ipcRenderer.invoke(IPC.live.closeWindow),
+    /** Fires when the detached preview window is closed. Returns an unsubscribe fn. */
+    onWindowClosed: (cb: () => void): (() => void) => {
+      const listener = (): void => cb()
+      ipcRenderer.on(IPC.live.windowClosed, listener)
+      return () => ipcRenderer.removeListener(IPC.live.windowClosed, listener)
+    }
   },
   settings: {
     get: <T = unknown>(key: string): Promise<T | undefined> =>
