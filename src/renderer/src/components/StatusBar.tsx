@@ -43,6 +43,10 @@ export function StatusBar(): JSX.Element {
   const livePort = useApp((s) => s.livePort)
   const goLive = useApp((s) => s.goLive)
   const stopLive = useApp((s) => s.stopLive)
+  const activeSsh = useApp((s) => s.activeSsh)
+  const sshConnections = useApp((s) => s.sshConnections)
+  const openSshTerminal = useApp((s) => s.openSshTerminal)
+  const sshConn = sshConnections.find((c) => c.id === activeSsh)
   const current = openFiles.find((f) => f.path === activeFile)
   const isHtml = !!current && /\.html?$/i.test(current.name)
 
@@ -111,6 +115,15 @@ export function StatusBar(): JSX.Element {
       <span className="seg">{modelLabel}</span>
       <span className="seg">{accessLabel}</span>
       <span className="spacer" />
+      {sshConn && (
+        <button
+          className="seg seg-btn ssh-on"
+          onClick={() => openSshTerminal(sshConn.id)}
+          title={`Agent run_command runs on ${sshConn.username}@${sshConn.host}`}
+        >
+          <Icon name="terminal" size={12} /> {sshConn.username}@{sshConn.host}
+        </button>
+      )}
       {isHtml &&
         (liveUrl ? (
           <>

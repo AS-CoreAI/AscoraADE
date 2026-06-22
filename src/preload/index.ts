@@ -5,6 +5,12 @@ import {
   type FileContent,
   type FileActionResult,
   type LiveServerResult,
+  type SshConnection,
+  type SshConnectResult,
+  type SshExecResult,
+  type SshSize,
+  type SshDataPayload,
+  type SshExitPayload,
   type Workspace,
   type TaskSummary,
   type TaskRecord,
@@ -74,6 +80,33 @@ const api = {
       ipcRenderer.invoke(IPC.fs.renameDirectory, dir, newName),
     deleteDirectory: (dir: string): Promise<FileActionResult> =>
       ipcRenderer.invoke(IPC.fs.deleteDirectory, dir)
+  },
+  ssh: {
+    connect: (id: string, config: SshConnection, size?: SshSize): Promise<SshConnectResult> =>
+      ipcRenderer.invoke(IPC.ssh.connect, id, config, size),
+    input: (id: string, data: string): Promise<void> => ipcRenderer.invoke(IPC.ssh.input, id, data),
+    resize: (id: string, cols: number, rows: number): Promise<void> =>
+      ipcRenderer.invoke(IPC.ssh.resize, id, cols, rows),
+    disconnect: (id: string): Promise<void> => ipcRenderer.invoke(IPC.ssh.disconnect, id),
+    exec: (id: string, command: string): Promise<SshExecResult> =>
+      ipcRenderer.invoke(IPC.ssh.exec, id, command),
+    pickKey: (): Promise<string | null> => ipcRenderer.invoke(IPC.ssh.pickKey),
+    /** Subscribe to remote shell output. Returns an unsubscribe function. */
+    onData: (id: string, cb: (data: string) => void): (() => void) => {
+      const listener = (_e: IpcRendererEvent, p: SshDataPayload): void => {
+        if (p.id === id) cb(p.data)
+      }
+      ipcRenderer.on(IPC.ssh.data, listener)
+      return () => ipcRenderer.removeListener(IPC.ssh.data, listener)
+    },
+    /** Subscribe to session exit. Returns an unsubscribe function. */
+    onExit: (id: string, cb: (code: number | null, error?: string) => void): (() => void) => {
+      const listener = (_e: IpcRendererEvent, p: SshExitPayload): void => {
+        if (p.id === id) cb(p.code, p.error)
+      }
+      ipcRenderer.on(IPC.ssh.exit, listener)
+      return () => ipcRenderer.removeListener(IPC.ssh.exit, listener)
+    }
   },
   live: {
     start: (root: string): Promise<LiveServerResult> => ipcRenderer.invoke(IPC.live.start, root),

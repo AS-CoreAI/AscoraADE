@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import type {
   Workspace,
   TreeNode,
+  SshConnection,
   LlmMessage,
   TaskMessage,
   TaskSummary,
@@ -154,7 +155,7 @@ const TOOLS: ToolDef[] = [
 ]
 
 /** Build the system prompt for the local (LM Studio) agent loop. */
-function buildSystemPrompt(): string {
+function buildSystemPrompt(sshHost?: string): string {
   const onWin = api.system.platform === 'win32'
   const shellNote = onWin
     ? 'Commands run in Windows PowerShell. Chain steps with `;` (PowerShell also accepts ' +
@@ -179,6 +180,13 @@ function buildSystemPrompt(): string {
     'edit_file for surgical changes; reach for write_file only for new files or full rewrites.',
     'Always read a snippet before editing it so old_string matches exactly.',
     shellNote,
+    ...(sshHost
+      ? [
+          `An SSH session to ${sshHost} is connected — run_command runs on that REMOTE host, ` +
+            'not the local project. The file tools (read_file/write_file/edit_file/search_files/' +
+            'list_dir) still operate on the local project folder.'
+        ]
+      : []),
     'When the task is done, reply with a short plain-text summary and NO tool call.',
     '',
     'If you cannot emit native tool calls, request a tool by replying with ONLY a fenced',
@@ -521,6 +529,18 @@ interface AppState {
   /** Serialized dockview layout; kept so the panel arrangement survives view switches. */
   dockLayout: unknown
 
+  // SSH terminals
+  /** Saved SSH hosts shown under Workspaces (persisted in app settings). */
+  sshConnections: SshConnection[]
+  /** Connection ids whose terminal panel is open in the dock. */
+  openSshTerminals: string[]
+  /** Connection id the agent's run_command targets while a session is open. */
+  activeSsh: string | null
+  /** Whether the add/edit SSH connection modal is open. */
+  sshModalOpen: boolean
+  /** Connection being edited (null → adding a new one). */
+  sshEditing: SshConnection | null
+
   // LLM provider
   provider: LlmProvider
   /** Per-workspace saved backend selections (workspace id → choice). */
@@ -613,6 +633,20 @@ interface AppState {
   /** Persist the current dockview panel arrangement. */
   setDockLayout: (layout: unknown) => void
 
+  // SSH
+  /** Open the add/edit SSH connection modal (pass a connection to edit it). */
+  openSshModal: (conn?: SshConnection | null) => void
+  closeSshModal: () => void
+  /** Create or update a saved SSH connection (persisted). */
+  saveSshConnection: (conn: SshConnection) => void
+  deleteSshConnection: (id: string) => void
+  /** Native file picker for a private-key file; returns the chosen path. */
+  pickSshKey: () => Promise<string | null>
+  /** Open (or focus) an SSH terminal for a saved connection. */
+  openSshTerminal: (id: string) => void
+  /** Close an SSH terminal panel and disconnect its session. */
+  closeSshTerminal: (id: string) => void
+
   refreshModels: () => Promise<void>
   setModel: (m: string) => void
   setBaseUrl: (url: string) => Promise<void>
@@ -678,6 +712,12 @@ export const useApp = create<AppState>((set, get) => ({
   previewMode: 'docked',
   dockLayout: null,
 
+  sshConnections: [],
+  openSshTerminals: [],
+  activeSsh: null,
+  sshModalOpen: false,
+  sshEditing: null,
+
   provider: DEFAULT_LLM_CONFIG.provider,
   workspaceLlm: {},
   baseUrl: DEFAULT_LLM_CONFIG.baseUrl,
@@ -719,8 +759,17 @@ export const useApp = create<AppState>((set, get) => ({
   thinkingStartedAt: null,
 
   async init() {
-    const [workspaces, cfg, savedTheme, savedOrder, savedCollapsed, savedLlm, savedSidebar, savedSkills] =
-      await Promise.all([
+    const [
+      workspaces,
+      cfg,
+      savedTheme,
+      savedOrder,
+      savedCollapsed,
+      savedLlm,
+      savedSidebar,
+      savedSkills,
+      savedSsh
+    ] = await Promise.all([
         api.workspace.list(),
         api.llm.config(),
         api.settings.get<ThemePreference>('appearance.theme'),
@@ -728,7 +777,8 @@ export const useApp = create<AppState>((set, get) => ({
         api.settings.get<Record<string, boolean>>('workspace.collapsed'),
         api.settings.get<Record<string, WorkspaceLlm>>('workspace.llm'),
         api.settings.get<boolean>('sidebar.collapsed'),
-        api.settings.get<Skill[]>('skills')
+        api.settings.get<Skill[]>('skills'),
+        api.settings.get<SshConnection[]>('ssh.connections')
       ])
     const workspaceOrder = Array.isArray(savedOrder) ? savedOrder : []
     const collapsedWorkspaces =
@@ -750,6 +800,7 @@ export const useApp = create<AppState>((set, get) => ({
       // First run (no saved value) seeds the defaults; an empty saved array is
       // respected (the user removed every skill).
       skills: Array.isArray(savedSkills) ? savedSkills : DEFAULT_SKILLS,
+      sshConnections: Array.isArray(savedSsh) ? savedSsh : [],
       provider: cfg.provider,
       baseUrl: cfg.baseUrl,
       model: cfg.model,
@@ -1121,6 +1172,59 @@ export const useApp = create<AppState>((set, get) => ({
 
   setDockLayout(layout) {
     set({ dockLayout: layout })
+  },
+
+  openSshModal(conn) {
+    set({ sshModalOpen: true, sshEditing: conn ?? null })
+  },
+
+  closeSshModal() {
+    set({ sshModalOpen: false, sshEditing: null })
+  },
+
+  saveSshConnection(conn) {
+    set((state) => {
+      const exists = state.sshConnections.some((c) => c.id === conn.id)
+      const sshConnections = exists
+        ? state.sshConnections.map((c) => (c.id === conn.id ? conn : c))
+        : [...state.sshConnections, conn]
+      void api.settings.set('ssh.connections', sshConnections)
+      return { sshConnections, sshModalOpen: false, sshEditing: null }
+    })
+  },
+
+  deleteSshConnection(id) {
+    get().closeSshTerminal(id)
+    set((state) => {
+      const sshConnections = state.sshConnections.filter((c) => c.id !== id)
+      void api.settings.set('ssh.connections', sshConnections)
+      return { sshConnections }
+    })
+  },
+
+  pickSshKey() {
+    return api.ssh.pickKey()
+  },
+
+  openSshTerminal(id) {
+    set((state) => ({
+      openSshTerminals: state.openSshTerminals.includes(id)
+        ? state.openSshTerminals
+        : [...state.openSshTerminals, id],
+      // The agent's run_command targets the most recently opened host.
+      activeSsh: id,
+      view: 'workspace'
+    }))
+  },
+
+  closeSshTerminal(id) {
+    void api.ssh.disconnect(id)
+    set((state) => {
+      const openSshTerminals = state.openSshTerminals.filter((t) => t !== id)
+      const activeSsh =
+        state.activeSsh === id ? (openSshTerminals.at(-1) ?? null) : state.activeSsh
+      return { openSshTerminals, activeSsh }
+    })
   },
 
   async refreshModels() {
@@ -1567,7 +1671,10 @@ export const useApp = create<AppState>((set, get) => ({
         const replyId = crypto.randomUUID()
         addMsg({ id: replyId, role: 'assistant', kind: 'text', model: assistantModel, text: '' })
         set({ streamId: replyId, thinking: true })
-        const systemPrompt = skillsBlock ? `${buildSystemPrompt()}\n\n${skillsBlock}` : buildSystemPrompt()
+        const sshConn = get().sshConnections.find((c) => c.id === get().activeSsh)
+        const sshHost = sshConn ? `${sshConn.username}@${sshConn.host}` : undefined
+        const base = buildSystemPrompt(sshHost)
+        const systemPrompt = skillsBlock ? `${base}\n\n${skillsBlock}` : base
         const messages: LlmMessage[] = [{ role: 'system', content: systemPrompt }, ...get().convo]
         const result = await api.llm.chat(
           crypto.randomUUID(),
@@ -1814,15 +1921,22 @@ export const useApp = create<AppState>((set, get) => ({
               r.ok ? `${r.created ? 'Created' : 'Updated'} ${r.path} (${r.bytes} bytes).` : `Error: ${r.error}`
             )
           } else {
-            const r = await api.agent.runCommand(root, asStr(call.args.command))
+            const command = asStr(call.args.command)
+            // When an SSH session is open, run_command targets the remote host.
+            const sshId = get().activeSsh
+            const r = sshId
+              ? await api.ssh.exec(sshId, command)
+              : await api.agent.runCommand(root, command)
+            const timedOut = 'timedOut' in r ? r.timedOut === true : false
             patch(cardId, {
               status: r.ok ? 'done' : 'error',
               output: r.stdout,
               stderr: r.stderr,
-              exitCode: r.timedOut ? null : r.code,
+              exitCode: timedOut ? null : r.code,
               error: r.error
             })
-            const head = r.timedOut ? 'Exit: killed (timeout)' : `Exit code: ${r.code}`
+            const where = sshId ? ' (remote)' : ''
+            const head = timedOut ? 'Exit: killed (timeout)' : `Exit code: ${r.code}${where}`
             const body = [head]
             if (r.stdout?.trim()) body.push(`stdout:\n${r.stdout}`)
             if (r.stderr?.trim()) body.push(`stderr:\n${r.stderr}`)

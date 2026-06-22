@@ -35,6 +35,17 @@ export const IPC = {
     closeWindow: 'live:closeWindow',
     windowClosed: 'live:windowClosed'
   },
+  ssh: {
+    connect: 'ssh:connect',
+    input: 'ssh:input',
+    resize: 'ssh:resize',
+    disconnect: 'ssh:disconnect',
+    exec: 'ssh:exec',
+    run: 'ssh:run',
+    pickKey: 'ssh:pickKey',
+    data: 'ssh:data',
+    exit: 'ssh:exit'
+  },
   settings: {
     get: 'settings:get',
     set: 'settings:set',
@@ -582,6 +593,60 @@ export interface GitActionResult {
 export interface FileActionResult {
   ok: boolean
   path?: string
+  error?: string
+}
+
+// ---------- SSH terminals ----------
+
+export type SshAuthType = 'key' | 'password'
+
+/** A saved SSH host the user can open a terminal to (persisted in app settings). */
+export interface SshConnection {
+  id: string
+  /** Display label in the rail. */
+  name: string
+  host: string
+  port: number
+  username: string
+  authType: SshAuthType
+  /** Absolute path to a PEM/private-key file (authType 'key'). */
+  keyPath?: string
+  /** Optional passphrase for an encrypted private key. */
+  passphrase?: string
+  /** Password (authType 'password'). Stored in local app settings. */
+  password?: string
+}
+
+/** Window size for the remote pty, sent on connect/resize. */
+export interface SshSize {
+  cols: number
+  rows: number
+}
+
+export interface SshConnectResult {
+  ok: boolean
+  error?: string
+}
+
+/** One-shot remote command result (used by the agent's run_command over SSH). */
+export interface SshExecResult {
+  ok: boolean
+  stdout?: string
+  stderr?: string
+  code?: number | null
+  error?: string
+}
+
+/** Remote shell output forwarded main → renderer. */
+export interface SshDataPayload {
+  id: string
+  data: string
+}
+
+/** Emitted main → renderer when the SSH session ends. */
+export interface SshExitPayload {
+  id: string
+  code: number | null
   error?: string
 }
 

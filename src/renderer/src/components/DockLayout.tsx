@@ -14,6 +14,7 @@ import { EditorPane } from './EditorPane'
 import { TerminalPanel } from './TerminalPanel'
 import { AgentChat } from './AgentChat'
 import { LivePreview } from './LivePreview'
+import { SshTerminal } from './SshTerminal'
 import { Icon } from './Icon'
 import { useApp } from '@/state/store'
 
@@ -42,8 +43,11 @@ const components: Record<string, FunctionComponent<IDockviewPanelProps>> = {
   editor: () => <EditorPane />,
   terminal: () => <TerminalPanel />,
   chat: () => <AgentChat full />,
-  preview: () => <LivePreview />
+  preview: () => <LivePreview />,
+  ssh: (props) => <SshTerminal connId={String((props.params as { connId?: string })?.connId ?? '')} />
 }
+
+const SSH_PREFIX = 'ssh-'
 
 /** First of `ids` that currently has a panel, used to anchor new panels. */
 function firstExisting(api: DockviewApi, ids: string[]): string | undefined {
@@ -84,6 +88,31 @@ function ensureEditor(api: DockviewApi): void {
   api.addPanel({ id: 'terminal', component: 'terminal', title: TITLES.terminal, initialHeight: 200, position: { referencePanel: 'editor', direction: 'below' } })
 }
 
+/** Add/remove SSH terminal panels so they match the store's open list. */
+function reconcileSsh(api: DockviewApi): void {
+  const state = useApp.getState()
+  for (const connId of state.openSshTerminals) {
+    const panelId = `${SSH_PREFIX}${connId}`
+    const existing = api.getPanel(panelId)
+    if (existing) {
+      existing.api.setActive()
+      continue
+    }
+    const conn = state.sshConnections.find((c) => c.id === connId)
+    const title = conn ? conn.name : 'SSH'
+    const ref = firstExisting(api, ['editor', 'chat', 'explorer', 'git'])
+    if (ref === 'editor') api.addPanel({ id: panelId, component: 'ssh', title, params: { connId }, position: { referencePanel: 'editor', direction: 'within' } })
+    else if (ref) api.addPanel({ id: panelId, component: 'ssh', title, params: { connId }, position: { referencePanel: ref, direction: 'left' } })
+    else api.addPanel({ id: panelId, component: 'ssh', title, params: { connId } })
+  }
+  // Remove panels for sessions that are no longer open.
+  for (const panel of api.panels) {
+    if (panel.id.startsWith(SSH_PREFIX) && !state.openSshTerminals.includes(panel.id.slice(SSH_PREFIX.length))) {
+      api.removePanel(panel)
+    }
+  }
+}
+
 /** Add or remove the Live Preview panel so it matches the store's preview state. */
 function reconcilePreview(api: DockviewApi): void {
   const { previewUrl, previewMode } = useApp.getState()
@@ -107,6 +136,7 @@ export function DockLayout(): JSX.Element {
   const previewUrl = useApp((s) => s.previewUrl)
   const previewMode = useApp((s) => s.previewMode)
   const openFilesLen = useApp((s) => s.openFiles.length)
+  const openSshTerminals = useApp((s) => s.openSshTerminals)
   const setDockLayout = useApp((s) => s.setDockLayout)
 
   const onReady = (event: DockviewReadyEvent): void => {
@@ -127,15 +157,25 @@ export function DockLayout(): JSX.Element {
 
     if (useApp.getState().openFiles.length > 0) ensureEditor(api)
     reconcilePreview(api)
+    reconcileSsh(api)
     setActiveId(api.activePanel?.id)
 
     disposables.current = [
       api.onDidLayoutChange(() => setDockLayout(api.toJSON())),
-      api.onDidActivePanelChange(() => setActiveId(api.activePanel?.id)),
+      api.onDidActivePanelChange(() => {
+        const id = api.activePanel?.id
+        setActiveId(id)
+        // Focusing an SSH terminal makes it the agent's run_command target.
+        if (id?.startsWith(SSH_PREFIX)) useApp.setState({ activeSsh: id.slice(SSH_PREFIX.length) })
+      }),
       api.onDidRemovePanel((panel) => {
-        if (panel.id !== 'preview') return
         const s = useApp.getState()
-        if (s.previewUrl && s.previewMode === 'docked') s.closePreview()
+        if (panel.id === 'preview') {
+          if (s.previewUrl && s.previewMode === 'docked') s.closePreview()
+        } else if (panel.id.startsWith(SSH_PREFIX)) {
+          const connId = panel.id.slice(SSH_PREFIX.length)
+          if (s.openSshTerminals.includes(connId)) s.closeSshTerminal(connId)
+        }
       })
     ]
   }
@@ -157,6 +197,11 @@ export function DockLayout(): JSX.Element {
   useEffect(() => {
     if (apiRef.current) reconcilePreview(apiRef.current)
   }, [previewUrl, previewMode])
+
+  // Mirror the store's open SSH terminals into the dock.
+  useEffect(() => {
+    if (apiRef.current) reconcileSsh(apiRef.current)
+  }, [openSshTerminals])
 
   const open = (id: 'explorer' | 'git' | 'chat'): void => {
     if (apiRef.current) focusOrOpen(apiRef.current, id)

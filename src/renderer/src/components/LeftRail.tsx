@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type JSX } from 'react'
 import type { TaskSummary, Workspace } from '@shared/ipc'
 import { Icon } from './Icon'
+import { SshRail } from './SshRail'
 import { useApp, type ThemePreference } from '@/state/store'
 
 /** A workspace row plus the tasks to show under it (filtered while searching). */
@@ -275,6 +276,8 @@ export function LeftRail(): JSX.Element {
           )
         })}
       </div>
+
+      <SshRail />
 
       <div className="rail-footer" ref={themeMenuRef}>
         {themeMenuOpen && (
