@@ -3,6 +3,7 @@ import {
   IPC,
   type TreeNode,
   type FileContent,
+  type FileActionResult,
   type Workspace,
   type TaskSummary,
   type TaskRecord,
@@ -25,6 +26,7 @@ import {
   type GitDiffRequest,
   type GitDiffResult,
   type GitActionResult,
+  type GitBranchesResult,
   type GitHistoryResult,
   type GitCommitFilesResult,
   type GitCommitDiffRequest,
@@ -57,7 +59,20 @@ const api = {
   },
   fs: {
     readTree: (dir: string): Promise<TreeNode[]> => ipcRenderer.invoke(IPC.fs.readTree, dir),
-    readFile: (file: string): Promise<FileContent> => ipcRenderer.invoke(IPC.fs.readFile, file)
+    readFile: (file: string): Promise<FileContent> => ipcRenderer.invoke(IPC.fs.readFile, file),
+    openPath: (dir: string): Promise<string> => ipcRenderer.invoke(IPC.fs.openPath, dir),
+    renameFile: (file: string, newName: string): Promise<FileActionResult> =>
+      ipcRenderer.invoke(IPC.fs.renameFile, file, newName),
+    deleteFile: (file: string): Promise<FileActionResult> =>
+      ipcRenderer.invoke(IPC.fs.deleteFile, file),
+    createFile: (parent: string, name: string): Promise<FileActionResult> =>
+      ipcRenderer.invoke(IPC.fs.createFile, parent, name),
+    createDirectory: (parent: string, name: string): Promise<FileActionResult> =>
+      ipcRenderer.invoke(IPC.fs.createDirectory, parent, name),
+    renameDirectory: (dir: string, newName: string): Promise<FileActionResult> =>
+      ipcRenderer.invoke(IPC.fs.renameDirectory, dir, newName),
+    deleteDirectory: (dir: string): Promise<FileActionResult> =>
+      ipcRenderer.invoke(IPC.fs.deleteDirectory, dir)
   },
   settings: {
     get: <T = unknown>(key: string): Promise<T | undefined> =>
@@ -168,7 +183,11 @@ const api = {
     commit: (cwd: string, message: string): Promise<GitActionResult> =>
       ipcRenderer.invoke(IPC.git.commit, cwd, message),
     push: (cwd: string): Promise<GitActionResult> => ipcRenderer.invoke(IPC.git.push, cwd),
+    pull: (cwd: string): Promise<GitActionResult> => ipcRenderer.invoke(IPC.git.pull, cwd),
     fetch: (cwd: string): Promise<GitActionResult> => ipcRenderer.invoke(IPC.git.fetch, cwd),
+    branches: (cwd: string): Promise<GitBranchesResult> => ipcRenderer.invoke(IPC.git.branches, cwd),
+    checkout: (cwd: string, branch: string): Promise<GitActionResult> =>
+      ipcRenderer.invoke(IPC.git.checkout, cwd, branch),
     history: (cwd: string): Promise<GitHistoryResult> => ipcRenderer.invoke(IPC.git.history, cwd),
     commitFiles: (cwd: string, commit: string): Promise<GitCommitFilesResult> =>
       ipcRenderer.invoke(IPC.git.commitFiles, cwd, commit),

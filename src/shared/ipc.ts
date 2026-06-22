@@ -18,7 +18,14 @@ export const IPC = {
   },
   fs: {
     readTree: 'fs:readTree',
-    readFile: 'fs:readFile'
+    readFile: 'fs:readFile',
+    openPath: 'fs:openPath',
+    renameFile: 'fs:renameFile',
+    deleteFile: 'fs:deleteFile',
+    createFile: 'fs:createFile',
+    createDirectory: 'fs:createDirectory',
+    renameDirectory: 'fs:renameDirectory',
+    deleteDirectory: 'fs:deleteDirectory'
   },
   settings: {
     get: 'settings:get',
@@ -72,7 +79,10 @@ export const IPC = {
     discard: 'git:discard',
     commit: 'git:commit',
     push: 'git:push',
+    pull: 'git:pull',
     fetch: 'git:fetch',
+    branches: 'git:branches',
+    checkout: 'git:checkout',
     history: 'git:history',
     commitFiles: 'git:commitFiles',
     commitDiff: 'git:commitDiff'
@@ -519,6 +529,7 @@ export interface GitStatusResult {
   root?: string
   branch?: string
   upstream?: string
+  pushTarget?: string
   ahead?: number
   behind?: number
   files?: GitStatusFile[]
@@ -557,6 +568,23 @@ export interface GitCommitDiffRequest {
 export interface GitActionResult {
   ok: boolean
   output?: string
+  error?: string
+}
+
+export interface FileActionResult {
+  ok: boolean
+  path?: string
+  error?: string
+}
+
+export interface GitBranch {
+  name: string
+  current: boolean
+}
+
+export interface GitBranchesResult {
+  ok: boolean
+  branches?: GitBranch[]
   error?: string
 }
 

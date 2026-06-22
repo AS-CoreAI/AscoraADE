@@ -574,7 +574,11 @@ interface AppState {
   openAnalytics: () => void
   closeAnalytics: () => void
   toggleDir: (node: TreeNode) => Promise<void>
+  refreshDirectory: (path: string) => Promise<void>
   openFile: (node: TreeNode) => Promise<void>
+  renameOpenFile: (oldPath: string, newPath: string, newName: string) => void
+  renameOpenPathPrefix: (oldPath: string, newPath: string) => void
+  closeFilesUnder: (path: string) => void
   closeFile: (path: string) => void
   closeOtherFiles: (path: string) => void
   closeFilesToRight: (path: string) => void
@@ -921,6 +925,18 @@ export const useApp = create<AppState>((set, get) => ({
     set((s) => ({ expanded: { ...s.expanded, [node.path]: true } }))
   },
 
+  async refreshDirectory(path) {
+    const active = get().active
+    if (!active) return
+    const children = await api.fs.readTree(path)
+    const normalize = (value: string): string => value.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase()
+    if (normalize(path) === normalize(active.path)) {
+      set({ treeRoots: children })
+      return
+    }
+    set((state) => ({ childrenByPath: { ...state.childrenByPath, [path]: children } }))
+  },
+
   async openFile(node) {
     const existing = get().openFiles.find((f) => f.path === node.path)
     if (existing) {
@@ -936,6 +952,44 @@ export const useApp = create<AppState>((set, get) => ({
       activeFile: file.path,
       view: 'workspace'
     }))
+  },
+
+  renameOpenFile(oldPath, newPath, newName) {
+    set((state) => ({
+      openFiles: state.openFiles.map((file) =>
+        file.path === oldPath ? { ...file, path: newPath, name: newName } : file
+      ),
+      activeFile: state.activeFile === oldPath ? newPath : state.activeFile
+    }))
+  },
+
+  renameOpenPathPrefix(oldPath, newPath) {
+    const normalize = (path: string): string => path.replace(/\\/g, '/')
+    const oldPrefix = `${normalize(oldPath).replace(/\/+$/, '')}/`
+    const rewrite = (path: string): string => {
+      const normalized = normalize(path)
+      if (!normalized.startsWith(oldPrefix)) return path
+      const separator = newPath.includes('\\') ? '\\' : '/'
+      const tail = normalized.slice(oldPrefix.length).replace(/\//g, separator)
+      return `${newPath.replace(/[\\/]+$/, '')}${separator}${tail}`
+    }
+    set((state) => ({
+      openFiles: state.openFiles.map((file) => ({ ...file, path: rewrite(file.path) })),
+      activeFile: state.activeFile ? rewrite(state.activeFile) : null
+    }))
+  },
+
+  closeFilesUnder(path) {
+    const normalize = (value: string): string => value.replace(/\\/g, '/').replace(/\/+$/, '')
+    const prefix = `${normalize(path)}/`
+    set((state) => {
+      const openFiles = state.openFiles.filter((file) => !normalize(file.path).startsWith(prefix))
+      const activeFile =
+        state.activeFile && normalize(state.activeFile).startsWith(prefix)
+          ? (openFiles.at(-1)?.path ?? null)
+          : state.activeFile
+      return { openFiles, activeFile }
+    })
   },
 
   closeFile(path) {

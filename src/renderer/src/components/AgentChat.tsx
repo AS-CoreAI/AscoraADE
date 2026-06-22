@@ -1,8 +1,10 @@
-import { useEffect, useLayoutEffect, useRef, useState, type JSX } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type JSX } from 'react'
+import type { GitBranch, GitStatusResult } from '@shared/ipc'
 import { Composer } from './Composer'
 import { Icon } from './Icon'
 import { useApp, type ChatMessage, type ToolStatus } from '@/state/store'
 import { lineDiff } from '@/lib/diff'
+import { api } from '@/lib/api'
 
 const TOOL_LABEL: Record<string, string> = {
   list_dir: 'List directory',
@@ -356,6 +358,298 @@ function ChangesBadge({ floating = false }: { floating?: boolean }): JSX.Element
   )
 }
 
+function cleanCommitMessage(text: string): string {
+  return text
+    .replace(/```[a-z]*|```/gi, '')
+    .split('\n')
+    .map((line) => line.replace(/^["'`]|["'`]$/g, '').trimEnd())
+    .join('\n')
+    .trim()
+}
+
+function sameProjectPath(left: string | undefined, right: string): boolean {
+  if (!left) return false
+  const normalize = (path: string): string => {
+    const normalized = path.replace(/\\/g, '/').replace(/\/+$/, '')
+    return api.system.platform === 'win32' ? normalized.toLowerCase() : normalized
+  }
+  return normalize(left) === normalize(right)
+}
+
+function GitBranchBadge(): JSX.Element | null {
+  const activePath = useApp((s) => s.active?.path)
+  const model = useApp((s) => s.model)
+  const rootRef = useRef<HTMLDivElement>(null)
+  const [status, setStatus] = useState<GitStatusResult | null>(null)
+  const [branches, setBranches] = useState<GitBranch[]>([])
+  const [open, setOpen] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [busy, setBusy] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+
+  const refresh = useCallback(
+    async (fetchRemote = false): Promise<void> => {
+      if (!activePath) {
+        setStatus(null)
+        setBranches([])
+        return
+      }
+      setLoading(true)
+      try {
+        let remoteError: string | null = null
+        if (fetchRemote) {
+          const before = await api.git.status(activePath)
+          if (before.ok && before.upstream) {
+            const fetched = await api.git.fetch(activePath)
+            if (!fetched.ok) remoteError = fetched.error ?? 'Failed to fetch remote changes.'
+          }
+        }
+        const nextStatus = await api.git.status(activePath)
+        const isProjectRepository = nextStatus.ok && sameProjectPath(nextStatus.root, activePath)
+        setStatus(isProjectRepository ? nextStatus : null)
+        if (!isProjectRepository) {
+          setBranches([])
+          setError(null)
+          return
+        }
+        try {
+          const nextBranches = await api.git.branches(activePath)
+          setBranches(nextBranches.ok ? nextBranches.branches ?? [] : [])
+          if (!nextBranches.ok && nextStatus.ok) {
+            remoteError = nextBranches.error ?? 'Failed to read Git branches.'
+          }
+        } catch (err) {
+          setBranches([])
+          if (nextStatus.ok) {
+            remoteError = err instanceof Error ? err.message : 'Failed to read Git branches.'
+          }
+        }
+        setError(remoteError ?? (nextStatus.ok ? null : nextStatus.error ?? 'Failed to read Git status.'))
+      } catch {
+        setStatus(null)
+        setBranches([])
+      } finally {
+        setLoading(false)
+      }
+    },
+    [activePath]
+  )
+
+  useEffect(() => {
+    setOpen(false)
+    setError(null)
+    setNotice(null)
+    void refresh(false)
+  }, [refresh])
+
+  useEffect(() => {
+    if (!open) return
+    void refresh(true)
+    const closeOnOutsideClick = (event: PointerEvent): void => {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false)
+    }
+    const closeOnEscape = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('pointerdown', closeOnOutsideClick)
+    document.addEventListener('keydown', closeOnEscape)
+    return () => {
+      document.removeEventListener('pointerdown', closeOnOutsideClick)
+      document.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [open, refresh])
+
+  const runGitAction = async (
+    name: string,
+    action: () => Promise<{ ok: boolean; error?: string; output?: string }>,
+    successMessage: string
+  ): Promise<void> => {
+    setBusy(name)
+    setError(null)
+    setNotice(null)
+    try {
+      const result = await action()
+      if (!result.ok) {
+        setError(result.error ?? 'Git command failed.')
+        return
+      }
+      setNotice(successMessage)
+      await refresh(false)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Git command failed.')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const switchBranch = (branch: string): void => {
+    if (!activePath || branch === status?.branch) return
+    void runGitAction(
+      'switch',
+      () => api.git.checkout(activePath, branch),
+      `Switched to ${branch}.`
+    )
+  }
+
+  const pull = (): void => {
+    if (!activePath) return
+    void runGitAction('pull', () => api.git.pull(activePath), 'Branch updated.')
+  }
+
+  const push = (): void => {
+    if (!activePath) return
+    void runGitAction('push', () => api.git.push(activePath), 'Commits pushed.')
+  }
+
+  const aiCommitAndPush = async (): Promise<void> => {
+    if (!activePath || busy) return
+    setBusy('ai')
+    setError(null)
+    setNotice(null)
+    try {
+      const staged = await api.git.stage(activePath)
+      if (!staged.ok) throw new Error(staged.error ?? 'Failed to stage changes.')
+
+      const diffResult = await api.git.diff(activePath, { staged: true })
+      if (!diffResult.ok) throw new Error(diffResult.error ?? 'Failed to read staged diff.')
+      const diff = (diffResult.diff ?? '').trim()
+      if (!diff) throw new Error('There are no changes to commit.')
+
+      const result = await api.llm.chat(
+        crypto.randomUUID(),
+        {
+          model,
+          temperature: 0.2,
+          messages: [
+            {
+              role: 'system',
+              content: 'Write concise Git commit messages. Return only the commit message, without markdown.'
+            },
+            {
+              role: 'user',
+              content:
+                'Create a concise commit message for this staged diff. Use imperative mood and keep the subject under 72 characters.\n\n' +
+                diff.slice(0, 12_000)
+            }
+          ]
+        },
+        () => undefined
+      )
+      if (!result.ok) throw new Error(result.error ?? 'Failed to generate a commit message.')
+      const message = cleanCommitMessage(result.content)
+      if (!message) throw new Error('AI returned an empty commit message.')
+
+      const committed = await api.git.commit(activePath, message)
+      if (!committed.ok) throw new Error(committed.error ?? 'Failed to create commit.')
+      const pushed = await api.git.push(activePath)
+      if (!pushed.ok) {
+        throw new Error(`Commit created as "${message}", but push failed: ${pushed.error ?? 'unknown error'}`)
+      }
+      setNotice(`Committed and pushed: ${message}`)
+      await refresh(false)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'AI commit failed.'
+      await refresh(false)
+      setError(message)
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  if (!activePath || !status?.ok || !sameProjectPath(status.root, activePath)) return null
+
+  const fileCount = status.files?.length ?? 0
+  const ahead = status.ahead ?? 0
+  const behind = status.behind ?? 0
+  const hasPushTarget = Boolean(status.pushTarget)
+  const canPush = hasPushTarget && (ahead > 0 || !status.upstream)
+  const disabled = loading || busy !== null
+
+  return (
+    <div className="git-branch-floating" ref={rootRef}>
+      <button
+        type="button"
+        className="changes-badge git-branch-badge"
+        aria-expanded={open}
+        title="Git branch and repository actions"
+        onClick={() => setOpen((value) => !value)}
+      >
+        <Icon name="gitBranch" size={12} />
+        <span>{status.branch || 'HEAD'}</span>
+        {behind > 0 && <span className="git-behind">↓{behind}</span>}
+        {ahead > 0 && <span className="git-ahead">↑{ahead}</span>}
+        <Icon name={open ? 'chevronDown' : 'chevronRight'} size={11} />
+      </button>
+
+      {open && (
+        <div className="git-quick-popover" role="dialog" aria-label="Git actions">
+          <div className="git-quick-head">
+            <div>
+              <strong>{status.branch || 'HEAD'}</strong>
+              <span>
+                {status.pushTarget ? `Push target: ${status.pushTarget}` : 'No push remote configured'}
+              </span>
+            </div>
+            <button
+              type="button"
+              className="git-quick-icon"
+              title="Fetch and refresh"
+              disabled={disabled}
+              onClick={() => void refresh(true)}
+            >
+              <Icon name="refresh" size={14} />
+            </button>
+          </div>
+
+          <label className="git-quick-field">
+            <span>Branch</span>
+            <select
+              value={status.branch || ''}
+              disabled={disabled || branches.length === 0}
+              onChange={(event) => switchBranch(event.target.value)}
+            >
+              {branches.map((branch) => (
+                <option key={branch.name} value={branch.name}>
+                  {branch.name}{branch.current ? ' (current)' : ''}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <div className="git-quick-state">
+            <span>{fileCount} changed</span>
+            <span>{behind} incoming</span>
+            <span>{ahead} outgoing</span>
+          </div>
+
+          <div className="git-quick-actions">
+            <button type="button" disabled={disabled || behind === 0} onClick={pull}>
+              {busy === 'pull' ? 'Pulling…' : `Pull${behind ? ` (${behind})` : ''}`}
+            </button>
+            <button type="button" disabled={disabled || !canPush} onClick={push}>
+              {busy === 'push' ? 'Pushing…' : `Push${ahead ? ` (${ahead})` : ''}`}
+            </button>
+          </div>
+          <button
+            type="button"
+            className="git-ai-push"
+            disabled={disabled || fileCount === 0 || !hasPushTarget}
+            onClick={() => void aiCommitAndPush()}
+          >
+            <Icon name="sparkles" size={14} />
+            {busy === 'ai' ? 'Creating AI commit…' : 'AI commit & push'}
+          </button>
+
+          {loading && <div className="git-quick-message">Checking remote…</div>}
+          {notice && <div className="git-quick-message success">{notice}</div>}
+          {error && <div className="git-quick-message error">{error}</div>}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function AgentChat({ full = false }: { full?: boolean }): JSX.Element {
   const messages = useApp((s) => s.messages)
   const thinking = useApp((s) => s.thinking)
@@ -369,6 +663,7 @@ export function AgentChat({ full = false }: { full?: boolean }): JSX.Element {
   if (full) {
     return (
       <div className="chat-full">
+        <GitBranchBadge />
         <ChangesBadge floating />
         <div className="chat-full-scroll" ref={scrollRef}>
           <div className="chat-col chat-messages-col">

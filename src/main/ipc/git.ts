@@ -5,6 +5,7 @@ import { isAbsolute, relative, resolve } from 'node:path'
 import {
   IPC,
   type GitActionResult,
+  type GitBranchesResult,
   type GitCommitFile,
   type GitCommitSummary,
   type GitCommitDiffRequest,
@@ -126,6 +127,13 @@ function statusChar(char: string): GitFileStatus {
 function safeCommitHash(hash: string): string {
   const trimmed = hash.trim()
   if (!/^[0-9a-f]{7,40}$/i.test(trimmed)) throw new GitError('Invalid commit hash.')
+  return trimmed
+}
+
+async function safeBranchName(root: string, branch: string): Promise<string> {
+  const trimmed = branch.trim()
+  if (!trimmed || trimmed.includes('\0')) throw new GitError('Invalid branch name.')
+  await runGit(root, ['check-ref-format', '--branch', trimmed])
   return trimmed
 }
 
@@ -277,6 +285,12 @@ async function hasRemote(root: string, name: string): Promise<boolean> {
   }
 }
 
+async function resolvePushTarget(root: string, branch: GitBranchInfo): Promise<string | undefined> {
+  if (branch.upstream) return branch.upstream
+  if (!branch.branch || branch.branch === 'HEAD') return undefined
+  return (await hasRemote(root, 'origin')) ? `origin/${branch.branch}` : undefined
+}
+
 function pathInside(root: string, filePath: string): string {
   const pathspec = safePathspec(filePath)
   const absolute = resolve(root, pathspec)
@@ -345,6 +359,7 @@ export function registerGitHandlers(): void {
         ok: true,
         root,
         ...snapshot.branch,
+        pushTarget: await resolvePushTarget(root, snapshot.branch),
         files: snapshot.files,
         outgoingCommits: snapshot.outgoingCommits
       }
@@ -448,11 +463,28 @@ export function registerGitHandlers(): void {
       const root = await repoRoot(cwd)
       const snapshot = await readSnapshot(root)
       const branch = snapshot.branch.branch
-      const args =
-        snapshot.branch.upstream || !branch || branch === 'HEAD' || !(await hasRemote(root, 'origin'))
-          ? ['push', '--porcelain']
-          : ['push', '--porcelain', '-u', 'origin', branch]
+      const target = await resolvePushTarget(root, snapshot.branch)
+      if (!target) {
+        throw new GitError('No push remote is configured. Add an origin remote before pushing.')
+      }
+      const args = snapshot.branch.upstream
+        ? ['push', '--porcelain']
+        : ['push', '--porcelain', '-u', 'origin', branch as string]
       const output = await runGit(root, args)
+      return { ok: true, output: cleanOutput(output.stdout || output.stderr) }
+    } catch (err) {
+      return actionError(err)
+    }
+  })
+
+  ipcMain.handle(IPC.git.pull, async (_e, cwd: string): Promise<GitActionResult> => {
+    try {
+      const root = await repoRoot(cwd)
+      const snapshot = await readSnapshot(root)
+      if (!snapshot.branch.upstream) {
+        throw new GitError('The current branch has no upstream branch.')
+      }
+      const output = await runGit(root, ['pull', '--ff-only'])
       return { ok: true, output: cleanOutput(output.stdout || output.stderr) }
     } catch (err) {
       return actionError(err)
@@ -471,6 +503,42 @@ export function registerGitHandlers(): void {
       return actionError(err)
     }
   })
+
+  ipcMain.handle(IPC.git.branches, async (_e, cwd: string): Promise<GitBranchesResult> => {
+    try {
+      const root = await repoRoot(cwd)
+      const output = await runGit(root, [
+        'for-each-ref',
+        '--format=%(refname:short)%00%(HEAD)',
+        'refs/heads'
+      ])
+      const branches = output.stdout
+        .split(/\r?\n/)
+        .filter(Boolean)
+        .map((line) => {
+          const [name = '', marker = ''] = line.split('\0')
+          return { name, current: marker.trim() === '*' }
+        })
+        .filter((branch) => branch.name)
+      return { ok: true, branches }
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) }
+    }
+  })
+
+  ipcMain.handle(
+    IPC.git.checkout,
+    async (_e, cwd: string, branch: string): Promise<GitActionResult> => {
+      try {
+        const root = await repoRoot(cwd)
+        const name = await safeBranchName(root, branch)
+        const output = await runGit(root, ['switch', name])
+        return { ok: true, output: cleanOutput(output.stdout || output.stderr) }
+      } catch (err) {
+        return actionError(err)
+      }
+    }
+  )
 
   ipcMain.handle(IPC.git.history, async (_e, cwd: string): Promise<GitHistoryResult> => {
     try {

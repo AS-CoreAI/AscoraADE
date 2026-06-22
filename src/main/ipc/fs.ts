@@ -1,7 +1,13 @@
-import { ipcMain } from 'electron'
-import { readdir, readFile, stat } from 'node:fs/promises'
-import { join, basename, extname } from 'node:path'
-import { IPC, EXCLUDED_DIRS, type TreeNode, type FileContent } from '@shared/ipc'
+import { ipcMain, shell } from 'electron'
+import { mkdir, readdir, readFile, rename, rm, stat, unlink, writeFile } from 'node:fs/promises'
+import { join, basename, dirname, extname } from 'node:path'
+import {
+  IPC,
+  EXCLUDED_DIRS,
+  type TreeNode,
+  type FileActionResult,
+  type FileContent
+} from '@shared/ipc'
 
 /** Max file size we'll read into the editor (2 MB) before flagging as truncated. */
 const MAX_FILE_BYTES = 2 * 1024 * 1024
@@ -74,6 +80,22 @@ function languageFor(filePath: string): string {
   return LANG_BY_EXT[extname(filePath).toLowerCase()] ?? 'plaintext'
 }
 
+function safeEntryName(name: string): string | null {
+  const trimmed = name.trim()
+  if (
+    !trimmed ||
+    trimmed === '.' ||
+    trimmed === '..' ||
+    trimmed !== basename(trimmed) ||
+    trimmed.includes('/') ||
+    trimmed.includes('\\') ||
+    trimmed.includes('\0')
+  ) {
+    return null
+  }
+  return trimmed
+}
+
 export function registerFsHandlers(): void {
   ipcMain.handle(IPC.fs.readTree, async (_e, dir: string): Promise<TreeNode[]> => {
     return readDir(dir)
@@ -108,4 +130,105 @@ export function registerFsHandlers(): void {
       truncated: false
     }
   })
+
+  ipcMain.handle(IPC.fs.openPath, async (_e, targetPath: string): Promise<string> => {
+    const info = await stat(targetPath)
+    if (info.isFile()) return shell.openPath(dirname(targetPath))
+    if (!info.isDirectory()) return 'The selected path is not a file or directory.'
+    return shell.openPath(targetPath)
+  })
+
+  ipcMain.handle(
+    IPC.fs.renameFile,
+    async (_e, filePath: string, newName: string): Promise<FileActionResult> => {
+      try {
+        const trimmed = safeEntryName(newName)
+        if (!trimmed) return { ok: false, error: 'Invalid file name.' }
+        const info = await stat(filePath)
+        if (!info.isFile()) return { ok: false, error: 'The selected path is not a file.' }
+        const nextPath = join(dirname(filePath), trimmed)
+        if (nextPath !== filePath) await rename(filePath, nextPath)
+        return { ok: true, path: nextPath }
+      } catch (err) {
+        return { ok: false, error: err instanceof Error ? err.message : String(err) }
+      }
+    }
+  )
+
+  ipcMain.handle(IPC.fs.deleteFile, async (_e, filePath: string): Promise<FileActionResult> => {
+    try {
+      const info = await stat(filePath)
+      if (!info.isFile()) return { ok: false, error: 'The selected path is not a file.' }
+      await unlink(filePath)
+      return { ok: true }
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) }
+    }
+  })
+
+  ipcMain.handle(
+    IPC.fs.createFile,
+    async (_e, parentPath: string, name: string): Promise<FileActionResult> => {
+      try {
+        const safeName = safeEntryName(name)
+        if (!safeName) return { ok: false, error: 'Invalid file name.' }
+        const parent = await stat(parentPath)
+        if (!parent.isDirectory()) return { ok: false, error: 'The parent path is not a directory.' }
+        const nextPath = join(parentPath, safeName)
+        // 'wx' fails if the file already exists, so we never clobber.
+        await writeFile(nextPath, '', { flag: 'wx' })
+        return { ok: true, path: nextPath }
+      } catch (err) {
+        return { ok: false, error: err instanceof Error ? err.message : String(err) }
+      }
+    }
+  )
+
+  ipcMain.handle(
+    IPC.fs.createDirectory,
+    async (_e, parentPath: string, name: string): Promise<FileActionResult> => {
+      try {
+        const safeName = safeEntryName(name)
+        if (!safeName) return { ok: false, error: 'Invalid folder name.' }
+        const parent = await stat(parentPath)
+        if (!parent.isDirectory()) return { ok: false, error: 'The parent path is not a directory.' }
+        const nextPath = join(parentPath, safeName)
+        await mkdir(nextPath)
+        return { ok: true, path: nextPath }
+      } catch (err) {
+        return { ok: false, error: err instanceof Error ? err.message : String(err) }
+      }
+    }
+  )
+
+  ipcMain.handle(
+    IPC.fs.renameDirectory,
+    async (_e, directoryPath: string, newName: string): Promise<FileActionResult> => {
+      try {
+        const safeName = safeEntryName(newName)
+        if (!safeName) return { ok: false, error: 'Invalid folder name.' }
+        const info = await stat(directoryPath)
+        if (!info.isDirectory()) return { ok: false, error: 'The selected path is not a directory.' }
+        const nextPath = join(dirname(directoryPath), safeName)
+        if (nextPath !== directoryPath) await rename(directoryPath, nextPath)
+        return { ok: true, path: nextPath }
+      } catch (err) {
+        return { ok: false, error: err instanceof Error ? err.message : String(err) }
+      }
+    }
+  )
+
+  ipcMain.handle(
+    IPC.fs.deleteDirectory,
+    async (_e, directoryPath: string): Promise<FileActionResult> => {
+      try {
+        const info = await stat(directoryPath)
+        if (!info.isDirectory()) return { ok: false, error: 'The selected path is not a directory.' }
+        await rm(directoryPath, { recursive: true, force: false })
+        return { ok: true }
+      } catch (err) {
+        return { ok: false, error: err instanceof Error ? err.message : String(err) }
+      }
+    }
+  )
 }
