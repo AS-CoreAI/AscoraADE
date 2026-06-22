@@ -558,6 +558,38 @@ button {
   background: var(--bg-hover);
 }
 
+/* ---------- Context menu (e.g. editor tab right-click) ---------- */
+.context-menu {
+  position: fixed;
+  z-index: 50;
+  min-width: 168px;
+  padding: 5px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  box-shadow: 0 10px 28px var(--modal-shadow);
+}
+.context-item {
+  width: 100%;
+  height: 30px;
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  border-radius: 5px;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  text-align: left;
+}
+.context-item:hover:not(:disabled) {
+  color: var(--text);
+  background: var(--bg-hover);
+}
+.context-item:disabled {
+  color: var(--text-faint);
+  opacity: 0.5;
+  cursor: default;
+}
+
 /* ---------- Home / launcher ---------- */
 .home {
   flex: 1;

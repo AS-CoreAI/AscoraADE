@@ -510,6 +510,9 @@ interface AppState {
   toggleDir: (node: TreeNode) => Promise<void>
   openFile: (node: TreeNode) => Promise<void>
   closeFile: (path: string) => void
+  closeOtherFiles: (path: string) => void
+  closeFilesToRight: (path: string) => void
+  closeAllFiles: () => void
   setActiveFile: (path: string) => void
 
   refreshModels: () => Promise<void>
@@ -860,6 +863,28 @@ export const useApp = create<AppState>((set, get) => ({
       const activeFile = s.activeFile === path ? (openFiles.at(-1)?.path ?? null) : s.activeFile
       return { openFiles, activeFile }
     })
+  },
+
+  closeOtherFiles(path) {
+    set((s) => {
+      const kept = s.openFiles.find((f) => f.path === path)
+      return kept ? { openFiles: [kept], activeFile: kept.path } : {}
+    })
+  },
+
+  closeFilesToRight(path) {
+    set((s) => {
+      const index = s.openFiles.findIndex((f) => f.path === path)
+      if (index === -1) return {}
+      const openFiles = s.openFiles.slice(0, index + 1)
+      // Keep the current file active unless it was one of the closed (right-side) tabs.
+      const activeFile = openFiles.some((f) => f.path === s.activeFile) ? s.activeFile : path
+      return { openFiles, activeFile }
+    })
+  },
+
+  closeAllFiles() {
+    set({ openFiles: [], activeFile: null })
   },
 
   setActiveFile(path) {

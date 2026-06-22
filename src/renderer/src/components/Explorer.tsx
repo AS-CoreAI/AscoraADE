@@ -1,6 +1,7 @@
 import type { JSX } from 'react'
 import type { TreeNode } from '@shared/ipc'
 import { Icon } from './Icon'
+import { FileIcon } from './FileIcon'
 import { useApp } from '@/state/store'
 
 function Row({ node, depth }: { node: TreeNode; depth: number }): JSX.Element {
@@ -23,7 +24,11 @@ function Row({ node, depth }: { node: TreeNode; depth: number }): JSX.Element {
           {isDir && <Icon name={expanded ? 'chevronDown' : 'chevronRight'} size={12} />}
         </span>
         <span className="ic">
-          <Icon name={isDir ? (expanded ? 'folderOpen' : 'folder') : 'file'} size={15} />
+          {isDir ? (
+            <Icon name={expanded ? 'folderOpen' : 'folder'} size={15} />
+          ) : (
+            <FileIcon name={node.name} size={15} />
+          )}
         </span>
         <span>{node.name}</span>
       </div>
