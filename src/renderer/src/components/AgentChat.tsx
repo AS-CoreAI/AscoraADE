@@ -248,6 +248,86 @@ function ThinkingIndicator(): JSX.Element | null {
   )
 }
 
+type ChangeKind = 'add' | 'modify' | 'delete'
+
+/** Normalize a backend's change verb (codex/claude/glm use add|update|delete|edit). */
+function normChangeKind(raw: string): ChangeKind {
+  const k = raw.trim().toLowerCase()
+  if (k === 'add' || k === 'added' || k === 'create' || k === 'created' || k === 'new' || k === 'a')
+    return 'add'
+  if (k === 'delete' || k === 'deleted' || k === 'remove' || k === 'removed' || k === 'd')
+    return 'delete'
+  return 'modify'
+}
+
+/** Merge repeated touches of one file: a delete wins; a file born in this branch stays "add". */
+function mergeChangeKind(prev: ChangeKind | undefined, next: ChangeKind): ChangeKind {
+  if (next === 'delete') return 'delete'
+  if (prev === 'add') return 'add'
+  return next
+}
+
+/**
+ * Tally the distinct files touched across the whole task branch (every prompt's
+ * messages), deduped by path. Works for the local loop (write_file/edit_file)
+ * and the CLI backends (apply_patch cards, whose `output` lists "kind name").
+ */
+function countChanges(messages: ChatMessage[]): {
+  added: number
+  modified: number
+  removed: number
+} {
+  const files = new Map<string, ChangeKind>()
+  const note = (key: string, kind: ChangeKind): void => {
+    const path = key.trim()
+    if (path) files.set(path, mergeChangeKind(files.get(path), kind))
+  }
+  for (const m of messages) {
+    if (m.kind !== 'tool' || m.status !== 'done') continue
+    if (m.tool === 'write_file') note(String(m.args?.path ?? ''), m.created ? 'add' : 'modify')
+    else if (m.tool === 'edit_file') note(String(m.args?.path ?? ''), 'modify')
+    else if (m.tool === 'apply_patch' && m.output) {
+      for (const line of m.output.split('\n')) {
+        const t = line.trim()
+        const sp = t.indexOf(' ')
+        if (sp > 0) note(t.slice(sp + 1), normChangeKind(t.slice(0, sp)))
+      }
+    }
+  }
+  let added = 0
+  let modified = 0
+  let removed = 0
+  for (const kind of files.values()) {
+    if (kind === 'add') added += 1
+    else if (kind === 'delete') removed += 1
+    else modified += 1
+  }
+  return { added, modified, removed }
+}
+
+/**
+ * "Changes +N -M" pill summarising the files edited so far in this task branch.
+ * Green counts files added or modified; red counts deletions. Hidden until the
+ * agent has actually changed something.
+ */
+function ChangesBadge({ floating = false }: { floating?: boolean }): JSX.Element | null {
+  const messages = useApp((s) => s.messages)
+  const { added, modified, removed } = countChanges(messages)
+  const changed = added + modified
+  if (changed === 0 && removed === 0) return null
+  return (
+    <div
+      className={`changes-badge${floating ? ' floating' : ''}`}
+      title={`${added} added · ${modified} modified · ${removed} removed`}
+    >
+      <Icon name="file" size={12} />
+      <span className="changes-label">Changes</span>
+      <span className="changes-add">+{changed}</span>
+      <span className="changes-del">-{removed}</span>
+    </div>
+  )
+}
+
 export function AgentChat({ full = false }: { full?: boolean }): JSX.Element {
   const messages = useApp((s) => s.messages)
   const thinking = useApp((s) => s.thinking)
@@ -261,6 +341,7 @@ export function AgentChat({ full = false }: { full?: boolean }): JSX.Element {
   if (full) {
     return (
       <div className="chat-full">
+        <ChangesBadge floating />
         <div className="chat-full-scroll" ref={scrollRef}>
           <div className="chat-col chat-messages-col">
             <Messages messages={messages} />
@@ -282,6 +363,7 @@ export function AgentChat({ full = false }: { full?: boolean }): JSX.Element {
         <Icon name="message" size={13} />
         Agent
         <span className="spacer" />
+        <ChangesBadge />
       </div>
 
       <div className="chat">

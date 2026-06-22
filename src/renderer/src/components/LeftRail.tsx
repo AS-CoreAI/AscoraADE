@@ -1,6 +1,14 @@
 import { useEffect, useRef, useState, type JSX } from 'react'
+import type { TaskSummary, Workspace } from '@shared/ipc'
 import { Icon } from './Icon'
 import { useApp, type ThemePreference } from '@/state/store'
+
+/** A workspace row plus the tasks to show under it (filtered while searching). */
+interface VisibleWorkspace {
+  ws: Workspace
+  tasks: TaskSummary[]
+  collapsed: boolean
+}
 
 const THEMES: { value: ThemePreference; label: string }[] = [
   { value: 'dark', label: 'Dark' },
@@ -36,6 +44,9 @@ export function LeftRail(): JSX.Element {
   const newTask = useApp((s) => s.newTask)
   const [dragId, setDragId] = useState<string | null>(null)
   const [dragOverId, setDragOverId] = useState<string | null>(null)
+  const [search, setSearch] = useState('')
+  const [searchOpen, setSearchOpen] = useState(false)
+  const searchInputRef = useRef<HTMLInputElement>(null)
   const view = useApp((s) => s.view)
   const openAnalytics = useApp((s) => s.openAnalytics)
   const closeAnalytics = useApp((s) => s.closeAnalytics)
@@ -60,6 +71,43 @@ export function LeftRail(): JSX.Element {
     }
   }, [themeMenuOpen])
 
+  const openSearch = (): void => {
+    setSearchOpen(true)
+    // Focus after the input has mounted/rendered.
+    requestAnimationFrame(() => searchInputRef.current?.focus())
+  }
+
+  const closeSearch = (): void => {
+    setSearchOpen(false)
+    setSearch('')
+  }
+
+  // Ctrl/Cmd+K opens the workspace search and focuses the field.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent): void => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault()
+        setSearchOpen(true)
+        requestAnimationFrame(() => searchInputRef.current?.focus())
+      }
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [])
+
+  const query = search.trim().toLowerCase()
+  const isSearching = query.length > 0
+  // While searching, keep only workspaces that match by name or hold a matching
+  // task, force the group open, and narrow the task list to the matches.
+  const visibleWorkspaces: VisibleWorkspace[] = workspaces.flatMap((ws) => {
+    const tasks = tasksByWorkspace[ws.id] ?? []
+    if (!isSearching) return [{ ws, tasks, collapsed: !!collapsedWorkspaces[ws.id] }]
+    const nameMatch = ws.name.toLowerCase().includes(query)
+    const matchedTasks = tasks.filter((task) => task.title.toLowerCase().includes(query))
+    if (!nameMatch && matchedTasks.length === 0) return []
+    return [{ ws, tasks: nameMatch ? tasks : matchedTasks, collapsed: false }]
+  })
+
   return (
     <div className="rail">
       <div className="rail-actions">
@@ -68,7 +116,7 @@ export function LeftRail(): JSX.Element {
           New task
           <span className="kbd">Ctrl+N</span>
         </button>
-        <button className="rail-action search">
+        <button className="rail-action search" onClick={openSearch}>
           <Icon name="search" size={16} />
           Search
           <span className="kbd">Ctrl+K</span>
@@ -88,7 +136,11 @@ export function LeftRail(): JSX.Element {
           <button title="Filter">
             <Icon name="filter" size={13} />
           </button>
-          <button title="Search workspaces">
+          <button
+            className={searchOpen ? 'active' : undefined}
+            title="Search workspaces"
+            onClick={() => (searchOpen ? closeSearch() : openSearch())}
+          >
             <Icon name="search" size={13} />
           </button>
           <button title="Archived">
@@ -97,8 +149,32 @@ export function LeftRail(): JSX.Element {
         </span>
       </div>
 
+      {searchOpen && (
+        <div className="rail-search">
+          <Icon name="search" size={13} />
+          <input
+            ref={searchInputRef}
+            type="text"
+            placeholder="Search workspaces & tasks"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') closeSearch()
+            }}
+          />
+          <button
+            className="rail-search-clear"
+            title="Close search"
+            aria-label="Close search"
+            onClick={closeSearch}
+          >
+            <Icon name="close" size={13} />
+          </button>
+        </div>
+      )}
+
       <div className="rail-scroll">
-        {workspaces.length === 0 && (
+        {workspaces.length === 0 && !isSearching && (
           <button
             className="task-item"
             style={{ paddingLeft: 14 }}
@@ -110,9 +186,11 @@ export function LeftRail(): JSX.Element {
           </button>
         )}
 
-        {workspaces.map((ws) => {
-          const tasks = tasksByWorkspace[ws.id] ?? []
-          const collapsed = !!collapsedWorkspaces[ws.id]
+        {isSearching && visibleWorkspaces.length === 0 && (
+          <div className="task-empty">No matches for “{search.trim()}”</div>
+        )}
+
+        {visibleWorkspaces.map(({ ws, tasks, collapsed }) => {
           return (
             <div className="ws-group" key={ws.id}>
               <div

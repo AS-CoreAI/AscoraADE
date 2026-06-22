@@ -6,11 +6,19 @@ import { useApp } from '@/state/store'
 export function TitleBar(): JSX.Element {
   const view = useApp((s) => s.view)
   const goHome = useApp((s) => s.goHome)
+  const toggleSidebar = useApp((s) => s.toggleSidebar)
 
   return (
     <div className="titlebar">
       <div className="titlebar-left">
-        <div className="logo">A</div>
+        <button
+          className="logo"
+          title="Toggle sidebar"
+          aria-label="Toggle sidebar"
+          onClick={toggleSidebar}
+        >
+          A
+        </button>
         <button
           className="nav-btn"
           title="Back"

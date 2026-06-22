@@ -479,6 +479,8 @@ interface AppState {
   settingsOpen: boolean
   themePreference: ThemePreference
   resolvedTheme: ResolvedTheme
+  /** Whether the left sidebar (rail) is collapsed out of view (persisted). */
+  sidebarCollapsed: boolean
 
   mode: AgentMode
   messages: ChatMessage[]
@@ -533,6 +535,7 @@ interface AppState {
   setSettingsOpen: (open: boolean) => void
   setThemePreference: (theme: ThemePreference) => void
   syncSystemTheme: () => void
+  toggleSidebar: () => void
 
   setMode: (m: AgentMode) => void
   submitTask: (text: string) => Promise<void>
@@ -585,6 +588,7 @@ export const useApp = create<AppState>((set, get) => ({
   settingsOpen: false,
   themePreference: 'dark',
   resolvedTheme: 'dark',
+  sidebarCollapsed: false,
 
   mode: 'ask',
   messages: [],
@@ -596,14 +600,16 @@ export const useApp = create<AppState>((set, get) => ({
   thinkingStartedAt: null,
 
   async init() {
-    const [workspaces, cfg, savedTheme, savedOrder, savedCollapsed, savedLlm] = await Promise.all([
-      api.workspace.list(),
-      api.llm.config(),
-      api.settings.get<ThemePreference>('appearance.theme'),
-      api.settings.get<string[]>('workspace.order'),
-      api.settings.get<Record<string, boolean>>('workspace.collapsed'),
-      api.settings.get<Record<string, WorkspaceLlm>>('workspace.llm')
-    ])
+    const [workspaces, cfg, savedTheme, savedOrder, savedCollapsed, savedLlm, savedSidebar] =
+      await Promise.all([
+        api.workspace.list(),
+        api.llm.config(),
+        api.settings.get<ThemePreference>('appearance.theme'),
+        api.settings.get<string[]>('workspace.order'),
+        api.settings.get<Record<string, boolean>>('workspace.collapsed'),
+        api.settings.get<Record<string, WorkspaceLlm>>('workspace.llm'),
+        api.settings.get<boolean>('sidebar.collapsed')
+      ])
     const workspaceOrder = Array.isArray(savedOrder) ? savedOrder : []
     const collapsedWorkspaces =
       savedCollapsed && typeof savedCollapsed === 'object' ? savedCollapsed : {}
@@ -620,6 +626,7 @@ export const useApp = create<AppState>((set, get) => ({
       collapsedWorkspaces,
       workspaceLlm,
       tasksByWorkspace: Object.fromEntries(taskLists),
+      sidebarCollapsed: savedSidebar === true,
       provider: cfg.provider,
       baseUrl: cfg.baseUrl,
       model: cfg.model,
@@ -1033,6 +1040,14 @@ export const useApp = create<AppState>((set, get) => ({
     if (themePreference !== 'system') return
     const next = applyTheme(themePreference)
     if (next !== resolvedTheme) set({ resolvedTheme: next })
+  },
+
+  toggleSidebar() {
+    set((s) => {
+      const sidebarCollapsed = !s.sidebarCollapsed
+      void api.settings.set('sidebar.collapsed', sidebarCollapsed)
+      return { sidebarCollapsed }
+    })
   },
 
   setMode(mode) {

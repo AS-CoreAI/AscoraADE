@@ -13,6 +13,7 @@ export function App(): JSX.Element {
   const init = useApp((s) => s.init)
   const themePreference = useApp((s) => s.themePreference)
   const syncSystemTheme = useApp((s) => s.syncSystemTheme)
+  const sidebarCollapsed = useApp((s) => s.sidebarCollapsed)
 
   useEffect(() => {
     void init()
@@ -28,7 +29,7 @@ export function App(): JSX.Element {
   }, [syncSystemTheme, themePreference])
 
   return (
-    <div className="app">
+    <div className={`app${sidebarCollapsed ? ' sidebar-collapsed' : ''}`}>
       <TitleBar />
       <div className="body">
         <LeftRail />
