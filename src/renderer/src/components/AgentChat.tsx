@@ -258,6 +258,23 @@ function ThinkingIndicator(): JSX.Element | null {
 
 type ChangeKind = 'add' | 'modify' | 'delete'
 
+interface ChangeFileSummary {
+  path: string
+  kind: ChangeKind
+  added: number
+  removed: number
+  hasLineCounts: boolean
+}
+
+interface ChangesSummary {
+  added: number
+  modified: number
+  removed: number
+  lineAdded: number
+  lineRemoved: number
+  files: ChangeFileSummary[]
+}
+
 /** Normalize a backend's change verb (codex/claude/glm use add|update|delete|edit). */
 function normChangeKind(raw: string): ChangeKind {
   const k = raw.trim().toLowerCase()
@@ -276,25 +293,41 @@ function mergeChangeKind(prev: ChangeKind | undefined, next: ChangeKind): Change
 }
 
 /**
- * Tally the distinct files touched across the whole task branch (every prompt's
- * messages), deduped by path. Works for the local loop (write_file/edit_file)
- * and the CLI backends (apply_patch cards, whose `output` lists "kind name").
+ * Tally the distinct files touched across the whole task branch, deduped by
+ * path. Uses structured `changes` when available and falls back to older
+ * apply_patch text so saved tasks still render.
  */
-function countChanges(messages: ChatMessage[]): {
-  added: number
-  modified: number
-  removed: number
-} {
-  const files = new Map<string, ChangeKind>()
-  const note = (key: string, kind: ChangeKind): void => {
+function summarizeChanges(messages: ChatMessage[]): ChangesSummary {
+  const files = new Map<string, ChangeFileSummary>()
+  const note = (key: string, kind: ChangeKind, added?: number, removed?: number): void => {
     const path = key.trim()
-    if (path) files.set(path, mergeChangeKind(files.get(path), kind))
+    if (!path) return
+    const prev = files.get(path)
+    files.set(path, {
+      path,
+      kind: mergeChangeKind(prev?.kind, kind),
+      added: (prev?.added ?? 0) + (added ?? 0),
+      removed: (prev?.removed ?? 0) + (removed ?? 0),
+      hasLineCounts: Boolean(prev?.hasLineCounts || added != null || removed != null)
+    })
   }
   for (const m of messages) {
     if (m.kind !== 'tool' || m.status !== 'done') continue
-    if (m.tool === 'write_file') note(String(m.args?.path ?? ''), m.created ? 'add' : 'modify')
-    else if (m.tool === 'edit_file') note(String(m.args?.path ?? ''), 'modify')
-    else if (m.tool === 'apply_patch' && m.output) {
+    if (m.changes?.length) {
+      for (const change of m.changes) {
+        const singleFile = m.changes.length === 1
+        note(
+          change.path,
+          normChangeKind(change.kind),
+          change.added ?? (singleFile ? m.addedLines : undefined),
+          change.removed ?? (singleFile ? m.removedLines : undefined)
+        )
+      }
+    } else if (m.tool === 'write_file') {
+      note(String(m.args?.path ?? ''), m.created ? 'add' : 'modify', m.addedLines, m.removedLines)
+    } else if (m.tool === 'edit_file') {
+      note(String(m.args?.path ?? ''), 'modify', m.addedLines, m.removedLines)
+    } else if (m.tool === 'apply_patch' && m.output) {
       for (const line of m.output.split('\n')) {
         const t = line.trim()
         const sp = t.indexOf(' ')
@@ -305,26 +338,29 @@ function countChanges(messages: ChatMessage[]): {
   let added = 0
   let modified = 0
   let removed = 0
-  for (const kind of files.values()) {
-    if (kind === 'add') added += 1
-    else if (kind === 'delete') removed += 1
+  let lineAdded = 0
+  let lineRemoved = 0
+  for (const file of files.values()) {
+    if (file.kind === 'add') added += 1
+    else if (file.kind === 'delete') removed += 1
     else modified += 1
+    lineAdded += file.added
+    lineRemoved += file.removed
   }
-  return { added, modified, removed }
+  return {
+    added,
+    modified,
+    removed,
+    lineAdded,
+    lineRemoved,
+    files: [...files.values()].sort((a, b) => a.path.localeCompare(b.path))
+  }
 }
 
-/** Sum the added/removed *lines* across every applied edit in this task branch. */
-function countLines(messages: ChatMessage[]): { added: number; removed: number } {
-  let added = 0
-  let removed = 0
-  for (const m of messages) {
-    if (m.kind !== 'tool' || m.status !== 'done') continue
-    if (m.tool === 'write_file' || m.tool === 'edit_file' || m.tool === 'apply_patch') {
-      added += m.addedLines ?? 0
-      removed += m.removedLines ?? 0
-    }
-  }
-  return { added, removed }
+function changeKindLabel(kind: ChangeKind): string {
+  if (kind === 'add') return 'Created'
+  if (kind === 'delete') return 'Removed'
+  return 'Edited'
 }
 
 /**
@@ -334,25 +370,74 @@ function countLines(messages: ChatMessage[]): { added: number; removed: number }
  */
 function ChangesBadge({ floating = false }: { floating?: boolean }): JSX.Element | null {
   const messages = useApp((s) => s.messages)
-  const files = countChanges(messages)
-  const lines = countLines(messages)
-  const fileCount = files.added + files.modified + files.removed
+  const rootRef = useRef<HTMLDivElement>(null)
+  const [open, setOpen] = useState(false)
+  const summary = summarizeChanges(messages)
+  const fileCount = summary.added + summary.modified + summary.removed
+
+  useEffect(() => {
+    if (fileCount === 0 && open) setOpen(false)
+  }, [fileCount, open])
+
+  useEffect(() => {
+    if (!open) return
+    const closeOnOutsideClick = (event: PointerEvent): void => {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false)
+    }
+    const closeOnEscape = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('pointerdown', closeOnOutsideClick)
+    document.addEventListener('keydown', closeOnEscape)
+    return () => {
+      document.removeEventListener('pointerdown', closeOnOutsideClick)
+      document.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [open])
+
   if (fileCount === 0) return null
-  const hasLines = lines.added > 0 || lines.removed > 0
   return (
-    <div
-      className={`changes-badge${floating ? ' floating' : ''}`}
-      title={`${files.added} added · ${files.modified} modified · ${files.removed} removed`}
-    >
-      <Icon name="file" size={12} />
-      <span className="changes-label">
-        {fileCount} file{fileCount === 1 ? '' : 's'}
-      </span>
-      {hasLines && (
-        <>
-          <span className="changes-add">+{lines.added}</span>
-          <span className="changes-del">-{lines.removed}</span>
-        </>
+    <div className={`changes-popover-root${floating ? ' floating' : ''}`} ref={rootRef}>
+      <button
+        type="button"
+        className={`changes-badge${floating ? ' floating' : ''}`}
+        aria-expanded={open}
+        title={`${summary.added} added, ${summary.modified} modified, ${summary.removed} removed`}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <Icon name="file" size={12} />
+        <span className="changes-label">
+          {fileCount} file{fileCount === 1 ? '' : 's'}
+        </span>
+        <span className="changes-add">+{summary.lineAdded}</span>
+        <span className="changes-del">-{summary.lineRemoved}</span>
+        <Icon name={open ? 'chevronDown' : 'chevronRight'} size={11} />
+      </button>
+
+      {open && (
+        <div className="changes-popover" role="dialog" aria-label="Changed files">
+          <div className="changes-popover-head">
+            <strong>
+              {fileCount} changed file{fileCount === 1 ? '' : 's'}
+            </strong>
+            <span>
+              {summary.added} created, {summary.modified} edited, {summary.removed} removed
+            </span>
+          </div>
+
+          <div className="changes-file-list">
+            {summary.files.map((file) => (
+              <div className="changes-file-row" key={file.path} title={file.path}>
+                <span className={`changes-kind ${file.kind}`}>{changeKindLabel(file.kind)}</span>
+                <span className="changes-file-path">{file.path}</span>
+                <span className="changes-file-stat">
+                  <span className="changes-add">+{file.hasLineCounts ? file.added : '?'}</span>
+                  <span className="changes-del">-{file.hasLineCounts ? file.removed : '?'}</span>
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
     </div>
   )

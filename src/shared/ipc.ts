@@ -162,6 +162,13 @@ export interface TaskSummary {
   deletedAt?: number
 }
 
+export interface TaskFileChange {
+  path: string
+  kind: string
+  added?: number
+  removed?: number
+}
+
 /** A renderer chat entry persisted as part of a task. */
 export interface TaskMessage {
   id: string
@@ -186,6 +193,8 @@ export interface TaskMessage {
   addedLines?: number
   /** Lines removed by this edit, for the -M stat. */
   removedLines?: number
+  /** Per-file changes for the task change summary/popover. */
+  changes?: TaskFileChange[]
   error?: string
 }
 
@@ -402,7 +411,7 @@ export interface CodexItem {
   /** command_execution: exit code (null while running / when killed). */
   exitCode?: number | null
   /** file_change: the files touched and how (with per-file line counts when Codex reports them). */
-  changes?: { path: string; kind: string; added?: number; removed?: number }[]
+  changes?: TaskFileChange[]
   /** "in_progress" | "completed" | "failed". */
   status?: string
 }

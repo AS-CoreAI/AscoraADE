@@ -390,6 +390,7 @@ function codexItemToCard(it: CodexItem): Partial<ChatMessage> {
       args: { path: `${changes.length} file${changes.length === 1 ? '' : 's'}` },
       status,
       output: changes.map((c) => `${c.kind} ${baseName(c.path)}`).join('\n'),
+      changes,
       ...(hasCounts
         ? {
             addedLines: changes.reduce((sum, c) => sum + (c.added ?? 0), 0),
@@ -1899,14 +1900,30 @@ export const useApp = create<AppState>((set, get) => ({
                 : `Error: ${r.error}`
             )
           } else if (call.name === 'edit_file') {
+            const path = asStr(call.args.path)
             const r = await api.agent.editFile(
               root,
-              asStr(call.args.path),
+              path,
               asStr(call.args.old_string),
               asStr(call.args.new_string),
               call.args.replace_all === true
             )
-            patch(cardId, { status: r.ok ? 'done' : 'error', error: r.error })
+            patch(cardId, {
+              status: r.ok ? 'done' : 'error',
+              ...(r.ok
+                ? {
+                    changes: [
+                      {
+                        path: r.path ?? path,
+                        kind: 'update',
+                        added: stat?.added ?? 0,
+                        removed: stat?.removed ?? 0
+                      }
+                    ]
+                  }
+                : {}),
+              error: r.error
+            })
             appendResult(
               call,
               r.ok
@@ -1914,8 +1931,25 @@ export const useApp = create<AppState>((set, get) => ({
                 : `Error: ${r.error}`
             )
           } else if (call.name === 'write_file') {
-            const r = await api.agent.writeFile(root, asStr(call.args.path), asStr(call.args.content))
-            patch(cardId, { status: r.ok ? 'done' : 'error', created: r.created, error: r.error })
+            const path = asStr(call.args.path)
+            const r = await api.agent.writeFile(root, path, asStr(call.args.content))
+            patch(cardId, {
+              status: r.ok ? 'done' : 'error',
+              created: r.created,
+              ...(r.ok
+                ? {
+                    changes: [
+                      {
+                        path: r.path ?? path,
+                        kind: r.created ? 'add' : 'update',
+                        added: stat?.added ?? 0,
+                        removed: stat?.removed ?? 0
+                      }
+                    ]
+                  }
+                : {}),
+              error: r.error
+            })
             appendResult(
               call,
               r.ok ? `${r.created ? 'Created' : 'Updated'} ${r.path} (${r.bytes} bytes).` : `Error: ${r.error}`
