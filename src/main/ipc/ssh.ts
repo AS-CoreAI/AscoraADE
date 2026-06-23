@@ -189,6 +189,51 @@ function execCommand(id: string, command: string): Promise<SshExecResult> {
   })
 }
 
+/**
+ * Run a command by typing it into the interactive shell (so it appears in the
+ * user's visible console and executes on the remote host), then capture its
+ * output. We append a sentinel `printf` that prints a unique marker + the exit
+ * code; output is everything between the echoed command line and that marker.
+ * Assumes a POSIX remote shell (the common case for SSH servers).
+ */
+function runInShell(id: string, command: string): Promise<SshExecResult> {
+  const session = sessions.get(id)
+  if (!session || !session.ready || !session.stream) {
+    return Promise.resolve({ ok: false, error: 'SSH session is not connected.' })
+  }
+  const stream = session.stream
+  return new Promise((resolve) => {
+    const tag = Math.random().toString(36).slice(2, 10)
+    // Match the marker only when followed by digits — the echoed printf line
+    // contains `…:%s`, the real output line contains `…:<code>`.
+    const re = new RegExp(`__ASC_${tag}:(-?\\d+)`)
+    let buffer = ''
+    let done = false
+    const finish = (result: SshExecResult): void => {
+      if (done) return
+      done = true
+      clearTimeout(timer)
+      stream.removeListener('data', onData)
+      resolve(result)
+    }
+    const onData = (chunk: Buffer): void => {
+      buffer += chunk.toString('utf8')
+      const match = re.exec(buffer)
+      if (!match) return
+      let out = buffer.slice(0, match.index)
+      const firstNl = out.indexOf('\n') // drop the echoed command line
+      if (firstNl !== -1) out = out.slice(firstNl + 1)
+      finish({ ok: true, stdout: out.replace(/[\r\n]+$/, ''), stderr: '', code: parseInt(match[1], 10) })
+    }
+    const timer = setTimeout(
+      () => finish({ ok: true, stdout: buffer, stderr: '', code: null }),
+      120_000
+    )
+    stream.on('data', onData)
+    stream.write(`${command}; printf '\\n__ASC_${tag}:%s\\n' "$?"\n`)
+  })
+}
+
 export function registerSshHandlers(): void {
   ipcMain.handle(
     IPC.ssh.connect,
@@ -215,6 +260,10 @@ export function registerSshHandlers(): void {
   ipcMain.handle(
     IPC.ssh.exec,
     (_e, id: string, command: string): Promise<SshExecResult> => execCommand(id, command)
+  )
+  ipcMain.handle(
+    IPC.ssh.run,
+    (_e, id: string, command: string): Promise<SshExecResult> => runInShell(id, command)
   )
   ipcMain.handle(IPC.ssh.pickKey, async (e): Promise<string | null> => {
     const win = BrowserWindow.fromWebContents(e.sender) ?? undefined

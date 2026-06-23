@@ -2,6 +2,8 @@ import { create } from 'zustand'
 import type {
   Workspace,
   TreeNode,
+  FileActionResult,
+  FileContent,
   SshConnection,
   LlmMessage,
   TaskMessage,
@@ -14,9 +16,17 @@ import type {
   GlmMode,
   CodexEvent,
   CodexItem,
-  CodexCheckResult
+  CodexCheckResult,
+  AgentListResult,
+  AgentReadResult,
+  AgentReadRange,
+  AgentWriteResult,
+  AgentEditResult,
+  AgentSearchResult,
+  AgentDirEntry,
+  AgentSearchMatch
 } from '@shared/ipc'
-import { DEFAULT_LLM_CONFIG } from '@shared/ipc'
+import { DEFAULT_LLM_CONFIG, EXCLUDED_DIRS } from '@shared/ipc'
 import { api } from '@/lib/api'
 import { diffStat } from '@/lib/diff'
 import { solveZCodeCaptcha } from '@/lib/zcode-captcha'
@@ -33,6 +43,9 @@ export interface OpenFile {
   name: string
   content: string
   language: string
+  dirty?: boolean
+  saving?: boolean
+  truncated?: boolean
 }
 
 /** Lifecycle and shape of chat entries persisted with a task. */
@@ -41,6 +54,107 @@ export type ChatMessage = TaskMessage
 
 /** How many tool round-trips a single task may take before we stop. */
 const MAX_STEPS = 16
+const SSH_WORKSPACE_PREFIX = 'ssh:'
+const MAX_EDITOR_FILE_BYTES = 2 * 1024 * 1024
+
+const LANG_BY_EXT: Record<string, string> = {
+  '.ts': 'typescript',
+  '.tsx': 'typescript',
+  '.js': 'javascript',
+  '.jsx': 'javascript',
+  '.mjs': 'javascript',
+  '.cjs': 'javascript',
+  '.json': 'json',
+  '.html': 'html',
+  '.htm': 'html',
+  '.css': 'css',
+  '.scss': 'scss',
+  '.less': 'less',
+  '.md': 'markdown',
+  '.py': 'python',
+  '.go': 'go',
+  '.rs': 'rust',
+  '.java': 'java',
+  '.c': 'c',
+  '.h': 'c',
+  '.cpp': 'cpp',
+  '.cs': 'csharp',
+  '.php': 'php',
+  '.rb': 'ruby',
+  '.sh': 'shell',
+  '.yml': 'yaml',
+  '.yaml': 'yaml',
+  '.xml': 'xml',
+  '.sql': 'sql',
+  '.toml': 'ini',
+  '.ini': 'ini'
+}
+
+function languageForPath(path: string): string {
+  const name = path.split(/[\\/]/).at(-1) ?? path
+  const dot = name.lastIndexOf('.')
+  return dot >= 0 ? (LANG_BY_EXT[name.slice(dot).toLowerCase()] ?? 'plaintext') : 'plaintext'
+}
+
+function nameFromPath(path: string): string {
+  const trimmed = path.replace(/[\\/]+$/, '')
+  return trimmed.split(/[\\/]/).filter(Boolean).at(-1) ?? trimmed
+}
+
+function sshWorkspaceId(connId: string): string {
+  return `${SSH_WORKSPACE_PREFIX}${connId}`
+}
+
+function isSshWorkspaceId(id: string | undefined | null): boolean {
+  return !!id?.startsWith(SSH_WORKSPACE_PREFIX)
+}
+
+function sshWorkspace(conn: SshConnection, root = '~'): Workspace {
+  return {
+    id: sshWorkspaceId(conn.id),
+    name: conn.name || `${conn.username}@${conn.host}`,
+    path: root,
+    lastOpenedAt: Date.now()
+  }
+}
+
+function remoteJoin(parent: string, child: string): string {
+  if (!child) return parent
+  if (child.startsWith('/')) return child
+  const base = parent.replace(/\/+$/, '')
+  return base ? `${base}/${child}` : child
+}
+
+function remoteResolve(root: string, path: string): string {
+  const p = (path || '.').trim()
+  if (!p || p === '.') return root || '.'
+  if (p === '~') return root || '.'
+  if (p.startsWith('~/')) return remoteJoin(root || '.', p.slice(2))
+  if (p.startsWith('/')) return p
+  return remoteJoin(root || '.', p)
+}
+
+function safeEntryName(name: string): string | null {
+  const trimmed = name.trim()
+  if (
+    !trimmed ||
+    trimmed === '.' ||
+    trimmed === '..' ||
+    trimmed.includes('/') ||
+    trimmed.includes('\\') ||
+    trimmed.includes('\0')
+  ) {
+    return null
+  }
+  return trimmed
+}
+
+function localRelativePath(root: string, path: string): string {
+  const normRoot = root.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase()
+  const normPath = path.replace(/\\/g, '/')
+  if (normPath.toLowerCase().startsWith(`${normRoot}/`)) return normPath.slice(normRoot.length + 1)
+  return path
+}
 
 const TOOL_NAMES = [
   'list_dir',
@@ -155,12 +269,17 @@ const TOOLS: ToolDef[] = [
 ]
 
 /** Build the system prompt for the local (LM Studio) agent loop. */
-function buildSystemPrompt(sshHost?: string): string {
+function buildSystemPrompt(sshHost?: string, sshRoot?: string): string {
   const onWin = api.system.platform === 'win32'
-  const shellNote = onWin
-    ? 'Commands run in Windows PowerShell. Chain steps with `;` (PowerShell also accepts ' +
-      '`&&`/`||`, which are translated for you) and use PowerShell/Windows-friendly commands.'
-    : 'Commands run in a POSIX shell (sh).'
+  // Over SSH the command runs in the remote shell (a POSIX shell on the typical
+  // Linux host), not the local one — steer the model to Unix commands.
+  const shellNote = sshHost
+    ? 'Commands run in the REMOTE host\'s POSIX shell (bash/sh) over SSH — use Unix commands ' +
+      '(ls, find, grep, cat, …), not Windows/PowerShell ones.'
+    : onWin
+      ? 'Commands run in Windows PowerShell. Chain steps with `;` (PowerShell also accepts ' +
+        '`&&`/`||`, which are translated for you) and use PowerShell/Windows-friendly commands.'
+      : 'Commands run in a POSIX shell (sh).'
   return [
     'You are a capable AI coding agent operating inside ASCORA ADE, a desktop IDE, with',
     "direct access to the user's open project folder. Keep your own identity: if asked who",
@@ -182,9 +301,11 @@ function buildSystemPrompt(sshHost?: string): string {
     shellNote,
     ...(sshHost
       ? [
-          `An SSH session to ${sshHost} is connected — run_command runs on that REMOTE host, ` +
-            'not the local project. The file tools (read_file/write_file/edit_file/search_files/' +
-            'list_dir) still operate on the local project folder.'
+          `An SSH session to ${sshHost} is connected and is your working context: EVERY tool ` +
+            'operates on that REMOTE host. run_command runs in its shell, and the file tools ' +
+            '(list_dir/read_file/search_files/write_file/edit_file) act on its filesystem, with ' +
+            `relative paths resolved against the active remote root (${sshRoot || '$HOME'}). There is no separate local ` +
+            'project here — work directly on the remote host and do not assume any local files.'
         ]
       : []),
     'When the task is done, reply with a short plain-text summary and NO tool call.',
@@ -241,6 +362,229 @@ function applyEdit(
     return { ok: false, error: 'old_string is not unique.' }
   }
   return { ok: true, content: content.slice(0, idx) + newStr + content.slice(idx + oldStr.length) }
+}
+
+// ---- SSH-backed agent tools ----
+// When an SSH session is the active target, the file tools must operate on the
+// REMOTE host, not the local workspace. These mirror the api.agent.* result
+// shapes but run as commands in the connected shell (so paths resolve against
+// the remote shell's current directory, exactly like the visible terminal).
+
+/** Single-quote a value for safe interpolation into a POSIX shell command. */
+function shq(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`
+}
+
+/** UTF-8 → base64, so file contents survive the shell without quoting pain. */
+function utf8ToBase64(text: string): string {
+  const bytes = new TextEncoder().encode(text)
+  let binary = ''
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000))
+  }
+  return btoa(binary)
+}
+
+/** True when a remote command failed (transport error or non-zero exit). */
+function sshFailed(r: { ok: boolean; code?: number | null }): boolean {
+  return !r.ok || (typeof r.code === 'number' && r.code !== 0)
+}
+
+const sshLines = (out: string | undefined): string[] =>
+  (out ?? '').split('\n').map((l) => l.replace(/\r$/, '')).filter(Boolean)
+
+async function sshListDir(id: string, path: string, root = '.'): Promise<AgentListResult> {
+  const p = remoteResolve(root, path)
+  // -1 one per line, -A include dotfiles (but not . / ..), -p mark dirs with "/".
+  const r = await api.ssh.exec(id, `ls -1Ap -- ${shq(p)}`)
+  if (sshFailed(r)) return { ok: false, error: (r.stderr || r.stdout || r.error || 'ls failed').trim() }
+  const entries: AgentDirEntry[] = sshLines(r.stdout).map((name) =>
+    name.endsWith('/')
+      ? { name: name.slice(0, -1), type: 'directory' as const }
+      : { name, type: 'file' as const }
+  )
+  return { ok: true, path: p, entries }
+}
+
+async function sshReadFile(
+  id: string,
+  path: string,
+  range?: AgentReadRange,
+  root = '.'
+): Promise<AgentReadResult> {
+  if (!path) return { ok: false, error: 'path is required.' }
+  const p = remoteResolve(root, path)
+  const wc = await api.ssh.exec(id, `wc -l < ${shq(p)}`)
+  if (sshFailed(wc)) return { ok: false, error: (wc.stdout || wc.error || `cannot read ${p}`).trim() }
+  const totalLines = (parseInt((wc.stdout ?? '0').trim(), 10) || 0) + 1
+  const { startLine, endLine } = range ?? {}
+  const cmd =
+    startLine || endLine
+      ? `sed -n ${shq(`${startLine ?? 1},${endLine ?? '$'}p`)} -- ${shq(p)}`
+      : `cat -- ${shq(p)}`
+  const r = await api.ssh.exec(id, cmd)
+  if (sshFailed(r)) return { ok: false, error: (r.stdout || r.error || `cannot read ${p}`).trim() }
+  const content = r.stdout ?? ''
+  return startLine || endLine
+    ? { ok: true, path: p, content, startLine: startLine ?? 1, endLine: endLine ?? totalLines, totalLines }
+    : { ok: true, path: p, content, totalLines }
+}
+
+async function sshSearch(id: string, query: string, path?: string, root = '.'): Promise<AgentSearchResult> {
+  if (!query) return { ok: false, error: 'query is required.' }
+  const where = shq(remoteResolve(root, path && path.trim() ? path : '.'))
+  const cap = 200
+  // -r recursive, -n line numbers, -I skip binary, -F literal, -i case-insensitive.
+  const r = await api.ssh.exec(
+    id,
+    `grep -rnI -F -i -e ${shq(query)} -- ${where} 2>/dev/null | head -n ${cap + 1}`
+  )
+  if (!r.ok) return { ok: false, error: r.error }
+  const lines = sshLines(r.stdout)
+  const truncated = lines.length > cap
+  const matches: AgentSearchMatch[] = lines.slice(0, cap).map((line) => {
+    const m = line.match(/^(.*?):(\d+):(.*)$/)
+    return m
+      ? { path: m[1], line: parseInt(m[2], 10), text: m[3].trim().slice(0, 400) }
+      : { path: line, line: 0, text: '' }
+  })
+  return { ok: true, query, matches, truncated }
+}
+
+async function sshWriteFile(id: string, path: string, content: string, root = '.'): Promise<AgentWriteResult> {
+  if (!path) return { ok: false, error: 'path is required.' }
+  const p = remoteResolve(root, path)
+  const existed = await api.ssh.exec(id, `test -e ${shq(p)} && echo Y || echo N`)
+  const created = sshLines(existed.stdout).at(-1) !== 'Y'
+  // Recreate the parent dir, then decode the base64 payload into the file.
+  const r = await api.ssh.exec(
+    id,
+    `mkdir -p -- "$(dirname -- ${shq(p)})" && printf %s ${shq(utf8ToBase64(content))} | base64 -d > ${shq(p)}`
+  )
+  if (sshFailed(r)) return { ok: false, error: (r.stdout || r.error || `cannot write ${p}`).trim() }
+  return { ok: true, path: p, created, bytes: new TextEncoder().encode(content).length }
+}
+
+async function sshEditFile(
+  id: string,
+  path: string,
+  oldString: string,
+  newString: string,
+  replaceAll: boolean,
+  root = '.'
+): Promise<AgentEditResult> {
+  if (!path) return { ok: false, error: 'path is required.' }
+  const cur = await sshReadFile(id, path, undefined, root)
+  if (!cur.ok) return { ok: false, error: cur.error }
+  const applied = applyEdit(cur.content ?? '', oldString, newString, replaceAll)
+  if (!applied.ok) return { ok: false, error: applied.error }
+  const replacements = replaceAll ? (cur.content ?? '').split(oldString).length - 1 : 1
+  const w = await sshWriteFile(id, cur.path ?? path, applied.content)
+  if (!w.ok) return { ok: false, error: w.error }
+  return { ok: true, path: w.path ?? cur.path ?? path, replacements }
+}
+
+async function sshReadTree(id: string, path: string, root = '.'): Promise<TreeNode[]> {
+  const listed = await sshListDir(id, path, root)
+  if (!listed.ok) return []
+  const base = listed.path ?? remoteResolve(root, path)
+  return (listed.entries ?? [])
+    .filter((entry) => !(entry.type === 'directory' && EXCLUDED_DIRS.has(entry.name)))
+    .map((entry) => ({
+      name: entry.name,
+      path: remoteJoin(base, entry.name),
+      type: entry.type,
+      ...(entry.type === 'directory' ? { children: undefined } : {})
+    }))
+    .sort((a, b) => {
+      if (a.type !== b.type) return a.type === 'directory' ? -1 : 1
+      return a.name.localeCompare(b.name)
+    })
+}
+
+async function sshReadFileContent(id: string, path: string, root = '.'): Promise<FileContent> {
+  const p = remoteResolve(root, path)
+  const size = await api.ssh.exec(id, `wc -c < ${shq(p)}`)
+  if (sshFailed(size)) {
+    throw new Error((size.stderr || size.stdout || size.error || `Cannot read ${p}`).trim())
+  }
+  const bytes = parseInt((size.stdout ?? '0').trim(), 10) || 0
+  if (bytes > MAX_EDITOR_FILE_BYTES) {
+    return {
+      path: p,
+      content: `// ${nameFromPath(p)} is ${(bytes / 1024 / 1024).toFixed(1)} MB - too large to display.`,
+      language: 'plaintext',
+      truncated: true
+    }
+  }
+  const probe = await api.ssh.exec(
+    id,
+    `[ -s ${shq(p)} ] && ! LC_ALL=C grep -Iq . -- ${shq(p)} && printf BINARY || printf TEXT`
+  )
+  if (sshFailed(probe)) {
+    throw new Error((probe.stderr || probe.stdout || probe.error || `Cannot read ${p}`).trim())
+  }
+  if ((probe.stdout ?? '').trim() === 'BINARY') {
+    return {
+      path: p,
+      content: `// ${nameFromPath(p)} appears to be a binary file.`,
+      language: 'plaintext',
+      truncated: true
+    }
+  }
+  const read = await api.ssh.exec(id, `cat -- ${shq(p)}`)
+  if (sshFailed(read)) {
+    throw new Error((read.stderr || read.stdout || read.error || `Cannot read ${p}`).trim())
+  }
+  return {
+    path: p,
+    content: read.stdout ?? '',
+    language: languageForPath(p),
+    truncated: false
+  }
+}
+
+function remoteChildPath(parentPath: string, name: string): string {
+  return remoteJoin(parentPath, name)
+}
+
+function fileResult(ok: boolean, path?: string, error?: string): FileActionResult {
+  return ok ? { ok: true, path } : { ok: false, error }
+}
+
+async function sshCreateFile(id: string, parentPath: string, name: string): Promise<FileActionResult> {
+  const safeName = safeEntryName(name)
+  if (!safeName) return { ok: false, error: 'Invalid file name.' }
+  const path = remoteChildPath(parentPath, safeName)
+  const r = await api.ssh.exec(id, `set -C; : > ${shq(path)}`)
+  return fileResult(!sshFailed(r), path, (r.stderr || r.stdout || r.error || 'Failed to create file.').trim())
+}
+
+async function sshCreateDirectory(id: string, parentPath: string, name: string): Promise<FileActionResult> {
+  const safeName = safeEntryName(name)
+  if (!safeName) return { ok: false, error: 'Invalid folder name.' }
+  const path = remoteChildPath(parentPath, safeName)
+  const r = await api.ssh.exec(id, `mkdir -- ${shq(path)}`)
+  return fileResult(!sshFailed(r), path, (r.stderr || r.stdout || r.error || 'Failed to create folder.').trim())
+}
+
+async function sshRenamePath(id: string, path: string, newName: string): Promise<FileActionResult> {
+  const safeName = safeEntryName(newName)
+  if (!safeName) return { ok: false, error: 'Invalid name.' }
+  const parent = path.replace(/\/+$/, '').split('/').slice(0, -1).join('/') || '/'
+  const nextPath = remoteChildPath(parent, safeName)
+  const r = await api.ssh.exec(id, `mv -- ${shq(path)} ${shq(nextPath)}`)
+  return fileResult(!sshFailed(r), nextPath, (r.stderr || r.stdout || r.error || 'Failed to rename.').trim())
+}
+
+async function sshDeleteFile(id: string, path: string): Promise<FileActionResult> {
+  const r = await api.ssh.exec(id, `rm -f -- ${shq(path)}`)
+  return fileResult(!sshFailed(r), undefined, (r.stderr || r.stdout || r.error || 'Failed to delete file.').trim())
+}
+
+async function sshDeleteDirectory(id: string, path: string): Promise<FileActionResult> {
+  const r = await api.ssh.exec(id, `rm -rf -- ${shq(path)}`)
+  return fileResult(!sshFailed(r), undefined, (r.stderr || r.stdout || r.error || 'Failed to delete folder.').trim())
 }
 
 function safeArgs(json: string): Record<string, unknown> {
@@ -610,6 +954,11 @@ interface AppState {
   toggleDir: (node: TreeNode) => Promise<void>
   refreshDirectory: (path: string) => Promise<void>
   openFile: (node: TreeNode) => Promise<void>
+  createFile: (parentPath: string, name: string) => Promise<FileActionResult>
+  createDirectory: (parentPath: string, name: string) => Promise<FileActionResult>
+  renamePath: (path: string, newName: string, type: 'file' | 'directory') => Promise<FileActionResult>
+  deleteFilePath: (path: string) => Promise<FileActionResult>
+  deleteDirectoryPath: (path: string) => Promise<FileActionResult>
   renameOpenFile: (oldPath: string, newPath: string, newName: string) => void
   renameOpenPathPrefix: (oldPath: string, newPath: string) => void
   closeFilesUnder: (path: string) => void
@@ -618,6 +967,8 @@ interface AppState {
   closeFilesToRight: (path: string) => void
   closeAllFiles: () => void
   setActiveFile: (path: string) => void
+  updateOpenFileContent: (path: string, content: string) => void
+  saveActiveFile: () => Promise<void>
 
   /** Start (or reuse) the Live Server and show the active HTML file docked. */
   goLive: () => Promise<void>
@@ -643,6 +994,8 @@ interface AppState {
   deleteSshConnection: (id: string) => void
   /** Native file picker for a private-key file; returns the chosen path. */
   pickSshKey: () => Promise<string | null>
+  /** Load the selected SSH host's remote filesystem into the IDE context. */
+  loadSshData: (id: string) => Promise<void>
   /** Open (or focus) an SSH terminal for a saved connection. */
   openSshTerminal: (id: string) => void
   /** Close an SSH terminal panel and disconnect its session. */
@@ -844,6 +1197,7 @@ export const useApp = create<AppState>((set, get) => ({
   async loadWorkspaceData(ws) {
     set({
       active: ws,
+      activeSsh: null,
       treeLoading: true,
       treeRoots: [],
       childrenByPath: {},
@@ -874,10 +1228,52 @@ export const useApp = create<AppState>((set, get) => ({
       codexThreadId: null,
       claudeSessionId: null,
       glmSessionId: null,
+      // Selecting a workspace makes it the active context, not an SSH host.
+      activeSsh: null,
       tasksByWorkspace: { ...state.tasksByWorkspace, [ws.id]: tasks }
     }))
     // Switch to this project's saved model/provider.
     await get().syncWorkspaceLlm(ws.id)
+  },
+
+  async loadSshData(id) {
+    const conn = get().sshConnections.find((c) => c.id === id)
+    if (!conn) return
+    const placeholder = sshWorkspace(conn)
+    set({
+      active: placeholder,
+      activeSsh: id,
+      treeLoading: true,
+      treeRoots: [],
+      childrenByPath: {},
+      expanded: {},
+      openFiles: [],
+      activeFile: null,
+      messages: [],
+      convo: [],
+      activeTaskId: null,
+      activeTaskTitle: '',
+      codexThreadId: null,
+      claudeSessionId: null,
+      glmSessionId: null,
+      view: 'workspace'
+    })
+    const pwd = await api.ssh.exec(id, 'pwd')
+    const root = !sshFailed(pwd) && pwd.stdout?.trim()
+      ? (pwd.stdout.trim().split(/\r?\n/).at(-1) ?? '~')
+      : '~'
+    const ws = sshWorkspace(conn, root)
+    const [tasks, roots] = await Promise.all([
+      api.workspace.tasks(ws.id).catch(() => [] as TaskSummary[]),
+      sshReadTree(id, root, root)
+    ])
+    set((state) => ({
+      active: ws,
+      activeSsh: id,
+      treeRoots: roots,
+      treeLoading: false,
+      tasksByWorkspace: { ...state.tasksByWorkspace, [ws.id]: tasks }
+    }))
   },
 
   toggleWorkspaceCollapsed(id) {
@@ -929,6 +1325,8 @@ export const useApp = create<AppState>((set, get) => ({
       codexThreadId: null,
       claudeSessionId: null,
       glmSessionId: null,
+      // Opening a task returns the active context to its workspace, not an SSH host.
+      activeSsh: null,
       view: 'workspace'
     })
     // Opening a task in a different project switches to that project's model.
@@ -999,23 +1397,27 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   async toggleDir(node) {
-    const { expanded, childrenByPath } = get()
+    const { active, activeSsh, expanded, childrenByPath } = get()
     const isOpen = !!expanded[node.path]
     if (isOpen) {
       set({ expanded: { ...expanded, [node.path]: false } })
       return
     }
     if (!childrenByPath[node.path]) {
-      const children = await api.fs.readTree(node.path)
+      const children = activeSsh
+        ? await sshReadTree(activeSsh, node.path, active?.path ?? '.')
+        : await api.fs.readTree(node.path)
       set((s) => ({ childrenByPath: { ...s.childrenByPath, [node.path]: children } }))
     }
     set((s) => ({ expanded: { ...s.expanded, [node.path]: true } }))
   },
 
   async refreshDirectory(path) {
-    const active = get().active
+    const { active, activeSsh } = get()
     if (!active) return
-    const children = await api.fs.readTree(path)
+    const children = activeSsh
+      ? await sshReadTree(activeSsh, path, active.path)
+      : await api.fs.readTree(path)
     const normalize = (value: string): string => value.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase()
     if (normalize(path) === normalize(active.path)) {
       set({ treeRoots: children })
@@ -1030,15 +1432,53 @@ export const useApp = create<AppState>((set, get) => ({
       set({ activeFile: node.path, view: 'workspace' })
       return
     }
-    const file = await api.fs.readFile(node.path)
+    const { active, activeSsh } = get()
+    const file = activeSsh
+      ? await sshReadFileContent(activeSsh, node.path, active?.path ?? '.')
+      : await api.fs.readFile(node.path)
     set((s) => ({
       openFiles: [
         ...s.openFiles,
-        { path: file.path, name: node.name, content: file.content, language: file.language }
+        {
+          path: file.path,
+          name: node.name,
+          content: file.content,
+          language: file.language,
+          truncated: file.truncated
+        }
       ],
       activeFile: file.path,
       view: 'workspace'
     }))
+  },
+
+  createFile(parentPath, name) {
+    const id = get().activeSsh
+    return id ? sshCreateFile(id, parentPath, name) : api.fs.createFile(parentPath, name)
+  },
+
+  createDirectory(parentPath, name) {
+    const id = get().activeSsh
+    return id ? sshCreateDirectory(id, parentPath, name) : api.fs.createDirectory(parentPath, name)
+  },
+
+  renamePath(path, newName, type) {
+    const id = get().activeSsh
+    return id
+      ? sshRenamePath(id, path, newName)
+      : type === 'directory'
+        ? api.fs.renameDirectory(path, newName)
+        : api.fs.renameFile(path, newName)
+  },
+
+  deleteFilePath(path) {
+    const id = get().activeSsh
+    return id ? sshDeleteFile(id, path) : api.fs.deleteFile(path)
+  },
+
+  deleteDirectoryPath(path) {
+    const id = get().activeSsh
+    return id ? sshDeleteDirectory(id, path) : api.fs.deleteDirectory(path)
   },
 
   renameOpenFile(oldPath, newPath, newName) {
@@ -1113,9 +1553,44 @@ export const useApp = create<AppState>((set, get) => ({
     set({ activeFile: path })
   },
 
+  updateOpenFileContent(path, content) {
+    set((state) => ({
+      openFiles: state.openFiles.map((file) =>
+        file.path === path && file.content !== content
+          ? { ...file, content, dirty: true }
+          : file
+      )
+    }))
+  },
+
+  async saveActiveFile() {
+    const { active, activeSsh, openFiles, activeFile } = get()
+    if (!active || !activeFile) return
+    const file = openFiles.find((f) => f.path === activeFile)
+    if (!file || file.truncated || file.saving || !file.dirty) return
+    set((state) => ({
+      openFiles: state.openFiles.map((f) => (f.path === file.path ? { ...f, saving: true } : f))
+    }))
+    const result = activeSsh
+      ? await sshWriteFile(activeSsh, file.path, file.content, active.path)
+      : await api.agent.writeFile(active.path, localRelativePath(active.path, file.path), file.content)
+    if (!result.ok) {
+      set((state) => ({
+        openFiles: state.openFiles.map((f) => (f.path === file.path ? { ...f, saving: false } : f))
+      }))
+      window.alert(result.error ?? 'Failed to save file.')
+      return
+    }
+    set((state) => ({
+      openFiles: state.openFiles.map((f) =>
+        f.path === file.path ? { ...f, dirty: false, saving: false } : f
+      )
+    }))
+  },
+
   async goLive() {
-    const { active, openFiles, activeFile, liveUrl, liveRoot } = get()
-    if (!active) return
+    const { active, activeSsh, openFiles, activeFile, liveUrl, liveRoot } = get()
+    if (!active || activeSsh) return
     const file = openFiles.find((f) => f.path === activeFile)
     if (!file || !/\.html?$/i.test(file.name)) return
 
@@ -1208,14 +1683,19 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   openSshTerminal(id) {
+    if (get().streaming) {
+      if (get().activeSsh === id) set({ view: 'workspace' })
+      return
+    }
+    const alreadyActive = get().activeSsh === id && isSshWorkspaceId(get().active?.id)
     set((state) => ({
       openSshTerminals: state.openSshTerminals.includes(id)
         ? state.openSshTerminals
         : [...state.openSshTerminals, id],
-      // The agent's run_command targets the most recently opened host.
       activeSsh: id,
       view: 'workspace'
     }))
+    if (!alreadyActive || get().treeRoots.length === 0) void get().loadSshData(id)
   },
 
   closeSshTerminal(id) {
@@ -1224,8 +1704,29 @@ export const useApp = create<AppState>((set, get) => ({
       const openSshTerminals = state.openSshTerminals.filter((t) => t !== id)
       const activeSsh =
         state.activeSsh === id ? (openSshTerminals.at(-1) ?? null) : state.activeSsh
-      return { openSshTerminals, activeSsh }
+      const leavingSshContext = state.activeSsh === id && !activeSsh && isSshWorkspaceId(state.active?.id)
+      return {
+        openSshTerminals,
+        activeSsh,
+        ...(leavingSshContext
+          ? {
+              active: null,
+              treeRoots: [],
+              childrenByPath: {},
+              expanded: {},
+              openFiles: [],
+              activeFile: null,
+              messages: [],
+              convo: [],
+              activeTaskId: null,
+              activeTaskTitle: '',
+              view: 'home' as const
+            }
+          : {})
+      }
     })
+    const next = get().activeSsh
+    if (next) void get().loadSshData(next)
   },
 
   async refreshModels() {
@@ -1498,6 +1999,26 @@ export const useApp = create<AppState>((set, get) => ({
     try {
       // ===== Codex / Claude / GLM CLI backends: delegate the turn to the agent CLI =====
       const agentProvider = get().provider
+      // The CLI backends run on THIS machine in the workspace folder — they can't
+      // target a remote host. If an SSH session is the active context, refuse
+      // loudly instead of silently working on the local project.
+      if (
+        get().activeSsh &&
+        (agentProvider === 'codex' || agentProvider === 'claude' || agentProvider === 'glm')
+      ) {
+        finalStatus = 'error'
+        addMsg({
+          id: crypto.randomUUID(),
+          role: 'assistant',
+          kind: 'text',
+          model: assistantModel,
+          text:
+            '⚠ This SSH session can only be driven by the local (LM Studio) agent. The ' +
+            "Codex / Claude / GLM CLIs run on your machine and can't target the remote host. " +
+            'Switch the model to LM Studio to work over SSH, or pick a workspace to work locally.'
+        })
+        return
+      }
       if (agentProvider === 'codex' || agentProvider === 'claude' || agentProvider === 'glm') {
         const isClaude = agentProvider === 'claude'
         const isGlm = agentProvider === 'glm'
@@ -1674,7 +2195,7 @@ export const useApp = create<AppState>((set, get) => ({
         set({ streamId: replyId, thinking: true })
         const sshConn = get().sshConnections.find((c) => c.id === get().activeSsh)
         const sshHost = sshConn ? `${sshConn.username}@${sshConn.host}` : undefined
-        const base = buildSystemPrompt(sshHost)
+        const base = buildSystemPrompt(sshHost, sshHost ? root : undefined)
         const systemPrompt = skillsBlock ? `${base}\n\n${skillsBlock}` : base
         const messages: LlmMessage[] = [{ role: 'system', content: systemPrompt }, ...get().convo]
         const result = await api.llm.chat(
@@ -1777,12 +2298,16 @@ export const useApp = create<AppState>((set, get) => ({
           const cardId = crypto.randomUUID()
           const mutating =
             call.name === 'write_file' || call.name === 'edit_file' || call.name === 'run_command'
+          // When an SSH session is the target, the tools run on the remote host.
+          const sshId = get().activeSsh
 
           // For file changes, read the current file first so the card can show a diff.
           let oldContent = ''
           let newContent = ''
           if ((call.name === 'write_file' || call.name === 'edit_file') && asStr(call.args.path)) {
-            const cur = await api.agent.readFile(root, asStr(call.args.path))
+            const cur = sshId
+              ? await sshReadFile(sshId, asStr(call.args.path), undefined, root)
+              : await api.agent.readFile(root, asStr(call.args.path))
             oldContent = cur.ok && !cur.truncated ? (cur.content ?? '') : ''
           }
           if (call.name === 'write_file') {
@@ -1832,7 +2357,9 @@ export const useApp = create<AppState>((set, get) => ({
 
           // 4) Run the tool and record the outcome on the card + transcript.
           if (call.name === 'list_dir') {
-            const r = await api.agent.listDir(root, asStr(call.args.path) || '.')
+            const r = sshId
+              ? await sshListDir(sshId, asStr(call.args.path) || '.', root)
+              : await api.agent.listDir(root, asStr(call.args.path) || '.')
             patch(cardId, {
               status: r.ok ? 'done' : 'error',
               output: r.ok ? `${r.entries?.length ?? 0} entries` : undefined,
@@ -1850,7 +2377,9 @@ export const useApp = create<AppState>((set, get) => ({
             const startLine = asLine(call.args.start_line)
             const endLine = asLine(call.args.end_line)
             const range = startLine || endLine ? { startLine, endLine } : undefined
-            const r = await api.agent.readFile(root, asStr(call.args.path), range)
+            const r = sshId
+              ? await sshReadFile(sshId, asStr(call.args.path), range, root)
+              : await api.agent.readFile(root, asStr(call.args.path), range)
             const ranged = r.ok && r.startLine != null && r.endLine != null
             patch(cardId, {
               status: r.ok ? 'done' : 'error',
@@ -1874,11 +2403,13 @@ export const useApp = create<AppState>((set, get) => ({
                 : `Error: ${r.error}`
             )
           } else if (call.name === 'search_files') {
-            const r = await api.agent.search(
-              root,
-              asStr(call.args.query),
-              asStr(call.args.path) || undefined
-            )
+            const r = sshId
+              ? await sshSearch(sshId, asStr(call.args.query), asStr(call.args.path) || undefined, root)
+              : await api.agent.search(
+                  root,
+                  asStr(call.args.query),
+                  asStr(call.args.path) || undefined
+                )
             const hits = r.matches ?? []
             patch(cardId, {
               status: r.ok ? 'done' : 'error',
@@ -1901,13 +2432,22 @@ export const useApp = create<AppState>((set, get) => ({
             )
           } else if (call.name === 'edit_file') {
             const path = asStr(call.args.path)
-            const r = await api.agent.editFile(
-              root,
-              path,
-              asStr(call.args.old_string),
-              asStr(call.args.new_string),
-              call.args.replace_all === true
-            )
+            const r = sshId
+              ? await sshEditFile(
+                  sshId,
+                  path,
+                  asStr(call.args.old_string),
+                  asStr(call.args.new_string),
+                  call.args.replace_all === true,
+                  root
+                )
+              : await api.agent.editFile(
+                  root,
+                  path,
+                  asStr(call.args.old_string),
+                  asStr(call.args.new_string),
+                  call.args.replace_all === true
+                )
             patch(cardId, {
               status: r.ok ? 'done' : 'error',
               ...(r.ok
@@ -1932,7 +2472,9 @@ export const useApp = create<AppState>((set, get) => ({
             )
           } else if (call.name === 'write_file') {
             const path = asStr(call.args.path)
-            const r = await api.agent.writeFile(root, path, asStr(call.args.content))
+            const r = sshId
+              ? await sshWriteFile(sshId, path, asStr(call.args.content), root)
+              : await api.agent.writeFile(root, path, asStr(call.args.content))
             patch(cardId, {
               status: r.ok ? 'done' : 'error',
               created: r.created,
@@ -1956,10 +2498,10 @@ export const useApp = create<AppState>((set, get) => ({
             )
           } else {
             const command = asStr(call.args.command)
-            // When an SSH session is open, run_command targets the remote host.
-            const sshId = get().activeSsh
+            // When an SSH session is open, type the command into the visible
+            // remote console; otherwise run locally (Workspaces — unchanged).
             const r = sshId
-              ? await api.ssh.exec(sshId, command)
+              ? await api.ssh.run(sshId, command)
               : await api.agent.runCommand(root, command)
             const timedOut = 'timedOut' in r ? r.timedOut === true : false
             patch(cardId, {

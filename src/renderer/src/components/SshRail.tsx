@@ -44,7 +44,7 @@ export function SshRail(): JSX.Element {
             >
               <Icon name="terminal" size={14} />
               <span className="name">{conn.name}</span>
-              {activeSsh === conn.id && <span className="ssh-active-dot" title="Agent target" />}
+              {activeSsh === conn.id && <span className="ssh-active-dot" title="Active context" />}
               <button
                 className="task-delete"
                 title="Edit"

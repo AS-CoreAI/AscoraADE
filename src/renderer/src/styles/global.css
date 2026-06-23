@@ -799,6 +799,7 @@ button {
   --separator-border: var(--border);
 }
 .panel {
+  position: relative;
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -902,6 +903,7 @@ button {
   border-bottom: 1px solid var(--border);
   overflow-x: auto;
   flex-shrink: 0;
+  padding-right: 38px;
 }
 .tab {
   display: flex;
@@ -921,6 +923,13 @@ button {
   background: var(--bg);
   color: var(--text);
 }
+.dirty-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
+}
 .tab .close {
   display: grid;
   place-items: center;
@@ -931,6 +940,33 @@ button {
 .tab .close:hover {
   background: var(--bg-active);
   color: var(--text);
+}
+.editor-actions {
+  position: absolute;
+  top: 0;
+  right: 0;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  padding: 0 7px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-rail);
+}
+.editor-actions button {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+}
+.editor-actions button:hover:not(:disabled) {
+  color: var(--text);
+  background: var(--bg-hover);
+}
+.editor-actions button:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
 }
 .editor-host {
   flex: 1;

@@ -90,6 +90,8 @@ const api = {
     disconnect: (id: string): Promise<void> => ipcRenderer.invoke(IPC.ssh.disconnect, id),
     exec: (id: string, command: string): Promise<SshExecResult> =>
       ipcRenderer.invoke(IPC.ssh.exec, id, command),
+    run: (id: string, command: string): Promise<SshExecResult> =>
+      ipcRenderer.invoke(IPC.ssh.run, id, command),
     pickKey: (): Promise<string | null> => ipcRenderer.invoke(IPC.ssh.pickKey),
     /** Subscribe to remote shell output. Returns an unsubscribe function. */
     onData: (id: string, cb: (data: string) => void): (() => void) => {

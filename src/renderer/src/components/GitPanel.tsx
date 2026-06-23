@@ -251,9 +251,10 @@ function GitCommitFileRow({
 
 export function GitPanel(): JSX.Element {
   const active = useApp((s) => s.active)
+  const activeSsh = useApp((s) => s.activeSsh)
   const model = useApp((s) => s.model)
   const openFileInEditor = useApp((s) => s.openFile)
-  const activePath = active?.path
+  const activePath = activeSsh ? undefined : active?.path
 
   const [status, setStatus] = useState<GitStatusResult | null>(null)
   const [loading, setLoading] = useState(false)

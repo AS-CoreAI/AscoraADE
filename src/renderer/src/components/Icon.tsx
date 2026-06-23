@@ -28,6 +28,7 @@ type IconName =
   | 'settings'
   | 'check'
   | 'copy'
+  | 'save'
   | 'trash'
   | 'barChart'
   | 'globe'
@@ -163,6 +164,13 @@ const paths: Record<IconName, JSX.Element> = {
     <>
       <rect x="8" y="8" width="11" height="11" rx="2" />
       <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" />
+    </>
+  ),
+  save: (
+    <>
+      <path d="M5 3h12l2 2v16H5z" />
+      <path d="M8 3v6h8V3" />
+      <path d="M8 21v-7h8v7" />
     </>
   ),
   barChart: (

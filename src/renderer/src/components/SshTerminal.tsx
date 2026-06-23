@@ -28,6 +28,7 @@ export function SshTerminal({ connId }: { connId: string }): JSX.Element {
   const conn = useApp((s) => s.sshConnections.find((c) => c.id === connId))
   const resolvedTheme = useApp((s) => s.resolvedTheme)
   const closeSshTerminal = useApp((s) => s.closeSshTerminal)
+  const loadSshData = useApp((s) => s.loadSshData)
   const [status, setStatus] = useState<'connecting' | 'connected' | 'closed'>('connecting')
   // Bumping this reconnects (the effect tears down and re-runs).
   const [nonce, setNonce] = useState(0)
@@ -73,6 +74,13 @@ export function SshTerminal({ connId }: { connId: string }): JSX.Element {
         return
       }
       setStatus('connected')
+      const state = useApp.getState()
+      if (
+        state.activeSsh === connId &&
+        (state.active?.id !== `ssh:${connId}` || state.treeRoots.length === 0)
+      ) {
+        void loadSshData(connId)
+      }
     })()
 
     const resize = new ResizeObserver(() => {
@@ -95,7 +103,7 @@ export function SshTerminal({ connId }: { connId: string }): JSX.Element {
       term.dispose()
       termRef.current = null
     }
-  }, [connId, conn, nonce])
+  }, [connId, conn, nonce, loadSshData])
 
   useEffect(() => {
     if (termRef.current) termRef.current.options.theme = terminalTheme(resolvedTheme)

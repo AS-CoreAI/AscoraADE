@@ -35,6 +35,9 @@ export function LeftRail(): JSX.Element {
   const active = useApp((s) => s.active)
   const tasksByWorkspace = useApp((s) => s.tasksByWorkspace)
   const activeTaskId = useApp((s) => s.activeTaskId)
+  // While an SSH host is the active context, the workspace/task highlight steps
+  // aside so only one thing reads as "active" at a time.
+  const activeSsh = useApp((s) => s.activeSsh)
   const collapsedWorkspaces = useApp((s) => s.collapsedWorkspaces)
   const openFolder = useApp((s) => s.openFolder)
   const openWorkspace = useApp((s) => s.openWorkspace)
@@ -196,7 +199,7 @@ export function LeftRail(): JSX.Element {
           return (
             <div className="ws-group" key={ws.id}>
               <div
-                className={`ws-item${active?.id === ws.id ? ' active' : ''}${
+                className={`ws-item${active?.id === ws.id && !activeSsh ? ' active' : ''}${
                   dragId === ws.id ? ' dragging' : ''
                 }${dragOverId === ws.id && dragId !== ws.id ? ' drag-over' : ''}`}
                 draggable
@@ -240,7 +243,7 @@ export function LeftRail(): JSX.Element {
               {!collapsed &&
                 tasks.map((task) => (
                   <div
-                    className={`task-item${activeTaskId === task.id ? ' active' : ''}`}
+                    className={`task-item${activeTaskId === task.id && !activeSsh ? ' active' : ''}`}
                     key={task.id}
                     role="button"
                     tabIndex={0}

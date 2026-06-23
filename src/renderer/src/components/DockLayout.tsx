@@ -80,17 +80,22 @@ function focusOrOpen(api: DockviewApi, id: 'explorer' | 'git' | 'chat'): void {
 
 /** Open the editor (and a terminal beneath it) once files are open. */
 function ensureEditor(api: DockviewApi): void {
-  if (api.getPanel('editor')) return
-  const ref = firstExisting(api, ['chat', 'explorer', 'git'])
-  if (ref === 'chat') api.addPanel({ id: 'editor', component: 'editor', title: TITLES.editor, position: { referencePanel: 'chat', direction: 'left' } })
-  else if (ref) api.addPanel({ id: 'editor', component: 'editor', title: TITLES.editor, position: { referencePanel: ref, direction: 'right' } })
-  else api.addPanel({ id: 'editor', component: 'editor', title: TITLES.editor })
-  api.addPanel({ id: 'terminal', component: 'terminal', title: TITLES.terminal, initialHeight: 200, position: { referencePanel: 'editor', direction: 'below' } })
+  if (!api.getPanel('editor')) {
+    const ref = firstExisting(api, ['chat', 'explorer', 'git'])
+    if (ref === 'chat') api.addPanel({ id: 'editor', component: 'editor', title: TITLES.editor, position: { referencePanel: 'chat', direction: 'left' } })
+    else if (ref) api.addPanel({ id: 'editor', component: 'editor', title: TITLES.editor, position: { referencePanel: ref, direction: 'right' } })
+    else api.addPanel({ id: 'editor', component: 'editor', title: TITLES.editor })
+  }
+  if (!useApp.getState().activeSsh && !api.getPanel('terminal')) {
+    api.addPanel({ id: 'terminal', component: 'terminal', title: TITLES.terminal, initialHeight: 200, position: { referencePanel: 'editor', direction: 'below' } })
+  }
 }
 
 /** Add/remove SSH terminal panels so they match the store's open list. */
 function reconcileSsh(api: DockviewApi): void {
   const state = useApp.getState()
+  const localTerminal = api.getPanel('terminal')
+  if (state.activeSsh && localTerminal) api.removePanel(localTerminal)
   for (const connId of state.openSshTerminals) {
     const panelId = `${SSH_PREFIX}${connId}`
     const existing = api.getPanel(panelId)
@@ -137,6 +142,7 @@ export function DockLayout(): JSX.Element {
   const previewMode = useApp((s) => s.previewMode)
   const openFilesLen = useApp((s) => s.openFiles.length)
   const openSshTerminals = useApp((s) => s.openSshTerminals)
+  const activeSsh = useApp((s) => s.activeSsh)
   const setDockLayout = useApp((s) => s.setDockLayout)
 
   const onReady = (event: DockviewReadyEvent): void => {
@@ -165,8 +171,13 @@ export function DockLayout(): JSX.Element {
       api.onDidActivePanelChange(() => {
         const id = api.activePanel?.id
         setActiveId(id)
-        // Focusing an SSH terminal makes it the agent's run_command target.
-        if (id?.startsWith(SSH_PREFIX)) useApp.setState({ activeSsh: id.slice(SSH_PREFIX.length) })
+        // Focusing an SSH terminal makes the whole IDE target that remote host.
+        if (id?.startsWith(SSH_PREFIX)) {
+          const connId = id.slice(SSH_PREFIX.length)
+          const state = useApp.getState()
+          if (!state.streaming && state.active?.id !== `ssh:${connId}`) void state.loadSshData(connId)
+          else useApp.setState({ activeSsh: connId })
+        }
       }),
       api.onDidRemovePanel((panel) => {
         const s = useApp.getState()
@@ -191,7 +202,7 @@ export function DockLayout(): JSX.Element {
   // Open the editor when the user opens a file from the Explorer.
   useEffect(() => {
     if (apiRef.current && openFilesLen > 0) ensureEditor(apiRef.current)
-  }, [openFilesLen])
+  }, [openFilesLen, activeSsh])
 
   // Mirror the store's preview state into the dock.
   useEffect(() => {
@@ -201,7 +212,7 @@ export function DockLayout(): JSX.Element {
   // Mirror the store's open SSH terminals into the dock.
   useEffect(() => {
     if (apiRef.current) reconcileSsh(apiRef.current)
-  }, [openSshTerminals])
+  }, [openSshTerminals, activeSsh])
 
   const open = (id: 'explorer' | 'git' | 'chat'): void => {
     if (apiRef.current) focusOrOpen(apiRef.current, id)

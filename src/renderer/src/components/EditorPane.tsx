@@ -19,6 +19,8 @@ export function EditorPane(): JSX.Element {
   const closeOtherFiles = useApp((s) => s.closeOtherFiles)
   const closeFilesToRight = useApp((s) => s.closeFilesToRight)
   const closeAllFiles = useApp((s) => s.closeAllFiles)
+  const updateOpenFileContent = useApp((s) => s.updateOpenFileContent)
+  const saveActiveFile = useApp((s) => s.saveActiveFile)
   const [menu, setMenu] = useState<{ x: number; y: number; path: string } | null>(null)
 
   const current = openFiles.find((f) => f.path === activeFile)
@@ -41,6 +43,17 @@ export function EditorPane(): JSX.Element {
       window.removeEventListener('blur', close)
     }
   }, [menu])
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent): void => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
+        event.preventDefault()
+        void saveActiveFile()
+      }
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [saveActiveFile])
 
   const openMenu = (e: MouseEvent, path: string): void => {
     e.preventDefault()
@@ -74,6 +87,7 @@ export function EditorPane(): JSX.Element {
           >
             <FileIcon name={f.name} size={13} />
             {f.name}
+            {f.dirty && <span className="dirty-dot" title="Unsaved changes" />}
             <span
               className="close"
               onClick={(e) => {
@@ -125,6 +139,16 @@ export function EditorPane(): JSX.Element {
           document.body
         )}
 
+      <div className="editor-actions">
+        <button
+          title="Save"
+          disabled={!current || !current.dirty || current.saving || current.truncated}
+          onClick={() => void saveActiveFile()}
+        >
+          <Icon name={current?.saving ? 'refresh' : 'save'} size={14} />
+        </button>
+      </div>
+
       {current ? (
         <div className="editor-host">
           <Editor
@@ -132,8 +156,9 @@ export function EditorPane(): JSX.Element {
             path={current.path}
             language={current.language}
             value={current.content}
+            onChange={(value) => updateOpenFileContent(current.path, value ?? '')}
             options={{
-              readOnly: true,
+              readOnly: current.truncated,
               fontSize: 13,
               fontFamily: 'var(--font-mono)',
               minimap: { enabled: false },

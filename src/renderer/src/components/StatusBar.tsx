@@ -119,12 +119,12 @@ export function StatusBar(): JSX.Element {
         <button
           className="seg seg-btn ssh-on"
           onClick={() => openSshTerminal(sshConn.id)}
-          title={`Agent run_command runs on ${sshConn.username}@${sshConn.host}`}
+          title={`Active SSH context: ${sshConn.username}@${sshConn.host}`}
         >
           <Icon name="terminal" size={12} /> {sshConn.username}@{sshConn.host}
         </button>
       )}
-      {isHtml &&
+      {!activeSsh && isHtml &&
         (liveUrl ? (
           <>
             <button

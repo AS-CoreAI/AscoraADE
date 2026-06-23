@@ -174,10 +174,16 @@ function Row({
 
 export function Explorer(): JSX.Element {
   const active = useApp((s) => s.active)
+  const activeSsh = useApp((s) => s.activeSsh)
   const roots = useApp((s) => s.treeRoots)
   const loading = useApp((s) => s.treeLoading)
   const openFolder = useApp((s) => s.openFolder)
   const refreshDirectory = useApp((s) => s.refreshDirectory)
+  const createFile = useApp((s) => s.createFile)
+  const createDirectory = useApp((s) => s.createDirectory)
+  const renamePath = useApp((s) => s.renamePath)
+  const deleteFilePath = useApp((s) => s.deleteFilePath)
+  const deleteDirectoryPath = useApp((s) => s.deleteDirectoryPath)
   const renameOpenFile = useApp((s) => s.renameOpenFile)
   const renameOpenPathPrefix = useApp((s) => s.renameOpenPathPrefix)
   const openFile = useApp((s) => s.openFile)
@@ -231,7 +237,7 @@ export function Explorer(): JSX.Element {
   }
 
   const openInFileExplorer = (): void => {
-    if (!menu) return
+    if (!menu || activeSsh) return
     const path = menu.node.path
     setMenu(null)
     void api.fs.openPath(path)
@@ -271,19 +277,13 @@ export function Explorer(): JSX.Element {
     if (session.mode === 'rename') {
       const node = session.node
       if (!name || name === node.name) return
-      if (node.type === 'file') {
-        const result = await api.fs.renameFile(node.path, name)
-        if (!result.ok || !result.path) {
-          window.alert(result.error ?? 'Failed to rename file.')
-          return
-        }
-        renameOpenFile(node.path, result.path, name)
-      } else {
-        const result = await api.fs.renameDirectory(node.path, name)
-        if (!result.ok || !result.path) {
-          window.alert(result.error ?? 'Failed to rename folder.')
-          return
-        }
+      const result = await renamePath(node.path, name, node.type)
+      if (!result.ok || !result.path) {
+        window.alert(result.error ?? `Failed to rename ${node.type}.`)
+        return
+      }
+      if (node.type === 'file') renameOpenFile(node.path, result.path, name)
+      else {
         renameOpenPathPrefix(node.path, result.path)
       }
       await refreshDirectory(parentPath(node.path))
@@ -293,14 +293,14 @@ export function Explorer(): JSX.Element {
     // create
     if (!name) return
     if (session.type === 'directory') {
-      const result = await api.fs.createDirectory(session.parentPath, name)
+      const result = await createDirectory(session.parentPath, name)
       if (!result.ok) {
         window.alert(result.error ?? 'Failed to create folder.')
         return
       }
       await refreshDirectory(session.parentPath)
     } else {
-      const result = await api.fs.createFile(session.parentPath, name)
+      const result = await createFile(session.parentPath, name)
       if (!result.ok || !result.path) {
         window.alert(result.error ?? 'Failed to create file.')
         return
@@ -315,7 +315,7 @@ export function Explorer(): JSX.Element {
     const node = menu.node
     setMenu(null)
     if (!window.confirm(`Delete ${node.name}? This cannot be undone.`)) return
-    const result = await api.fs.deleteFile(node.path)
+    const result = await deleteFilePath(node.path)
     if (!result.ok) {
       window.alert(result.error ?? 'Failed to delete file.')
       return
@@ -332,7 +332,7 @@ export function Explorer(): JSX.Element {
       `Delete folder ${node.name} and all of its contents? This cannot be undone.`
     )
     if (!confirmed) return
-    const result = await api.fs.deleteDirectory(node.path)
+    const result = await deleteDirectoryPath(node.path)
     if (!result.ok) {
       window.alert(result.error ?? 'Failed to delete folder.')
       return
@@ -351,14 +351,22 @@ export function Explorer(): JSX.Element {
       <div className="panel-header">
         {active?.name ?? 'Explorer'}
         <span className="spacer" />
-        <button title="Open folder" onClick={openFolder}>
-          <Icon name="folder" size={14} />
-        </button>
+        {activeSsh ? (
+          <button title="Refresh remote files" onClick={() => active?.path && void refreshDirectory(active.path)}>
+            <Icon name="refresh" size={14} />
+          </button>
+        ) : (
+          <button title="Open folder" onClick={openFolder}>
+            <Icon name="folder" size={14} />
+          </button>
+        )}
       </div>
       <div className="panel-body" onContextMenu={openPanelContextMenu}>
         {loading && <div className="tree-empty">Loading…</div>}
         {!loading && roots.length === 0 && !edit && (
-          <div className="tree-empty">No files to show. Open a project folder to get started.</div>
+          <div className="tree-empty">
+            {activeSsh ? 'No remote files to show.' : 'No files to show. Open a project folder to get started.'}
+          </div>
         )}
         {!loading && rootDraft && (
           <InlineInput
@@ -391,14 +399,16 @@ export function Explorer(): JSX.Element {
             role="menu"
             onMouseDown={(event) => event.stopPropagation()}
           >
-            <button
-              type="button"
-              role="menuitem"
-              className="context-item"
-              onClick={openInFileExplorer}
-            >
-              Open in File Explorer
-            </button>
+            {!activeSsh && (
+              <button
+                type="button"
+                role="menuitem"
+                className="context-item"
+                onClick={openInFileExplorer}
+              >
+                Open in File Explorer
+              </button>
+            )}
             {menu.node.type === 'file' && (
               <>
                 <button type="button" role="menuitem" className="context-item" onClick={beginRename}>
