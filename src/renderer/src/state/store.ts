@@ -134,6 +134,19 @@ function remoteResolve(root: string, path: string): string {
   return remoteJoin(root || '.', p)
 }
 
+/**
+ * Parent of a remote (POSIX) path. `/` is its own parent, so this never climbs
+ * above the filesystem root; a non-absolute root like `~` has no parent we can
+ * compute client-side, so it's returned unchanged (the "up" action becomes a
+ * no-op there).
+ */
+function remoteParent(path: string): string {
+  const s = (path || '').replace(/\/+$/, '')
+  if (!s.startsWith('/')) return path
+  const i = s.lastIndexOf('/')
+  return i <= 0 ? '/' : s.slice(0, i)
+}
+
 function safeEntryName(name: string): string | null {
   const trimmed = name.trim()
   if (
@@ -881,6 +894,8 @@ interface AppState {
   openSshTerminals: string[]
   /** Connection id the agent's run_command targets while a session is open. */
   activeSsh: string | null
+  /** Per-session "Run as root" state: when true, remote file ops run via sudo. */
+  sshElevated: Record<string, boolean>
   /** Whether the add/edit SSH connection modal is open. */
   sshModalOpen: boolean
   /** Connection being edited (null → adding a new one). */
@@ -953,6 +968,10 @@ interface AppState {
   closeAnalytics: () => void
   toggleDir: (node: TreeNode) => Promise<void>
   refreshDirectory: (path: string) => Promise<void>
+  /** Rebase the remote tree root one directory up (SSH only). */
+  goUpDirectory: () => Promise<void>
+  /** Toggle "Run as root" for the active SSH session and re-list the tree. */
+  toggleSshElevation: () => Promise<void>
   openFile: (node: TreeNode) => Promise<void>
   createFile: (parentPath: string, name: string) => Promise<FileActionResult>
   createDirectory: (parentPath: string, name: string) => Promise<FileActionResult>
@@ -1069,6 +1088,7 @@ export const useApp = create<AppState>((set, get) => ({
   sshConnections: [],
   openSshTerminals: [],
   activeSsh: null,
+  sshElevated: {},
   sshModalOpen: false,
   sshEditing: null,
 
@@ -1272,6 +1292,8 @@ export const useApp = create<AppState>((set, get) => ({
       activeSsh: id,
       treeRoots: roots,
       treeLoading: false,
+      // A fresh connection starts unelevated (main resets the session too).
+      sshElevated: { ...state.sshElevated, [id]: false },
       tasksByWorkspace: { ...state.tasksByWorkspace, [ws.id]: tasks }
     }))
   },
@@ -1424,6 +1446,38 @@ export const useApp = create<AppState>((set, get) => ({
       return
     }
     set((state) => ({ childrenByPath: { ...state.childrenByPath, [path]: children } }))
+  },
+
+  async goUpDirectory() {
+    const { active, activeSsh } = get()
+    if (!active || !activeSsh) return
+    const parent = remoteParent(active.path)
+    if (parent === active.path) return // already at the filesystem root
+    set({ treeLoading: true })
+    const roots = await sshReadTree(activeSsh, parent, parent)
+    set((state) => ({
+      active: state.active ? { ...state.active, path: parent } : state.active,
+      treeRoots: roots,
+      treeLoading: false,
+      // The new root is a different directory; old expansion/children are stale.
+      expanded: {},
+      childrenByPath: {}
+    }))
+  },
+
+  async toggleSshElevation() {
+    const { activeSsh, active, sshElevated } = get()
+    if (!activeSsh || !active) return
+    const enabled = !sshElevated[activeSsh]
+    await api.ssh.setElevation(activeSsh, enabled)
+    // Listing as a different user can change visibility/permissions, so drop the
+    // cached expansion and re-list from the root.
+    set((state) => ({
+      sshElevated: { ...state.sshElevated, [activeSsh]: enabled },
+      expanded: {},
+      childrenByPath: {}
+    }))
+    await get().refreshDirectory(active.path)
   },
 
   async openFile(node) {

@@ -92,6 +92,9 @@ const api = {
       ipcRenderer.invoke(IPC.ssh.exec, id, command),
     run: (id: string, command: string): Promise<SshExecResult> =>
       ipcRenderer.invoke(IPC.ssh.run, id, command),
+    /** Toggle whether exec commands run via sudo (operate on the remote as root). */
+    setElevation: (id: string, enabled: boolean): Promise<void> =>
+      ipcRenderer.invoke(IPC.ssh.setElevation, id, enabled),
     pickKey: (): Promise<string | null> => ipcRenderer.invoke(IPC.ssh.pickKey),
     /** Subscribe to remote shell output. Returns an unsubscribe function. */
     onData: (id: string, cb: (data: string) => void): (() => void) => {

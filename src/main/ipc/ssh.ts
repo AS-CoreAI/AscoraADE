@@ -24,12 +24,21 @@ interface SshSession {
   stream?: ClientChannel
   sender: WebContents
   ready: boolean
+  /** When true, exec commands are wrapped in sudo so they run as root. */
+  elevated: boolean
+  /** Login password, reused to answer sudo's prompt over stdin when elevated. */
+  password?: string
 }
 
 const sessions = new Map<string, SshSession>()
 
 function send(sender: WebContents, channel: string, payload: unknown): void {
   if (!sender.isDestroyed()) sender.send(channel, payload)
+}
+
+/** Single-quote a value for safe interpolation into a POSIX shell command. */
+function shq(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`
 }
 
 function closeSession(
@@ -71,7 +80,13 @@ function connect(
   closeSession(id, null, undefined, undefined, false)
   return new Promise((resolve) => {
     const client = new Client()
-    const session: SshSession = { client, sender, ready: false }
+    const session: SshSession = {
+      client,
+      sender,
+      ready: false,
+      elevated: false,
+      password: config.password
+    }
     sessions.set(id, session)
 
     let settled = false
@@ -168,8 +183,13 @@ function execCommand(id: string, command: string): Promise<SshExecResult> {
   if (!session || !session.ready) {
     return Promise.resolve({ ok: false, error: 'SSH session is not connected.' })
   }
+  // When elevated, run as root via sudo: `-S` takes the password from stdin
+  // (fed below), `-p ''` silences the prompt, and `sh -c` gives the wrapped
+  // command its own shell so pipes/redirections still behave.
+  const elevated = session.elevated
+  const finalCommand = elevated ? `sudo -S -p '' -- sh -c ${shq(command)}` : command
   return new Promise((resolve) => {
-    session.client.exec(command, (err, stream) => {
+    session.client.exec(finalCommand, (err, stream) => {
       if (err) {
         resolve({ ok: false, error: err.message })
         return
@@ -185,6 +205,9 @@ function execCommand(id: string, command: string): Promise<SshExecResult> {
       stream.on('close', (code: number | null) => {
         resolve({ ok: true, stdout, stderr, code: typeof code === 'number' ? code : null })
       })
+      // Answer sudo's password prompt; harmless (consumed as stdin) when sudo is
+      // passwordless. Our exec commands never read their own stdin.
+      if (elevated) stream.write(`${session.password ?? ''}\n`)
     })
   })
 }
@@ -265,6 +288,10 @@ export function registerSshHandlers(): void {
     IPC.ssh.run,
     (_e, id: string, command: string): Promise<SshExecResult> => runInShell(id, command)
   )
+  ipcMain.handle(IPC.ssh.setElevation, (_e, id: string, enabled: boolean) => {
+    const session = sessions.get(id)
+    if (session) session.elevated = enabled
+  })
   ipcMain.handle(IPC.ssh.pickKey, async (e): Promise<string | null> => {
     const win = BrowserWindow.fromWebContents(e.sender) ?? undefined
     const result = await dialog.showOpenDialog(win!, {

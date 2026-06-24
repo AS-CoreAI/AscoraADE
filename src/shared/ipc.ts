@@ -42,6 +42,7 @@ export const IPC = {
     disconnect: 'ssh:disconnect',
     exec: 'ssh:exec',
     run: 'ssh:run',
+    setElevation: 'ssh:setElevation',
     pickKey: 'ssh:pickKey',
     data: 'ssh:data',
     exit: 'ssh:exit'

@@ -179,6 +179,9 @@ export function Explorer(): JSX.Element {
   const loading = useApp((s) => s.treeLoading)
   const openFolder = useApp((s) => s.openFolder)
   const refreshDirectory = useApp((s) => s.refreshDirectory)
+  const goUpDirectory = useApp((s) => s.goUpDirectory)
+  const toggleSshElevation = useApp((s) => s.toggleSshElevation)
+  const elevated = useApp((s) => (s.activeSsh ? !!s.sshElevated[s.activeSsh] : false))
   const createFile = useApp((s) => s.createFile)
   const createDirectory = useApp((s) => s.createDirectory)
   const renamePath = useApp((s) => s.renamePath)
@@ -352,9 +355,44 @@ export function Explorer(): JSX.Element {
         {active?.name ?? 'Explorer'}
         <span className="spacer" />
         {activeSsh ? (
-          <button title="Refresh remote files" onClick={() => active?.path && void refreshDirectory(active.path)}>
-            <Icon name="refresh" size={14} />
-          </button>
+          <>
+            <button
+              title={
+                elevated
+                  ? 'Running remote file operations as root (sudo). Click to disable.'
+                  : 'Run remote file operations as root (sudo). Requires passwordless sudo or your saved password.'
+              }
+              aria-pressed={elevated}
+              style={{
+                fontSize: 10,
+                fontWeight: 700,
+                letterSpacing: '0.05em',
+                color: elevated ? 'var(--accent)' : undefined,
+                background: elevated ? 'var(--accent-dim)' : undefined
+              }}
+              onClick={() => void toggleSshElevation()}
+            >
+              root
+            </button>
+            {(() => {
+              // Can climb only while the remote root is an absolute path below "/".
+              // Stripping trailing slashes turns "/" into "", so it's excluded.
+              const canGoUp = (active?.path ?? '').replace(/\/+$/, '').startsWith('/')
+              return (
+                <button
+                  title="Up one level"
+                  disabled={!canGoUp}
+                  style={{ opacity: canGoUp ? 1 : 0.4 }}
+                  onClick={() => void goUpDirectory()}
+                >
+                  <Icon name="arrowUp" size={14} />
+                </button>
+              )
+            })()}
+            <button title="Refresh remote files" onClick={() => active?.path && void refreshDirectory(active.path)}>
+              <Icon name="refresh" size={14} />
+            </button>
+          </>
         ) : (
           <button title="Open folder" onClick={openFolder}>
             <Icon name="folder" size={14} />
