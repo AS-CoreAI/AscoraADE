@@ -3,6 +3,7 @@ import type { TaskSummary, Workspace } from '@shared/ipc'
 import { Icon } from './Icon'
 import { SshRail } from './SshRail'
 import { useApp, type ThemePreference } from '@/state/store'
+import { api } from '@/lib/api'
 
 /** A workspace row plus the tasks to show under it (filtered while searching). */
 interface VisibleWorkspace {
@@ -59,6 +60,7 @@ export function LeftRail(): JSX.Element {
   const setThemePreference = useApp((s) => s.setThemePreference)
   const [themeMenuOpen, setThemeMenuOpen] = useState(false)
   const themeMenuRef = useRef<HTMLDivElement>(null)
+  const [aboutOpen, setAboutOpen] = useState(false)
 
   useEffect(() => {
     if (!themeMenuOpen) return
@@ -75,6 +77,21 @@ export function LeftRail(): JSX.Element {
       document.removeEventListener('keydown', closeOnEscape)
     }
   }, [themeMenuOpen])
+
+  useEffect(() => {
+    if (!aboutOpen) return
+    const closeOnEscape = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') setAboutOpen(false)
+    }
+    document.addEventListener('keydown', closeOnEscape)
+    return () => document.removeEventListener('keydown', closeOnEscape)
+  }, [aboutOpen])
+
+  /** Open an external link in the OS browser (renderer can't navigate away). */
+  const openLink = (url: string): void => {
+    setAboutOpen(false)
+    void api.live.openExternal(url)
+  }
 
   const openSearch = (): void => {
     setSearchOpen(true)
@@ -316,10 +333,50 @@ export function LeftRail(): JSX.Element {
           title="Appearance settings"
           aria-label="Appearance settings"
           aria-expanded={themeMenuOpen}
-          onClick={() => setThemeMenuOpen((open) => !open)}
+          onClick={() => {
+            setAboutOpen(false)
+            setThemeMenuOpen((open) => !open)
+          }}
         >
           <Icon name="settings" size={17} />
         </button>
+        <span style={{ flex: 1 }} />
+        <div
+          className="about-wrap"
+          onMouseEnter={() => setAboutOpen(true)}
+          onMouseLeave={() => setAboutOpen(false)}
+        >
+          {aboutOpen && (
+            <div className="about-menu" role="dialog" aria-label="About Ascora ADE">
+              <div className="about-title">Ascora ADE</div>
+              <p>
+                Created at AS CORE AI —{' '}
+                <a onClick={() => openLink('https://ascoreai.com')}>ascoreai.com</a>
+              </p>
+              <p>
+                Author &amp; developer: Artur Strazewicz —{' '}
+                <a onClick={() => openLink('https://strazewicz.com/')}>strazewicz.com</a>
+              </p>
+              <p>
+                Website:{' '}
+                <a onClick={() => openLink('https://ade.ascoreai.com')}>ade.ascoreai.com</a>
+              </p>
+              <div className="about-copyright">© 2026 AS CORE AI. All rights reserved.</div>
+            </div>
+          )}
+          <button
+            className={`rail-settings${aboutOpen ? ' active' : ''}`}
+            title="About Ascora ADE"
+            aria-label="About Ascora ADE"
+            aria-expanded={aboutOpen}
+            onClick={() => {
+              setThemeMenuOpen(false)
+              setAboutOpen((open) => !open)
+            }}
+          >
+            <Icon name="info" size={17} />
+          </button>
+        </div>
       </div>
     </div>
   )

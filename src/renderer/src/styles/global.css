@@ -558,6 +558,50 @@ button {
   background: var(--bg-hover);
 }
 
+/* ---------- About popup (rail footer) ---------- */
+.about-wrap {
+  position: relative;
+  display: flex;
+}
+.about-menu {
+  position: absolute;
+  right: 0;
+  bottom: 100%;
+  width: calc(var(--rail-w) - 16px);
+  padding: 12px 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  box-shadow: 0 10px 28px var(--modal-shadow);
+  z-index: 30;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.about-title {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+.about-menu p {
+  margin: 0 0 6px;
+}
+.about-menu a {
+  color: var(--accent);
+  cursor: pointer;
+}
+.about-menu a:hover {
+  text-decoration: underline;
+}
+.about-copyright {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  color: var(--text-faint);
+  font-size: 11px;
+}
+
 /* ---------- Context menu (e.g. editor tab right-click) ---------- */
 .context-menu {
   position: fixed;

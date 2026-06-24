@@ -33,6 +33,7 @@ type IconName =
   | 'barChart'
   | 'globe'
   | 'external'
+  | 'info'
   | 'x'
 
 const paths: Record<IconName, JSX.Element> = {
@@ -201,6 +202,13 @@ const paths: Record<IconName, JSX.Element> = {
       <path d="M14 4h6v6" />
       <line x1="20" y1="4" x2="11" y2="13" />
       <path d="M19 13v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h5" />
+    </>
+  ),
+  info: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <line x1="12" y1="8" x2="12" y2="12.5" />
+      <line x1="12" y1="16" x2="12" y2="16.01" />
     </>
   )
 }
