@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import type { TreeNode } from '@shared/ipc'
 import { Icon } from './Icon'
 import { FileIcon } from './FileIcon'
-import { useApp } from '@/state/store'
+import { useApp, isRunnableFile } from '@/state/store'
 import { api } from '@/lib/api'
 
 /** An in-tree edit: renaming an existing node, or typing a new child's name. */
@@ -177,6 +177,7 @@ export function Explorer(): JSX.Element {
   const activeSsh = useApp((s) => s.activeSsh)
   const roots = useApp((s) => s.treeRoots)
   const loading = useApp((s) => s.treeLoading)
+  const treeError = useApp((s) => s.treeError)
   const openFolder = useApp((s) => s.openFolder)
   const refreshDirectory = useApp((s) => s.refreshDirectory)
   const goUpDirectory = useApp((s) => s.goUpDirectory)
@@ -190,6 +191,7 @@ export function Explorer(): JSX.Element {
   const renameOpenFile = useApp((s) => s.renameOpenFile)
   const renameOpenPathPrefix = useApp((s) => s.renameOpenPathPrefix)
   const openFile = useApp((s) => s.openFile)
+  const runFile = useApp((s) => s.runFile)
   const closeFile = useApp((s) => s.closeFile)
   const closeFilesUnder = useApp((s) => s.closeFilesUnder)
   const toggleDir = useApp((s) => s.toggleDir)
@@ -223,12 +225,13 @@ export function Explorer(): JSX.Element {
   const openContextMenu = (event: MouseEvent, node: TreeNode, workspaceRoot = false): void => {
     event.preventDefault()
     event.stopPropagation()
+    // Approximate menu height for off-screen clamping: a runnable local file gets
+    // an extra "Run" row (~36px) on top of the usual three file items.
+    const fileHeight = !activeSsh && isRunnableFile(node.name) ? 144 : 108
+    const height = node.type === 'file' ? fileHeight : workspaceRoot ? 108 : 168
     setMenu({
       x: Math.min(event.clientX, window.innerWidth - 196),
-      y: Math.min(
-        event.clientY,
-        window.innerHeight - (node.type === 'file' ? 108 : workspaceRoot ? 108 : 168)
-      ),
+      y: Math.min(event.clientY, window.innerHeight - height),
       node,
       workspaceRoot
     })
@@ -244,6 +247,13 @@ export function Explorer(): JSX.Element {
     const path = menu.node.path
     setMenu(null)
     void api.fs.openPath(path)
+  }
+
+  const runMenuFile = (): void => {
+    if (!menu || menu.node.type !== 'file') return
+    const node = menu.node
+    setMenu(null)
+    runFile(node)
   }
 
   const parentPath = (path: string): string => {
@@ -401,6 +411,19 @@ export function Explorer(): JSX.Element {
       </div>
       <div className="panel-body" onContextMenu={openPanelContextMenu}>
         {loading && <div className="tree-empty">Loading…</div>}
+        {!loading && activeSsh && treeError && (
+          <div className="tree-error" title={treeError}>
+            {treeError}
+            {/elevation|permission|denied|not permitted|sudo/i.test(treeError) && !elevated && (
+              <>
+                {' '}
+                <button type="button" className="tree-error-action" onClick={() => void toggleSshElevation()}>
+                  Try as root
+                </button>
+              </>
+            )}
+          </div>
+        )}
         {!loading && roots.length === 0 && !edit && (
           <div className="tree-empty">
             {activeSsh ? 'No remote files to show.' : 'No files to show. Open a project folder to get started.'}
@@ -449,6 +472,11 @@ export function Explorer(): JSX.Element {
             )}
             {menu.node.type === 'file' && (
               <>
+                {!activeSsh && isRunnableFile(menu.node.name) && (
+                  <button type="button" role="menuitem" className="context-item" onClick={runMenuFile}>
+                    Run
+                  </button>
+                )}
                 <button type="button" role="menuitem" className="context-item" onClick={beginRename}>
                   Rename
                 </button>

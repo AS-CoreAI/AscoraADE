@@ -939,6 +939,34 @@ button {
   line-height: 1.6;
 }
 
+.tree-error {
+  margin: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--danger, #e5534b);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--danger, #e5534b) 12%, transparent);
+  color: var(--danger, #e5534b);
+  font-size: 12px;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.tree-error-action {
+  margin-top: 4px;
+  padding: 2px 8px;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.tree-error-action:hover {
+  background: color-mix(in srgb, currentColor 14%, transparent);
+}
+
 /* Editor tabs */
 .tabs {
   display: flex;

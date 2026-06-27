@@ -50,6 +50,10 @@ export function TerminalPanel(): JSX.Element {
   const termRef = useRef<Terminal | null>(null)
   const workspacePath = useApp((s) => s.active?.path)
   const resolvedTheme = useApp((s) => s.resolvedTheme)
+  const terminalRequest = useApp((s) => s.terminalRequest)
+  // Lets the Explorer's "Run" inject a command into this shell (set in the effect).
+  const runExternalRef = useRef<((command: string) => void) | null>(null)
+  const handledNonceRef = useRef(0)
   // Bumping this restarts the shell (the effect tears down and re-runs).
   const [nonce, setNonce] = useState(0)
 
@@ -76,6 +80,7 @@ export function TerminalPanel(): JSX.Element {
     let line = '' // current input being edited
     let running = true // true while a command runs / before the first prompt
     let exited = false
+    const pending: string[] = [] // commands queued (e.g. from "Run") until the prompt returns
 
     const history: string[] = [] // submitted commands, oldest first
     let historyIndex = 0 // cursor into history; === history.length means "new line"
@@ -85,6 +90,12 @@ export function TerminalPanel(): JSX.Element {
       running = false
       line = ''
       term.write(`${C.green}PS${C.reset} ${C.muted}${cwd}${C.reset}> `)
+      // Drain one queued command (from "Run"); the next drains when its prompt returns.
+      const queued = pending.shift()
+      if (queued !== undefined) {
+        replaceLine(queued)
+        submit()
+      }
     }
 
     // Erase the current input from the screen (prompt untouched) and draw `next`.
@@ -121,6 +132,19 @@ export function TerminalPanel(): JSX.Element {
       // prompt always returns (its OSC 7 output drives showPrompt).
       void api.terminal.input(id, cwdReportCommand(kind) + '\n')
     }
+
+    // Inject a command from outside (the Explorer's "Run"): run it now if the
+    // prompt is idle, otherwise queue it until the running command finishes.
+    const runExternal = (command: string): void => {
+      if (exited) return
+      if (running) {
+        pending.push(command)
+        return
+      }
+      replaceLine(command)
+      submit()
+    }
+    runExternalRef.current = runExternal
 
     // The shell reports cwd via OSC 7; consume it and refresh the prompt.
     term.parser.registerOscHandler(7, (data) => {
@@ -202,8 +226,20 @@ export function TerminalPanel(): JSX.Element {
       void api.terminal.kill(id)
       term.dispose()
       termRef.current = null
+      runExternalRef.current = null
     }
   }, [workspacePath, nonce])
+
+  // Run a file in this shell when the Explorer requests it (PyCharm-style "Run").
+  useEffect(() => {
+    if (!terminalRequest || terminalRequest.nonce === handledNonceRef.current) return
+    handledNonceRef.current = terminalRequest.nonce
+    runExternalRef.current?.(terminalRequest.command)
+    // Clear so re-mounting the panel (e.g. returning to the workspace view) doesn't replay it.
+    useApp.setState((s) =>
+      s.terminalRequest?.nonce === terminalRequest.nonce ? { terminalRequest: null } : {}
+    )
+  }, [terminalRequest])
 
   useEffect(() => {
     if (termRef.current) termRef.current.options.theme = terminalTheme(resolvedTheme)

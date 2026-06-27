@@ -91,6 +91,22 @@ function ensureEditor(api: DockviewApi): void {
   }
 }
 
+/** Open (or focus) the local terminal panel — used by the Explorer's "Run". */
+function ensureTerminal(api: DockviewApi): void {
+  if (useApp.getState().activeSsh) return // the local terminal is hidden over SSH
+  const existing = api.getPanel('terminal')
+  if (existing) {
+    existing.api.setActive()
+    return
+  }
+  const ref = firstExisting(api, ['editor', 'chat', 'explorer', 'git'])
+  if (ref) {
+    api.addPanel({ id: 'terminal', component: 'terminal', title: TITLES.terminal, initialHeight: 200, position: { referencePanel: ref, direction: 'below' } })
+  } else {
+    api.addPanel({ id: 'terminal', component: 'terminal', title: TITLES.terminal, initialHeight: 200 })
+  }
+}
+
 /** Add/remove SSH terminal panels so they match the store's open list. */
 function reconcileSsh(api: DockviewApi): void {
   const state = useApp.getState()
@@ -143,6 +159,7 @@ export function DockLayout(): JSX.Element {
   const openFilesLen = useApp((s) => s.openFiles.length)
   const openSshTerminals = useApp((s) => s.openSshTerminals)
   const activeSsh = useApp((s) => s.activeSsh)
+  const terminalRequest = useApp((s) => s.terminalRequest)
   const setDockLayout = useApp((s) => s.setDockLayout)
 
   const onReady = (event: DockviewReadyEvent): void => {
@@ -213,6 +230,11 @@ export function DockLayout(): JSX.Element {
   useEffect(() => {
     if (apiRef.current) reconcileSsh(apiRef.current)
   }, [openSshTerminals, activeSsh])
+
+  // Surface the terminal when the Explorer asks to run a file in it.
+  useEffect(() => {
+    if (apiRef.current && terminalRequest) ensureTerminal(apiRef.current)
+  }, [terminalRequest])
 
   const open = (id: 'explorer' | 'git' | 'chat'): void => {
     if (apiRef.current) focusOrOpen(apiRef.current, id)

@@ -101,6 +101,36 @@ function nameFromPath(path: string): string {
   return trimmed.split(/[\\/]/).filter(Boolean).at(-1) ?? trimmed
 }
 
+/**
+ * Files the Explorer can "Run" directly (PyCharm-style), mapped to the program
+ * that executes them. The command is sent to the built-in terminal so the run's
+ * output and errors stream there. The absolute path is double-quoted, which both
+ * PowerShell and POSIX shells accept.
+ */
+const FILE_RUNNERS: Record<string, string> = {
+  '.py': 'python',
+  '.js': 'node',
+  '.mjs': 'node',
+  '.cjs': 'node'
+}
+
+function fileExtension(name: string): string {
+  const base = name.split(/[\\/]/).at(-1) ?? name
+  const dot = base.lastIndexOf('.')
+  return dot >= 0 ? base.slice(dot).toLowerCase() : ''
+}
+
+/** Whether the Explorer should offer a "Run" action for this file name. */
+export function isRunnableFile(name: string): boolean {
+  return fileExtension(name) in FILE_RUNNERS
+}
+
+/** Shell command that runs `path` in the built-in terminal, or null. */
+function runCommandForFile(path: string): string | null {
+  const runner = FILE_RUNNERS[fileExtension(path)]
+  return runner ? `${runner} "${path}"` : null
+}
+
 function sshWorkspaceId(connId: string): string {
   return `${SSH_WORKSPACE_PREFIX}${connId}`
 }
@@ -497,11 +527,20 @@ async function sshEditFile(
   return { ok: true, path: w.path ?? cur.path ?? path, replacements }
 }
 
-async function sshReadTree(id: string, path: string, root = '.'): Promise<TreeNode[]> {
+/**
+ * List a remote directory into tree nodes. On failure the error is returned
+ * (not swallowed) so callers can surface *why* a folder showed nothing —
+ * e.g. "Permission denied" when opening a root-only dir without elevation.
+ */
+async function sshReadTree(
+  id: string,
+  path: string,
+  root = '.'
+): Promise<{ nodes: TreeNode[]; error?: string }> {
   const listed = await sshListDir(id, path, root)
-  if (!listed.ok) return []
+  if (!listed.ok) return { nodes: [], error: listed.error }
   const base = listed.path ?? remoteResolve(root, path)
-  return (listed.entries ?? [])
+  const nodes = (listed.entries ?? [])
     .filter((entry) => !(entry.type === 'directory' && EXCLUDED_DIRS.has(entry.name)))
     .map((entry) => ({
       name: entry.name,
@@ -513,6 +552,7 @@ async function sshReadTree(id: string, path: string, root = '.'): Promise<TreeNo
       if (a.type !== b.type) return a.type === 'directory' ? -1 : 1
       return a.name.localeCompare(b.name)
     })
+  return { nodes }
 }
 
 async function sshReadFileContent(id: string, path: string, root = '.'): Promise<FileContent> {
@@ -870,6 +910,8 @@ interface AppState {
   childrenByPath: Record<string, TreeNode[]>
   expanded: Record<string, boolean>
   treeLoading: boolean
+  /** Last remote directory-listing failure (e.g. permission denied), or null. */
+  treeError: string | null
 
   openFiles: OpenFile[]
   activeFile: string | null
@@ -886,6 +928,9 @@ interface AppState {
   previewMode: 'docked' | 'window'
   /** Serialized dockview layout; kept so the panel arrangement survives view switches. */
   dockLayout: unknown
+  /** Pending PyCharm-style "Run this file" request for the built-in terminal;
+   *  the Terminal panel consumes it and clears it. */
+  terminalRequest: { command: string; nonce: number } | null
 
   // SSH terminals
   /** Saved SSH hosts shown under Workspaces (persisted in app settings). */
@@ -988,6 +1033,8 @@ interface AppState {
   setActiveFile: (path: string) => void
   updateOpenFileContent: (path: string, content: string) => void
   saveActiveFile: () => Promise<void>
+  /** Run a runnable file (e.g. Python) in the built-in terminal, PyCharm-style. */
+  runFile: (node: TreeNode) => void
 
   /** Start (or reuse) the Live Server and show the active HTML file docked. */
   goLive: () => Promise<void>
@@ -1075,6 +1122,7 @@ export const useApp = create<AppState>((set, get) => ({
   childrenByPath: {},
   expanded: {},
   treeLoading: false,
+  treeError: null,
   openFiles: [],
   activeFile: null,
 
@@ -1084,6 +1132,7 @@ export const useApp = create<AppState>((set, get) => ({
   previewUrl: null,
   previewMode: 'docked',
   dockLayout: null,
+  terminalRequest: null,
 
   sshConnections: [],
   openSshTerminals: [],
@@ -1283,14 +1332,15 @@ export const useApp = create<AppState>((set, get) => ({
       ? (pwd.stdout.trim().split(/\r?\n/).at(-1) ?? '~')
       : '~'
     const ws = sshWorkspace(conn, root)
-    const [tasks, roots] = await Promise.all([
+    const [tasks, tree] = await Promise.all([
       api.workspace.tasks(ws.id).catch(() => [] as TaskSummary[]),
       sshReadTree(id, root, root)
     ])
     set((state) => ({
       active: ws,
       activeSsh: id,
-      treeRoots: roots,
+      treeRoots: tree.nodes,
+      treeError: tree.error ?? null,
       treeLoading: false,
       // A fresh connection starts unelevated (main resets the session too).
       sshElevated: { ...state.sshElevated, [id]: false },
@@ -1426,10 +1476,16 @@ export const useApp = create<AppState>((set, get) => ({
       return
     }
     if (!childrenByPath[node.path]) {
-      const children = activeSsh
-        ? await sshReadTree(activeSsh, node.path, active?.path ?? '.')
-        : await api.fs.readTree(node.path)
-      set((s) => ({ childrenByPath: { ...s.childrenByPath, [node.path]: children } }))
+      if (activeSsh) {
+        const tree = await sshReadTree(activeSsh, node.path, active?.path ?? '.')
+        set((s) => ({
+          childrenByPath: { ...s.childrenByPath, [node.path]: tree.nodes },
+          treeError: tree.error ?? null
+        }))
+      } else {
+        const children = await api.fs.readTree(node.path)
+        set((s) => ({ childrenByPath: { ...s.childrenByPath, [node.path]: children } }))
+      }
     }
     set((s) => ({ expanded: { ...s.expanded, [node.path]: true } }))
   },
@@ -1437,15 +1493,25 @@ export const useApp = create<AppState>((set, get) => ({
   async refreshDirectory(path) {
     const { active, activeSsh } = get()
     if (!active) return
-    const children = activeSsh
-      ? await sshReadTree(activeSsh, path, active.path)
-      : await api.fs.readTree(path)
-    const normalize = (value: string): string => value.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase()
-    if (normalize(path) === normalize(active.path)) {
-      set({ treeRoots: children })
+    if (!activeSsh) {
+      const children = await api.fs.readTree(path)
+      const normalize = (value: string): string =>
+        value.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase()
+      if (normalize(path) === normalize(active.path)) set({ treeRoots: children })
+      else set((state) => ({ childrenByPath: { ...state.childrenByPath, [path]: children } }))
       return
     }
-    set((state) => ({ childrenByPath: { ...state.childrenByPath, [path]: children } }))
+    const tree = await sshReadTree(activeSsh, path, active.path)
+    const normalize = (value: string): string =>
+      value.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase()
+    if (normalize(path) === normalize(active.path)) {
+      set({ treeRoots: tree.nodes, treeError: tree.error ?? null })
+      return
+    }
+    set((state) => ({
+      childrenByPath: { ...state.childrenByPath, [path]: tree.nodes },
+      treeError: tree.error ?? null
+    }))
   },
 
   async goUpDirectory() {
@@ -1454,10 +1520,11 @@ export const useApp = create<AppState>((set, get) => ({
     const parent = remoteParent(active.path)
     if (parent === active.path) return // already at the filesystem root
     set({ treeLoading: true })
-    const roots = await sshReadTree(activeSsh, parent, parent)
+    const tree = await sshReadTree(activeSsh, parent, parent)
     set((state) => ({
       active: state.active ? { ...state.active, path: parent } : state.active,
-      treeRoots: roots,
+      treeRoots: tree.nodes,
+      treeError: tree.error ?? null,
       treeLoading: false,
       // The new root is a different directory; old expansion/children are stale.
       expanded: {},
@@ -1702,6 +1769,15 @@ export const useApp = create<AppState>((set, get) => ({
 
   setDockLayout(layout) {
     set({ dockLayout: layout })
+  },
+
+  runFile(node) {
+    // The built-in terminal is local-only (it's hidden while an SSH host is the
+    // active context), so running a remote file there wouldn't make sense.
+    if (node.type !== 'file' || get().activeSsh) return
+    const command = runCommandForFile(node.path)
+    if (!command) return
+    set((s) => ({ terminalRequest: { command, nonce: (s.terminalRequest?.nonce ?? 0) + 1 } }))
   },
 
   openSshModal(conn) {

@@ -65,6 +65,25 @@ export function SshTerminal({ connId }: { connId: string }): JSX.Element {
     })
     const onInput = term.onData((data) => void api.ssh.input(id, data))
 
+    // Right-click: PuTTY-style. Copy the active selection if there is one,
+    // otherwise paste the clipboard straight into the remote channel.
+    const onContextMenu = (event: MouseEvent): void => {
+      event.preventDefault()
+      const selection = term.getSelection()
+      if (selection) {
+        void navigator.clipboard.writeText(selection).catch(() => {})
+        term.clearSelection()
+        return
+      }
+      void navigator.clipboard
+        .readText()
+        .then((text) => {
+          if (text) void api.ssh.input(id, text)
+        })
+        .catch(() => {})
+    }
+    host.addEventListener('contextmenu', onContextMenu)
+
     void (async () => {
       const res = await api.ssh.connect(id, conn, { cols: term.cols, rows: term.rows })
       if (disposed) return
@@ -75,6 +94,10 @@ export function SshTerminal({ connId }: { connId: string }): JSX.Element {
       }
       setStatus('connected')
       const state = useApp.getState()
+      // Main resets every new session to unelevated, so re-apply the UI's root
+      // toggle here — otherwise a reconnect silently drops root mode and remote
+      // listings (e.g. /root) come back empty while the button still looks "on".
+      void api.ssh.setElevation(id, !!state.sshElevated[connId])
       if (
         state.activeSsh === connId &&
         (state.active?.id !== `ssh:${connId}` || state.treeRoots.length === 0)
@@ -98,6 +121,7 @@ export function SshTerminal({ connId }: { connId: string }): JSX.Element {
       offData()
       offExit()
       onInput.dispose()
+      host.removeEventListener('contextmenu', onContextMenu)
       resize.disconnect()
       void api.ssh.disconnect(id)
       term.dispose()
