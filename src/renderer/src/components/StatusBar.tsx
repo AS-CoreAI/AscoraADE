@@ -1,7 +1,13 @@
-import type { JSX } from 'react'
+import { useEffect, type JSX } from 'react'
 import { useApp } from '@/state/store'
+import { api } from '@/lib/api'
 import { Icon } from './Icon'
 import { REASONING_LABEL, PERMISSION_SHORT, GLM_MODE_SHORT } from './Composer'
+
+/** Where the usage indicator sends the user ("view usage"). */
+const USAGE_PAGE = 'https://claude.ai/settings/usage'
+/** Re-poll Claude usage every few minutes while it's the active backend. */
+const USAGE_POLL_MS = 3 * 60 * 1000
 
 const CONN_LABEL: Record<string, string> = {
   unknown: 'LM Studio: —',
@@ -15,6 +21,18 @@ const CONN_COLOR: Record<string, string> = {
   connecting: 'var(--blue)',
   connected: 'var(--accent)',
   error: 'var(--danger)'
+}
+
+/** Compact "resets in 4h" label from an ISO reset timestamp. */
+function resetLabel(iso?: string): string {
+  if (!iso) return ''
+  const ms = new Date(iso).getTime() - Date.now()
+  if (!Number.isFinite(ms) || ms <= 0) return 'resets soon'
+  const mins = Math.round(ms / 60000)
+  if (mins < 60) return `resets in ${mins}m`
+  const hrs = Math.round(mins / 60)
+  if (hrs < 48) return `resets in ${hrs}h`
+  return `resets in ${Math.round(hrs / 24)}d`
 }
 
 export function StatusBar(): JSX.Element {
@@ -33,6 +51,8 @@ export function StatusBar(): JSX.Element {
   const claudeCheck = useApp((s) => s.claudeCheck)
   const claudeChecking = useApp((s) => s.claudeChecking)
   const claudePermission = useApp((s) => s.claudePermission)
+  const claudeUsage = useApp((s) => s.claudeUsage)
+  const refreshClaudeUsage = useApp((s) => s.refreshClaudeUsage)
   const glmCheck = useApp((s) => s.glmCheck)
   const glmChecking = useApp((s) => s.glmChecking)
   const glmMode = useApp((s) => s.glmMode)
@@ -53,6 +73,17 @@ export function StatusBar(): JSX.Element {
   const isCodex = provider === 'codex'
   const isClaude = provider === 'claude'
   const isGlm = provider === 'glm'
+
+  // Keep the Claude usage indicator fresh while Claude is the active backend.
+  useEffect(() => {
+    if (!isClaude) return
+    void refreshClaudeUsage()
+    const timer = setInterval(() => void refreshClaudeUsage(), USAGE_POLL_MS)
+    return () => clearInterval(timer)
+  }, [isClaude, refreshClaudeUsage])
+
+  // Headline usage window (most-consumed) for the status-bar indicator.
+  const usageWin = isClaude ? claudeUsage?.headline : undefined
 
   // Status dot color + label for the active backend.
   let dotColor: string
@@ -115,6 +146,17 @@ export function StatusBar(): JSX.Element {
       <span className="seg">{modelLabel}</span>
       <span className="seg">{accessLabel}</span>
       <span className="spacer" />
+      {usageWin && (
+        <button
+          className={`seg seg-btn usage-seg${usageWin.severity !== 'normal' ? ' usage-warn' : ''}`}
+          onClick={() => void api.live.openExternal(USAGE_PAGE)}
+          title={`You've used ${usageWin.percent}% of your ${usageWin.label}${
+            usageWin.resetsAt ? ` · ${resetLabel(usageWin.resetsAt)}` : ''
+          } — click to view usage`}
+        >
+          <Icon name="barChart" size={12} /> {usageWin.percent}% {usageWin.label}
+        </button>
+      )}
       {sshConn && (
         <button
           className="seg seg-btn ssh-on"

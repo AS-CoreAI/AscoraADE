@@ -25,6 +25,7 @@ import {
   type CodexEvent,
   type CodexEventPayload,
   type ClaudeRunParams,
+  type ClaudeUsageResult,
   type GlmRunParams,
   type GlmCaptchaConfigResult,
   type UsageEvent,
@@ -47,7 +48,8 @@ import {
   type AgentWriteResult,
   type AgentEditResult,
   type AgentSearchResult,
-  type AgentRunResult
+  type AgentRunResult,
+  type UpdateInfo
 } from '@shared/ipc'
 
 /**
@@ -196,7 +198,9 @@ const api = {
         .invoke(IPC.claude.run, id, params)
         .finally(() => ipcRenderer.removeListener(IPC.claude.event, listener))
     },
-    abort: (id: string): Promise<void> => ipcRenderer.invoke(IPC.claude.abort, id)
+    abort: (id: string): Promise<void> => ipcRenderer.invoke(IPC.claude.abort, id),
+    /** Read the user's Claude subscription usage limits (`/api/oauth/usage`). */
+    usage: (): Promise<ClaudeUsageResult> => ipcRenderer.invoke(IPC.claude.usage)
   },
   glm: {
     check: (): Promise<CodexCheckResult> => ipcRenderer.invoke(IPC.glm.check),
@@ -288,6 +292,13 @@ const api = {
       ipcRenderer.invoke(IPC.agent.search, root, query, path),
     runCommand: (root: string, command: string): Promise<AgentRunResult> =>
       ipcRenderer.invoke(IPC.agent.runCommand, root, command)
+  },
+  update: {
+    /** Probe the website for a newer build. */
+    check: (): Promise<UpdateInfo> => ipcRenderer.invoke(IPC.update.check),
+    /** Open the download page (or a specific URL) in the system browser. */
+    openDownload: (url?: string): Promise<void> =>
+      ipcRenderer.invoke(IPC.update.openDownload, url)
   },
   system: {
     platform: process.platform

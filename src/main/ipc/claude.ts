@@ -5,10 +5,12 @@ import {
   type CodexCheckResult,
   type CodexRunResult,
   type ClaudePermissionMode,
-  type ClaudeRunParams
+  type ClaudeRunParams,
+  type ClaudeUsageResult
 } from '@shared/ipc'
 import { getStore } from '../store'
 import { checkClaude, killRun, runClaude } from '../claude/runner'
+import { fetchClaudeUsage } from '../claude/usage'
 
 function readClaudeConfig(): {
   claudePath: string
@@ -34,4 +36,6 @@ export function registerClaudeHandlers(): void {
   )
 
   ipcMain.handle(IPC.claude.abort, (_e, id: string) => killRun(id))
+
+  ipcMain.handle(IPC.claude.usage, (): Promise<ClaudeUsageResult> => fetchClaudeUsage())
 }

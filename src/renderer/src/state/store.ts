@@ -17,6 +17,7 @@ import type {
   CodexEvent,
   CodexItem,
   CodexCheckResult,
+  ClaudeUsageResult,
   AgentListResult,
   AgentReadResult,
   AgentReadRange,
@@ -971,6 +972,8 @@ interface AppState {
   claudeSessionId: string | null
   claudeCheck: CodexCheckResult | null
   claudeChecking: boolean
+  /** Latest Claude subscription usage limits (for the status-bar indicator). */
+  claudeUsage: ClaudeUsageResult | null
   // GLM / ZCode
   glmPath: string
   glmMode: GlmMode
@@ -1080,6 +1083,7 @@ interface AppState {
   setClaudeModel: (m: string) => void
   setClaudePermission: (p: ClaudePermissionMode) => void
   checkClaude: () => Promise<void>
+  refreshClaudeUsage: () => Promise<void>
   setGlmPath: (path: string) => Promise<void>
   setGlmMode: (m: GlmMode) => void
   checkGlm: () => Promise<void>
@@ -1160,6 +1164,7 @@ export const useApp = create<AppState>((set, get) => ({
   claudeSessionId: null,
   claudeCheck: null,
   claudeChecking: false,
+  claudeUsage: null,
   glmPath: DEFAULT_LLM_CONFIG.glmPath,
   glmMode: DEFAULT_LLM_CONFIG.glmMode,
   glmSessionId: null,
@@ -1954,10 +1959,23 @@ export const useApp = create<AppState>((set, get) => ({
     try {
       const res = await api.claude.check()
       set({ claudeCheck: res, claudeChecking: false })
+      // Pull subscription usage once we know Claude Code is installed/signed in.
+      if (res.installed) void get().refreshClaudeUsage()
     } catch (err) {
       set({
         claudeCheck: { ok: false, installed: false, error: err instanceof Error ? err.message : String(err) },
         claudeChecking: false
+      })
+    }
+  },
+
+  async refreshClaudeUsage() {
+    try {
+      const res = await api.claude.usage()
+      set({ claudeUsage: res })
+    } catch (err) {
+      set({
+        claudeUsage: { ok: false, loggedIn: false, windows: [], error: err instanceof Error ? err.message : String(err) }
       })
     }
   },
@@ -2278,6 +2296,8 @@ export const useApp = create<AppState>((set, get) => ({
 
         set({ streamId: null, thinking: false })
         if (res.threadId) setSession(res.threadId)
+        // A Claude turn just consumed quota — refresh the usage indicator.
+        if (isClaude) void get().refreshClaudeUsage()
 
         // Record usage for the dashboard (real token counts when reported).
         {

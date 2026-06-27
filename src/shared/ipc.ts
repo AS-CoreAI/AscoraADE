@@ -78,7 +78,8 @@ export const IPC = {
     check: 'claude:check',
     run: 'claude:run',
     abort: 'claude:abort',
-    event: 'claude:event'
+    event: 'claude:event',
+    usage: 'claude:usage'
   },
   glm: {
     check: 'glm:check',
@@ -121,6 +122,10 @@ export const IPC = {
     editFile: 'agent:editFile',
     search: 'agent:search',
     runCommand: 'agent:runCommand'
+  },
+  update: {
+    check: 'update:check',
+    openDownload: 'update:openDownload'
   }
 } as const
 
@@ -459,6 +464,34 @@ export interface ClaudeRunParams {
   model?: string
   /** Overrides the configured permission mode (`--permission-mode`). */
   permission?: ClaudePermissionMode
+}
+
+/**
+ * One rate-limit window from Claude's subscription usage feed
+ * (`/api/oauth/usage`), normalized for display. Mirrors what Claude Code's own
+ * IDE extension surfaces ("You've used 85% of your weekly limit").
+ */
+export interface ClaudeUsageWindow {
+  /** Display label, e.g. "session limit" / "weekly limit" / "weekly Opus limit". */
+  label: string
+  /** Percent of the window consumed, 0–100 (rounded). */
+  percent: number
+  /** Server-assessed severity; 'warning'/'critical' once the window is nearly spent. */
+  severity: 'normal' | 'warning' | 'critical' | string
+  /** ISO timestamp when the window resets, when reported. */
+  resetsAt?: string
+}
+
+/** Result of probing Claude's subscription usage limits (`/api/oauth/usage`). */
+export interface ClaudeUsageResult {
+  ok: boolean
+  /** False when no Claude Code OAuth credentials were found on disk. */
+  loggedIn: boolean
+  /** All reported limit windows, most-consumed first. */
+  windows: ClaudeUsageWindow[]
+  /** The window worth headlining (the most-consumed one), if any. */
+  headline?: ClaudeUsageWindow
+  error?: string
 }
 
 // ---------- GLM / ZCode (`zcode --prompt … --json`) ----------
@@ -800,6 +833,29 @@ export interface AgentRunResult {
   code?: number | null
   /** True when the command was killed by the timeout. */
   timedOut?: boolean
+  error?: string
+}
+
+// ---------- App updates (checked against ade.ascoreai.com) ----------
+
+/**
+ * Result of probing the website's release feed for a newer build. The renderer
+ * uses this to show/hide the title-bar "Update" badge; clicking it opens the
+ * download page via `update.openDownload`.
+ */
+export interface UpdateInfo {
+  ok: boolean
+  /** This build's version (from app.getVersion()). */
+  current: string
+  /** Latest published version, when the feed was reachable. */
+  latest?: string
+  /** True when `latest` is strictly newer than `current`. */
+  updateAvailable: boolean
+  /** Changelog/release notes for the latest version (markdown), if any. */
+  notes?: string
+  /** Page to open when the user clicks the badge (the site's download section). */
+  url?: string
+  /** Populated when the feed could not be reached or parsed. */
   error?: string
 }
 

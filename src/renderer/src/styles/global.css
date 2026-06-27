@@ -201,11 +201,17 @@ button {
   align-items: center;
   gap: 5px;
   padding: 3px 9px;
+  border: none;
   border-radius: 999px;
   background: var(--accent-dim);
   color: var(--accent);
   font-size: 11px;
   font-weight: 600;
+  cursor: pointer;
+  transition: filter 120ms ease;
+}
+.update-badge:hover {
+  filter: brightness(1.12);
 }
 .update-badge .dot {
   width: 6px;
@@ -1845,6 +1851,14 @@ button.changes-badge:hover {
 }
 .statusbar .seg-btn.live-on {
   color: var(--accent);
+}
+/* Claude subscription usage indicator (mirrors the Claude Code extension). */
+.statusbar .seg-btn.usage-warn {
+  color: var(--danger);
+}
+.statusbar .seg-btn.usage-warn:hover {
+  color: var(--danger);
+  filter: brightness(1.15);
 }
 
 /* ---------- Dockview (VS Code-style dockable panels) ---------- */

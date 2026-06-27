@@ -12,6 +12,7 @@ import { registerTerminalHandlers } from './terminal'
 import { registerAgentHandlers } from './agent'
 import { registerLiveHandlers } from './live'
 import { registerSshHandlers } from './ssh'
+import { registerUpdateHandlers } from './update'
 
 /** Register every IPC handler. Called once after the app is ready. */
 export function registerIpc(): void {
@@ -29,4 +30,5 @@ export function registerIpc(): void {
   registerAgentHandlers()
   registerLiveHandlers()
   registerSshHandlers()
+  registerUpdateHandlers()
 }
