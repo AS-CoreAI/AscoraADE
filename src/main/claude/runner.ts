@@ -195,12 +195,51 @@ function resultText(content: unknown): string {
   return ''
 }
 
+const countLines = (s: string): number => (s.length ? s.split('\n').length : 0)
+
+/**
+ * Added/removed line counts between two text blobs, using the same prefix/suffix
+ * trimming as the renderer's `diffStat` so the popover numbers match its edit cards.
+ */
+function diffLineStat(oldText: string, newText: string): { added: number; removed: number } {
+  if (oldText === newText) return { added: 0, removed: 0 }
+  const o = oldText.length ? oldText.split('\n') : []
+  const n = newText.length ? newText.split('\n') : []
+  let p = 0
+  while (p < o.length && p < n.length && o[p] === n[p]) p += 1
+  let s = 0
+  while (s < o.length - p && s < n.length - p && o[o.length - 1 - s] === n[n.length - 1 - s]) s += 1
+  return { removed: o.length - p - s, added: n.length - p - s }
+}
+
+/**
+ * Line counts for a Claude file-edit tool, derived from its input. The CLI doesn't
+ * report +/- counts in stream-json (Codex does), so without this the change popover
+ * renders "+? -?" for everything Claude touches.
+ */
+function editLineStat(name: string, input: Record<string, unknown>): { added: number; removed: number } {
+  if (name === 'Write') return { added: countLines(str(input.content)), removed: 0 }
+  if (name === 'NotebookEdit') return { added: countLines(str(input.new_source)), removed: 0 }
+  if (name === 'MultiEdit' && Array.isArray(input.edits)) {
+    let added = 0
+    let removed = 0
+    for (const e of input.edits as Record<string, unknown>[]) {
+      const d = diffLineStat(str(e.old_string), str(e.new_string))
+      added += d.added
+      removed += d.removed
+    }
+    return { added, removed }
+  }
+  return diffLineStat(str(input.old_string), str(input.new_string)) // Edit / Update
+}
+
 /** Map a Claude tool_use to our normalized item fields (matching Codex's vocab). */
 function mapTool(name: string, input: Record<string, unknown>): Partial<CodexItem> & { type: string } {
   if (name === 'Bash') return { type: 'command_execution', command: str(input.command) }
   if (['Edit', 'Write', 'MultiEdit', 'NotebookEdit', 'Update'].includes(name)) {
     const path = str(input.file_path) || str(input.path) || str(input.notebook_path)
-    return { type: 'file_change', changes: [{ path, kind: name === 'Write' ? 'add' : 'update' }] }
+    const { added, removed } = editLineStat(name, input)
+    return { type: 'file_change', changes: [{ path, kind: name === 'Write' ? 'add' : 'update', added, removed }] }
   }
   if (name === 'Read') return { type: 'read_file', text: str(input.file_path) || str(input.path) }
   if (['Grep', 'Glob', 'LS'].includes(name))
