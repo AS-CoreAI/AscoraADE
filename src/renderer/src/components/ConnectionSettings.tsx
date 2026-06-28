@@ -8,6 +8,7 @@ import {
   CLAUDE_MODEL_PRESETS,
   CLAUDE_PERMISSION_MODES,
   GLM_MODES,
+  normalizeOpenRouterApiKey,
   type CodexReasoning,
   type CodexSandbox,
   type ClaudePermissionMode,
@@ -439,8 +440,10 @@ function OpenRouterSetup(): JSX.Element {
   const ready = openRouterEnabled && openRouterApiKey.trim().length > 0
 
   const save = async (): Promise<void> => {
+    const normalized = normalizeOpenRouterApiKey(apiKey)
     setSaving(true)
-    await setOpenRouterApiKey(apiKey)
+    await setOpenRouterApiKey(normalized)
+    setApiKey(normalized)
     setSaving(false)
   }
 

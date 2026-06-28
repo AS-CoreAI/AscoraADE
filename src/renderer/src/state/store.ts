@@ -27,7 +27,7 @@ import type {
   AgentDirEntry,
   AgentSearchMatch
 } from '@shared/ipc'
-import { DEFAULT_LLM_CONFIG, EXCLUDED_DIRS } from '@shared/ipc'
+import { DEFAULT_LLM_CONFIG, EXCLUDED_DIRS, normalizeOpenRouterApiKey } from '@shared/ipc'
 import { api } from '@/lib/api'
 import { diffStat } from '@/lib/diff'
 import { solveZCodeCaptcha } from '@/lib/zcode-captcha'
@@ -1936,7 +1936,7 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   async setOpenRouterApiKey(apiKey) {
-    const openRouterApiKey = apiKey.trim()
+    const openRouterApiKey = normalizeOpenRouterApiKey(apiKey)
     set({ openRouterApiKey })
     await api.llm.setConfig({ openRouterApiKey })
     if ((!openRouterApiKey || !get().openRouterEnabled) && get().provider === 'openrouter') {

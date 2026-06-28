@@ -249,6 +249,19 @@ export interface LlmModel {
   id: string
 }
 
+function stripWrappingQuotes(value: string): string {
+  return value.replace(/^['"]|['"]$/g, '').trim()
+}
+
+export function normalizeOpenRouterApiKey(value: string): string {
+  let key = stripWrappingQuotes(value.trim())
+  const header = key.match(/authorization\s*:\s*(?:bearer\s+)?([^\s"'`]+)/i)
+  if (header) return stripWrappingQuotes(header[1])
+  const bearer = key.match(/^bearer\s+(.+)$/i)
+  if (bearer) key = bearer[1].trim()
+  return stripWrappingQuotes(key).split(/\s+/)[0] ?? ''
+}
+
 /** Sandbox policy passed to `codex exec -s`. */
 export type CodexSandbox = 'read-only' | 'workspace-write' | 'danger-full-access'
 

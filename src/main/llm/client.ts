@@ -1,4 +1,11 @@
-import type { ChatParams, LlmConfig, LlmModel, ToolCall, TokenUsage } from '@shared/ipc'
+import {
+  normalizeOpenRouterApiKey,
+  type ChatParams,
+  type LlmConfig,
+  type LlmModel,
+  type ToolCall,
+  type TokenUsage
+} from '@shared/ipc'
 
 /** What `streamChat` resolves to once the stream ends (its generator return). */
 export interface StreamReturn {
@@ -16,19 +23,6 @@ interface ToolCallDelta {
 }
 
 const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1'
-
-function stripWrappingQuotes(value: string): string {
-  return value.replace(/^['"]|['"]$/g, '').trim()
-}
-
-export function normalizeOpenRouterApiKey(value: string): string {
-  let key = stripWrappingQuotes(value.trim())
-  const header = key.match(/^authorization\s*:\s*(.+)$/i)
-  if (header) key = header[1].trim()
-  const bearer = key.match(/^bearer\s+(.+)$/i)
-  if (bearer) key = bearer[1].trim()
-  return stripWrappingQuotes(key)
-}
 
 /**
  * Minimal client for an LM Studio (OpenAI-compatible) server.
@@ -118,7 +112,7 @@ export class LmStudioClient {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' }
     if (this.config.provider === 'openrouter') {
       const apiKey = normalizeOpenRouterApiKey(this.config.openRouterApiKey)
-      if (apiKey) headers.authorization = `Bearer ${apiKey}`
+      if (apiKey) headers.Authorization = `Bearer ${apiKey}`
       headers['HTTP-Referer'] = 'https://ade.ascoreai.com'
       headers['X-OpenRouter-Title'] = 'Ascora ADE'
     }

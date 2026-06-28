@@ -12,6 +12,9 @@ What's new?
 - OpenRouter model dropdowns keep the selected model and default `openrouter/free` option visible even when the remote model list changes.
 - Codex change summaries now fill per-file `+N/-N` line counts in the changes popover when the CLI does not report them directly, using git stats as a fallback.
 - Local and SSH terminals now copy selected text with `Ctrl/Cmd+C`; right-click also copies the current selection.
+- OpenRouter API key normalization is now shared between main and renderer processes (moved to `@shared/ipc.ts`), with improved parsing for `Authorization: Bearer <key>`, `Bearer <key>`, and quoted keys.
+- OpenRouter request header uses correct casing (`Authorization` instead of `authorization`).
+- Renderer normalizes and displays the cleaned API key immediately after saving.
 
 
 ## Ascora ADE 1.0.0 — Initial release 28.06.2026

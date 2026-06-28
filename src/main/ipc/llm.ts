@@ -2,6 +2,7 @@ import { ipcMain } from 'electron'
 import {
   IPC,
   DEFAULT_LLM_CONFIG,
+  normalizeOpenRouterApiKey,
   type ChatParams,
   type ChatResult,
   type ClaudePermissionMode,
@@ -13,7 +14,7 @@ import {
   type ListModelsResult
 } from '@shared/ipc'
 import { getStore } from '../store'
-import { LmStudioClient, LmStudioError, normalizeOpenRouterApiKey } from '../llm/client'
+import { LmStudioClient, LmStudioError } from '../llm/client'
 
 let client: LmStudioClient | null = null
 /** In-flight chat requests, keyed by the renderer-supplied request id. */
