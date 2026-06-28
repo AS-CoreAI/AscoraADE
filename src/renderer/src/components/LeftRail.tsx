@@ -349,6 +349,7 @@ export function LeftRail(): JSX.Element {
           {aboutOpen && (
             <div className="about-menu" role="dialog" aria-label="About Ascora ADE">
               <div className="about-title">Ascora ADE</div>
+              <div className="about-version">Version 1.0</div>
               <p>
                 Created at AS CORE AI —{' '}
                 <a onClick={() => openLink('https://ascoreai.com')}>ascoreai.com</a>

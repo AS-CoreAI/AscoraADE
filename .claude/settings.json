@@ -9,12 +9,14 @@
       "Bash(ls /e/AscoraADE-website/node_modules/server-only 2>/dev/null && echo \"server-only: present\" || echo \"server-only: MISSING\")",
       "Read(//e/AscoraADE-website/node_modules/**)",
       "Bash(grep -o '.\\\\{120\\\\}weekly limit.\\\\{120\\\\}' /c/Users/strazewicz/.vscode/extensions/anthropic.claude-code-2.1.195-win32-x64/webview/index.js | head -20)",
-      "Read(//c/Users/strazewicz/.vscode/extensions/anthropic.claude-code-2.1.195-win32-x64/webview/**)"
+      "Read(//c/Users/strazewicz/.vscode/extensions/anthropic.claude-code-2.1.195-win32-x64/webview/**)",
+      "Read(//e/AscoraADE-website/**)"
     ],
     "additionalDirectories": [
       "e:\\AscoraADE-website\\lib",
       "e:\\AscoraADE-website\\app\\api\\releases\\latest",
-      "e:\\AscoraADE-website\\app\\api\\releases"
+      "e:\\AscoraADE-website\\app\\api\\releases",
+      "E:\\AscoraADE-website\\components"
     ]
   }
 }

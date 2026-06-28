@@ -3,6 +3,7 @@ import { createMainWindow } from './window'
 import { registerIpc } from './ipc'
 import { getStore, closeStore } from './store'
 import { stopLiveServer } from './ipc/live'
+import { startPresence, stopPresence } from './presence'
 
 // Single-instance lock: focus the existing window instead of opening a second.
 if (!app.requestSingleInstanceLock()) {
@@ -21,6 +22,7 @@ if (!app.requestSingleInstanceLock()) {
     getStore() // initialise persistence early
     registerIpc()
     createMainWindow()
+    startPresence() // anonymous "running now" heartbeat to the website
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createMainWindow()
@@ -32,6 +34,7 @@ if (!app.requestSingleInstanceLock()) {
   })
 
   app.on('before-quit', () => {
+    stopPresence()
     stopLiveServer()
     closeStore()
   })
