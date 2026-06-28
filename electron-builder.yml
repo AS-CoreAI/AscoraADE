@@ -1,0 +1,66 @@
+appId: com.ascora.ade
+productName: Ascora ADE
+copyright: Copyright © 2026 Ascora
+
+directories:
+  output: dist
+  buildResources: build
+
+# Only `out/**` (the electron-vite bundle) and the runtime deps are needed.
+# The renderer libs (monaco, react, dockview, allotment, xterm, zustand) are
+# bundled into out/renderer by Vite, so they're pruned from node_modules here —
+# ssh2 is the only production dependency required at runtime in the main process.
+asar: true
+files:
+  - out/**/*
+  - package.json
+  - "!node_modules/monaco-editor/**"
+  - "!node_modules/@monaco-editor/**"
+  - "!node_modules/react/**"
+  - "!node_modules/react-dom/**"
+  - "!node_modules/dockview/**"
+  - "!node_modules/dockview-react/**"
+  - "!node_modules/dockview-core/**"
+  - "!node_modules/allotment/**"
+  - "!node_modules/@xterm/**"
+  - "!node_modules/zustand/**"
+
+win:
+  icon: build/icon.png
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: portable
+      arch: [x64]
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  artifactName: Ascora-ADE-Setup-${version}.${ext}
+  shortcutName: Ascora ADE
+  uninstallDisplayName: Ascora ADE ${version}
+
+portable:
+  artifactName: Ascora-ADE-Portable-${version}.${ext}
+
+linux:
+  icon: build/icon.png
+  category: Development
+  maintainer: Ascora <support@ascoreai.com>
+  target:
+    - target: deb
+      arch: [x64]
+    - target: rpm
+      arch: [x64]
+    - target: pacman
+      arch: [x64]
+
+deb:
+  artifactName: Ascora-ADE-${version}-${arch}.${ext}
+
+rpm:
+  artifactName: Ascora-ADE-${version}-${arch}.${ext}
+
+pacman:
+  artifactName: Ascora-ADE-${version}-${arch}.${ext}
