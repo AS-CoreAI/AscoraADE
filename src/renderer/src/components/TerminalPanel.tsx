@@ -74,6 +74,32 @@ export function TerminalPanel(): JSX.Element {
     term.open(host)
     fit.fit()
 
+    const copySelection = (): boolean => {
+      const selection = term.getSelection()
+      if (!selection) return false
+      void navigator.clipboard.writeText(selection).catch(() => {})
+      return true
+    }
+
+    term.attachCustomKeyEventHandler((event) => {
+      if (event.type !== 'keydown') return true
+      const isCopyShortcut =
+        (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'c'
+      if (!isCopyShortcut) return true
+      if (copySelection()) {
+        event.preventDefault()
+        return false
+      }
+      return !event.shiftKey && !event.metaKey
+    })
+
+    const onContextMenu = (event: MouseEvent): void => {
+      if (!copySelection()) return
+      event.preventDefault()
+      term.clearSelection()
+    }
+    host.addEventListener('contextmenu', onContextMenu)
+
     const id = crypto.randomUUID()
     let kind: TerminalShellKind = 'powershell'
     let cwd = workspacePath ?? ''
@@ -222,6 +248,7 @@ export function TerminalPanel(): JSX.Element {
     return () => {
       offData()
       offExit()
+      host.removeEventListener('contextmenu', onContextMenu)
       resize.disconnect()
       void api.terminal.kill(id)
       term.dispose()

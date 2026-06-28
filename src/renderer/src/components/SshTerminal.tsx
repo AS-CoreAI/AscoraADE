@@ -49,6 +49,25 @@ export function SshTerminal({ connId }: { connId: string }): JSX.Element {
     term.open(host)
     fit.fit()
 
+    const copySelection = (): boolean => {
+      const selection = term.getSelection()
+      if (!selection) return false
+      void navigator.clipboard.writeText(selection).catch(() => {})
+      return true
+    }
+
+    term.attachCustomKeyEventHandler((event) => {
+      if (event.type !== 'keydown') return true
+      const isCopyShortcut =
+        (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'c'
+      if (!isCopyShortcut) return true
+      if (copySelection()) {
+        event.preventDefault()
+        return false
+      }
+      return !event.shiftKey && !event.metaKey
+    })
+
     const id = connId
     let disposed = false
     setStatus('connecting')
@@ -69,9 +88,7 @@ export function SshTerminal({ connId }: { connId: string }): JSX.Element {
     // otherwise paste the clipboard straight into the remote channel.
     const onContextMenu = (event: MouseEvent): void => {
       event.preventDefault()
-      const selection = term.getSelection()
-      if (selection) {
-        void navigator.clipboard.writeText(selection).catch(() => {})
+      if (copySelection()) {
         term.clearSelection()
         return
       }
