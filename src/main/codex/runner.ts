@@ -1,8 +1,8 @@
 import { app, type WebContents } from 'electron'
-import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
-import { existsSync, readdirSync } from 'node:fs'
+import { execFileSync, spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { delimiter, join } from 'node:path'
+import { delimiter, isAbsolute, join, relative, resolve } from 'node:path'
 import {
   IPC,
   type CodexCheckResult,
@@ -209,8 +209,75 @@ const firstNum = (...vs: unknown[]): number | undefined => {
   return undefined
 }
 
+const countLines = (s: string): number => (s.length ? s.split('\n').length : 0)
+
+function workspacePathspec(cwd: string, filePath: string): string | null {
+  if (!filePath || filePath.includes('\0')) return null
+  const absolute = isAbsolute(filePath) ? filePath : resolve(cwd, filePath)
+  const rel = relative(cwd, absolute)
+  if (!rel || rel.startsWith('..') || isAbsolute(rel) || rel.includes('\0')) return null
+  return rel.replace(/\\/g, '/')
+}
+
+function gitOutput(cwd: string, args: string[]): string | null {
+  try {
+    return execFileSync('git', args, {
+      cwd,
+      encoding: 'utf8',
+      maxBuffer: 1024 * 1024,
+      timeout: 5000,
+      windowsHide: true
+    })
+  } catch {
+    return null
+  }
+}
+
+function isGitUntracked(cwd: string, pathspec: string): boolean {
+  const out = gitOutput(cwd, ['ls-files', '--others', '--exclude-standard', '-z', '--', pathspec])
+  return Boolean(out?.split('\0').filter(Boolean).includes(pathspec))
+}
+
+function untrackedLineStat(cwd: string, pathspec: string): { added: number; removed: number } | undefined {
+  const absolute = resolve(cwd, pathspec)
+  if (!existsSync(absolute)) return undefined
+  try {
+    const info = statSync(absolute)
+    if (!info.isFile() || info.size > 1024 * 1024) return undefined
+    const buf = readFileSync(absolute)
+    if (buf.subarray(0, 8192).includes(0)) return undefined
+    return { added: countLines(buf.toString('utf8')), removed: 0 }
+  } catch {
+    return undefined
+  }
+}
+
+function isAddKind(kind: string): boolean {
+  const k = kind.trim().toLowerCase()
+  return k === 'add' || k === 'added' || k === 'create' || k === 'created' || k === 'new' || k === 'a'
+}
+
+function gitLineStat(cwd: string, filePath: string, kind: string): { added: number; removed: number } | undefined {
+  const pathspec = workspacePathspec(cwd, filePath)
+  if (!pathspec) return undefined
+  const out = gitOutput(cwd, ['diff', '--numstat', 'HEAD', '--', pathspec])
+  if (out != null) {
+    const line = out.split(/\r?\n/).find(Boolean)
+    if (line) {
+      const [addedRaw, removedRaw] = line.split('\t')
+      const added = Number(addedRaw)
+      const removed = Number(removedRaw)
+      if (Number.isFinite(added) && Number.isFinite(removed)) return { added, removed }
+    }
+    const untracked = isGitUntracked(cwd, pathspec)
+    if (untracked) return untrackedLineStat(cwd, pathspec)
+    return { added: 0, removed: 0 }
+  }
+  return isAddKind(kind) ? untrackedLineStat(cwd, pathspec) : undefined
+}
+
 /** Normalise the raw `item` object from a codex event into our `CodexItem`. */
-function normalizeItem(raw: Record<string, unknown>): CodexItem {
+function normalizeItem(raw: Record<string, unknown>, cwd?: string): CodexItem {
   const changes = Array.isArray(raw.changes)
     ? (raw.changes as Record<string, unknown>[]).map((c) => ({
         path: String(c.path ?? ''),
@@ -219,6 +286,15 @@ function normalizeItem(raw: Record<string, unknown>): CodexItem {
         removed: firstNum(c.removed, c.deletions)
       }))
     : undefined
+  if (cwd && changes) {
+    for (const change of changes) {
+      if (change.added != null && change.removed != null) continue
+      const stat = gitLineStat(cwd, change.path, change.kind)
+      if (!stat) continue
+      change.added = change.added ?? stat.added
+      change.removed = change.removed ?? stat.removed
+    }
+  }
   return {
     id: String(raw.id ?? ''),
     type: String(raw.type ?? 'unknown'),
@@ -232,7 +308,7 @@ function normalizeItem(raw: Record<string, unknown>): CodexItem {
 }
 
 /** Map one parsed JSONL object from `codex exec --json` to a `CodexEvent`. */
-function toEvent(obj: Record<string, unknown>): CodexEvent | null {
+function toEvent(obj: Record<string, unknown>, cwd?: string): CodexEvent | null {
   const type = String(obj.type ?? '')
   switch (type) {
     case 'thread.started':
@@ -244,7 +320,7 @@ function toEvent(obj: Record<string, unknown>): CodexEvent | null {
     case 'item.completed': {
       const phase = type === 'item.started' ? 'started' : type === 'item.updated' ? 'updated' : 'completed'
       const item = (obj.item ?? {}) as Record<string, unknown>
-      return { kind: 'item', phase, item: normalizeItem(item) }
+      return { kind: 'item', phase, item: normalizeItem(item, cwd) }
     }
     case 'turn.completed':
       return { kind: 'turn-completed' }
@@ -349,7 +425,7 @@ export function runCodex(
                 (typeof u.reasoning_output_tokens === 'number' ? u.reasoning_output_tokens : 0)
             }
           }
-          const event = toEvent(obj)
+          const event = toEvent(obj, params.cwd)
           if (!event) continue
           if (event.kind === 'thread') threadId = event.threadId
           emit(event)

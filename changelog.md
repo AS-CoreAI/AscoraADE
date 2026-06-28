@@ -1,6 +1,9 @@
 ## Ascora ADE 1.1.0
 What's new?
 
+### Fixed
+- Codex change summaries now fill per-file `+N/-N` line counts in the changes popover when the CLI does not report them directly, using git stats as a fallback.
+
 
 ## Ascora ADE 1.0.0 — Initial release 28.06.2026
 
