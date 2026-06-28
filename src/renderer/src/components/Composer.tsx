@@ -2,6 +2,7 @@ import { useRef, useState, type JSX, type KeyboardEvent } from 'react'
 import { Icon } from './Icon'
 import { useApp, type AgentMode } from '@/state/store'
 import {
+  DEFAULT_LLM_CONFIG,
   CODEX_REASONING_LEVELS,
   CLAUDE_MODEL_PRESETS,
   CLAUDE_PERMISSION_MODES,
@@ -57,6 +58,17 @@ export const REASONING_LABEL: Record<CodexReasoning, string> = {
   xhigh: 'Very high'
 }
 
+export function openRouterModelOptions(models: string[], selectedModel: string): string[] {
+  const seen = new Set<string>()
+  return [selectedModel, DEFAULT_LLM_CONFIG.openRouterModel, ...models]
+    .map((m) => m.trim())
+    .filter((m) => {
+      if (!m || seen.has(m)) return false
+      seen.add(m)
+      return true
+    })
+}
+
 export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.Element {
   const active = useApp((s) => s.active)
   const provider = useApp((s) => s.provider)
@@ -64,6 +76,10 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
   const model = useApp((s) => s.model)
   const models = useApp((s) => s.models)
   const setModel = useApp((s) => s.setModel)
+  const openRouterEnabled = useApp((s) => s.openRouterEnabled)
+  const openRouterApiKey = useApp((s) => s.openRouterApiKey)
+  const openRouterModel = useApp((s) => s.openRouterModel)
+  const setOpenRouterModel = useApp((s) => s.setOpenRouterModel)
   const codexModel = useApp((s) => s.codexModel)
   const setCodexModel = useApp((s) => s.setCodexModel)
   const codexReasoning = useApp((s) => s.codexReasoning)
@@ -86,7 +102,13 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
   const [text, setText] = useState('')
   const ref = useRef<HTMLTextAreaElement>(null)
 
-  const modelOptions = models.length > 0 ? models : [model || 'local-model']
+  const openRouterReady = openRouterEnabled && openRouterApiKey.trim().length > 0
+  const modelOptions =
+    provider === 'openrouter'
+      ? openRouterModelOptions(models, openRouterModel)
+      : models.length > 0
+        ? models
+        : [model || 'local-model']
   const canSend = text.trim().length > 0 && !!active && !streaming
 
   const grow = (): void => {
@@ -204,6 +226,7 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
           title="Agent backend"
         >
           <option value="lmstudio">LM Studio</option>
+          {openRouterReady && <option value="openrouter">OpenRouter</option>}
           <option value="codex">Codex</option>
           <option value="claude">Claude</option>
           <option value="glm">GLM (ZCode)</option>
@@ -265,6 +288,19 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
             title="GLM model comes from standalone ZCode CLI config or a compatible desktop Coding Plan"
           >
             <option value="glm">GLM · ZCode</option>
+          </select>
+        ) : provider === 'openrouter' ? (
+          <select
+            className="composer-select"
+            value={openRouterModel || modelOptions[0]}
+            onChange={(e) => setOpenRouterModel(e.target.value)}
+            title="Model (OpenRouter)"
+          >
+            {modelOptions.map((m) => (
+              <option key={m} value={m}>
+                {m}
+              </option>
+            ))}
           </select>
         ) : (
           <select

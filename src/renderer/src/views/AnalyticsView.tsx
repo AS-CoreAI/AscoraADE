@@ -13,6 +13,7 @@ import {
 
 const PROVIDER_LABEL: Record<string, string> = {
   lmstudio: 'LM Studio',
+  openrouter: 'OpenRouter',
   codex: 'Codex',
   claude: 'Claude Code',
   glm: 'GLM (ZCode)'

@@ -1,7 +1,15 @@
 ## Ascora ADE 1.1.0
 What's new?
 
+### Added
+- OpenRouter can now be enabled as a cloud OpenAI-compatible backend with a saved local API key, provider picker entry, model refresh, chat streaming, and OpenRouter-specific connection status.
+- OpenRouter model selection is persisted with workspace LLM settings and used consistently for agent chat, Git branch naming, Git commit message generation, and usage analytics.
+- Agent backend settings are now reachable from the left rail.
+
 ### Fixed
+- OpenRouter API keys pasted as `Authorization:` or `Bearer ...` values are normalized before saving and sending requests.
+- OpenRouter falls back to LM Studio when it is disabled or missing an API key, and reports clearer connection/authentication errors.
+- OpenRouter model dropdowns keep the selected model and default `openrouter/free` option visible even when the remote model list changes.
 - Codex change summaries now fill per-file `+N/-N` line counts in the changes popover when the CLI does not report them directly, using git stats as a fallback.
 - Local and SSH terminals now copy selected text with `Ctrl/Cmd+C`; right-click also copies the current selection.
 

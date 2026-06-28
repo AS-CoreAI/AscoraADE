@@ -1,6 +1,6 @@
 import { useState, type JSX } from 'react'
 import { Icon } from './Icon'
-import { REASONING_LABEL, CODEX_MODEL_PRESETS } from './Composer'
+import { REASONING_LABEL, CODEX_MODEL_PRESETS, openRouterModelOptions } from './Composer'
 import { useApp } from '@/state/store'
 import {
   DEFAULT_LLM_CONFIG,
@@ -428,11 +428,108 @@ function GlmPanel(): JSX.Element {
   )
 }
 
+function OpenRouterSetup(): JSX.Element {
+  const openRouterEnabled = useApp((s) => s.openRouterEnabled)
+  const openRouterApiKey = useApp((s) => s.openRouterApiKey)
+  const setOpenRouterEnabled = useApp((s) => s.setOpenRouterEnabled)
+  const setOpenRouterApiKey = useApp((s) => s.setOpenRouterApiKey)
+
+  const [apiKey, setApiKey] = useState(openRouterApiKey)
+  const [saving, setSaving] = useState(false)
+  const ready = openRouterEnabled && openRouterApiKey.trim().length > 0
+
+  const save = async (): Promise<void> => {
+    setSaving(true)
+    await setOpenRouterApiKey(apiKey)
+    setSaving(false)
+  }
+
+  return (
+    <div className="field">
+      <span className="field-label">OpenRouter</span>
+      <div className="field-row" style={{ alignItems: 'center' }}>
+        <label className="skill-toggle" title={openRouterEnabled ? 'Disable OpenRouter' : 'Enable OpenRouter'}>
+          <input
+            type="checkbox"
+            checked={openRouterEnabled}
+            onChange={(e) => void setOpenRouterEnabled(e.target.checked)}
+          />
+        </label>
+        <span className="field-hint">Enable OpenRouter as a cloud OpenAI-compatible backend.</span>
+      </div>
+      <div className="field-row">
+        <input
+          className="text-input"
+          type="password"
+          value={apiKey}
+          spellCheck={false}
+          placeholder="sk-or-v1-..."
+          onChange={(e) => setApiKey(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && void save()}
+        />
+        <button className="btn" onClick={() => void save()} disabled={saving}>
+          {saving ? 'Saving...' : 'Save'}
+        </button>
+      </div>
+      <span className="field-hint">
+        {ready
+          ? 'OpenRouter is available in the provider list.'
+          : 'Enable it and save an API key to show OpenRouter in the provider list.'}
+      </span>
+    </div>
+  )
+}
+
+function OpenRouterPanel(): JSX.Element {
+  const openRouterModel = useApp((s) => s.openRouterModel)
+  const setOpenRouterModel = useApp((s) => s.setOpenRouterModel)
+  const models = useApp((s) => s.models)
+  const connection = useApp((s) => s.connection)
+  const connectionError = useApp((s) => s.connectionError)
+  const refreshModels = useApp((s) => s.refreshModels)
+
+  const modelOptions = openRouterModelOptions(models, openRouterModel)
+
+  return (
+    <>
+      <label className="field">
+        <span className="field-label">Model</span>
+        <select
+          className="text-input"
+          value={openRouterModel || modelOptions[0]}
+          onChange={(e) => setOpenRouterModel(e.target.value)}
+        >
+          {modelOptions.map((m) => (
+            <option key={m} value={m}>
+              {m}
+            </option>
+          ))}
+        </select>
+        <span className="field-hint">Default model: {DEFAULT_LLM_CONFIG.openRouterModel}</span>
+      </label>
+
+      <div className={`conn-line ${connection}`}>
+        {connection === 'connected' && `OpenRouter connected - ${models.length} model(s) available.`}
+        {connection === 'connecting' && 'Connecting to OpenRouter...'}
+        {connection === 'error' && `OpenRouter error: ${connectionError ?? 'Connection failed.'}`}
+        {connection === 'unknown' && 'Not tested yet.'}
+      </div>
+
+      <button className="btn" style={{ alignSelf: 'flex-start' }} onClick={() => void refreshModels()}>
+        Refresh models
+      </button>
+    </>
+  )
+}
+
 export function ConnectionSettings(): JSX.Element | null {
   const open = useApp((s) => s.settingsOpen)
   const setOpen = useApp((s) => s.setSettingsOpen)
   const provider = useApp((s) => s.provider)
   const setProvider = useApp((s) => s.setProvider)
+  const openRouterReady = useApp(
+    (s) => s.openRouterEnabled && s.openRouterApiKey.trim().length > 0
+  )
 
   if (!open) return null
 
@@ -455,11 +552,14 @@ export function ConnectionSettings(): JSX.Element | null {
               onChange={(e) => void setProvider(e.target.value as LlmProvider)}
             >
               <option value="lmstudio">LM Studio (local, OpenAI-compatible)</option>
+              {openRouterReady && <option value="openrouter">OpenRouter (cloud, OpenAI-compatible)</option>}
               <option value="codex">Codex CLI (OpenAI's coding agent)</option>
               <option value="claude">Claude Code (Anthropic's coding agent)</option>
               <option value="glm">GLM / ZCode (Zhipu coding agent)</option>
             </select>
           </label>
+
+          <OpenRouterSetup />
 
           {provider === 'codex' ? (
             <CodexPanel />
@@ -467,6 +567,8 @@ export function ConnectionSettings(): JSX.Element | null {
             <ClaudePanel />
           ) : provider === 'glm' ? (
             <GlmPanel />
+          ) : provider === 'openrouter' ? (
+            <OpenRouterPanel />
           ) : (
             <LmStudioPanel />
           )}

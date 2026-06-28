@@ -56,6 +56,7 @@ export function LeftRail(): JSX.Element {
   const openAnalytics = useApp((s) => s.openAnalytics)
   const closeAnalytics = useApp((s) => s.closeAnalytics)
   const setSkillsOpen = useApp((s) => s.setSkillsOpen)
+  const setSettingsOpen = useApp((s) => s.setSettingsOpen)
   const themePreference = useApp((s) => s.themePreference)
   const setThemePreference = useApp((s) => s.setThemePreference)
   const [themeMenuOpen, setThemeMenuOpen] = useState(false)
@@ -327,6 +328,18 @@ export function LeftRail(): JSX.Element {
           onClick={() => (view === 'analytics' ? closeAnalytics() : openAnalytics())}
         >
           <Icon name="barChart" size={17} />
+        </button>
+        <button
+          className="rail-settings"
+          title="Agent backend settings"
+          aria-label="Agent backend settings"
+          onClick={() => {
+            setThemeMenuOpen(false)
+            setAboutOpen(false)
+            setSettingsOpen(true)
+          }}
+        >
+          <Icon name="message" size={17} />
         </button>
         <button
           className={`rail-settings${themeMenuOpen ? ' active' : ''}`}

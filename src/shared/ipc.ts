@@ -210,10 +210,10 @@ export interface TaskRecord extends TaskSummary {
   convo: LlmMessage[]
 }
 
-// ---------- LLM (provider-agnostic; LM Studio or Codex CLI) ----------
+// ---------- LLM (provider-agnostic; LM Studio, OpenRouter or CLI agents) ----------
 
 /** Which backend drives the agent chat. */
-export type LlmProvider = 'lmstudio' | 'codex' | 'claude' | 'glm'
+export type LlmProvider = 'lmstudio' | 'openrouter' | 'codex' | 'claude' | 'glm'
 
 export type LlmRole = 'system' | 'user' | 'assistant' | 'tool'
 
@@ -290,6 +290,12 @@ export interface LlmConfig {
   baseUrl: string
   /** Default LM Studio model id used when a request doesn't specify one. */
   model: string
+  /** Whether OpenRouter is exposed as a selectable agent backend. */
+  openRouterEnabled: boolean
+  /** OpenRouter API key. Stored locally in app settings. */
+  openRouterApiKey: string
+  /** Default OpenRouter model id used when selected. */
+  openRouterModel: string
   /** Path to the `codex` binary; empty → auto-detect (PATH / bundled extension). */
   codexPath: string
   /** Model passed to `codex exec -m`; empty → Codex's own default. */
@@ -318,6 +324,9 @@ export const DEFAULT_LLM_CONFIG: LlmConfig = {
   provider: 'lmstudio',
   baseUrl: 'http://localhost:1234/v1',
   model: '',
+  openRouterEnabled: false,
+  openRouterApiKey: '',
+  openRouterModel: 'openrouter/free',
   codexPath: '',
   codexModel: '',
   codexSandbox: 'workspace-write',

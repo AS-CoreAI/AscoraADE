@@ -681,12 +681,15 @@ function taskTitle(text: string): string {
 function modelLabel(s: {
   provider: LlmProvider
   model: string
+  openRouterModel: string
   codexModel: string
   claudeModel: string
 }): string {
   switch (s.provider) {
     case 'lmstudio':
       return s.model || 'local model'
+    case 'openrouter':
+      return s.openRouterModel || 'openrouter/free'
     case 'codex':
       return s.codexModel || 'Codex'
     case 'claude':
@@ -810,6 +813,7 @@ function codexItemToCard(it: CodexItem): Partial<ChatMessage> {
 interface WorkspaceLlm {
   provider: LlmProvider
   model: string
+  openRouterModel: string
   codexModel: string
   codexSandbox: CodexSandbox
   codexReasoning: CodexReasoning | ''
@@ -822,6 +826,7 @@ interface WorkspaceLlm {
 function snapshotLlm(s: {
   provider: LlmProvider
   model: string
+  openRouterModel: string
   codexModel: string
   codexSandbox: CodexSandbox
   codexReasoning: CodexReasoning | ''
@@ -832,6 +837,7 @@ function snapshotLlm(s: {
   return {
     provider: s.provider,
     model: s.model,
+    openRouterModel: s.openRouterModel,
     codexModel: s.codexModel,
     codexSandbox: s.codexSandbox,
     codexReasoning: s.codexReasoning,
@@ -957,6 +963,10 @@ interface AppState {
   models: string[]
   connection: Connection
   connectionError?: string
+  // OpenRouter
+  openRouterEnabled: boolean
+  openRouterApiKey: string
+  openRouterModel: string
   // Codex CLI
   codexPath: string
   codexModel: string
@@ -1074,6 +1084,9 @@ interface AppState {
   setModel: (m: string) => void
   setBaseUrl: (url: string) => Promise<void>
   setProvider: (p: LlmProvider) => Promise<void>
+  setOpenRouterEnabled: (enabled: boolean) => Promise<void>
+  setOpenRouterApiKey: (apiKey: string) => Promise<void>
+  setOpenRouterModel: (m: string) => void
   setCodexPath: (path: string) => Promise<void>
   setCodexModel: (m: string) => void
   setCodexSandbox: (s: CodexSandbox) => void
@@ -1151,6 +1164,9 @@ export const useApp = create<AppState>((set, get) => ({
   model: '',
   models: [],
   connection: 'unknown',
+  openRouterEnabled: DEFAULT_LLM_CONFIG.openRouterEnabled,
+  openRouterApiKey: DEFAULT_LLM_CONFIG.openRouterApiKey,
+  openRouterModel: DEFAULT_LLM_CONFIG.openRouterModel,
   codexPath: DEFAULT_LLM_CONFIG.codexPath,
   codexModel: DEFAULT_LLM_CONFIG.codexModel,
   codexSandbox: DEFAULT_LLM_CONFIG.codexSandbox,
@@ -1232,6 +1248,9 @@ export const useApp = create<AppState>((set, get) => ({
       provider: cfg.provider,
       baseUrl: cfg.baseUrl,
       model: cfg.model,
+      openRouterEnabled: cfg.openRouterEnabled,
+      openRouterApiKey: cfg.openRouterApiKey,
+      openRouterModel: cfg.openRouterModel,
       codexPath: cfg.codexPath,
       codexModel: cfg.codexModel,
       codexSandbox: cfg.codexSandbox,
@@ -1869,9 +1888,16 @@ export const useApp = create<AppState>((set, get) => ({
     const res = await api.llm.listModels()
     if (res.ok) {
       const models = (res.models ?? []).map((m) => m.id)
-      const model = get().model || models[0] || ''
-      set({ models, connection: 'connected', model })
-      if (model && model !== get().model) void api.llm.setConfig({ model })
+      const isOpenRouter = get().provider === 'openrouter'
+      const selected = (isOpenRouter ? get().openRouterModel : get().model) || models[0] || ''
+      set(
+        isOpenRouter
+          ? { models, connection: 'connected', openRouterModel: selected }
+          : { models, connection: 'connected', model: selected }
+      )
+      if (selected) {
+        void api.llm.setConfig(isOpenRouter ? { openRouterModel: selected } : { model: selected })
+      }
     } else {
       set({ connection: 'error', connectionError: res.error })
     }
@@ -1897,6 +1923,33 @@ export const useApp = create<AppState>((set, get) => ({
     else if (provider === 'claude') await get().checkClaude()
     else if (provider === 'glm') await get().checkGlm()
     else await get().refreshModels()
+  },
+
+  async setOpenRouterEnabled(openRouterEnabled) {
+    set({ openRouterEnabled })
+    await api.llm.setConfig({ openRouterEnabled })
+    if (!openRouterEnabled && get().provider === 'openrouter') {
+      await get().setProvider('lmstudio')
+    } else if (get().provider === 'openrouter') {
+      await get().refreshModels()
+    }
+  },
+
+  async setOpenRouterApiKey(apiKey) {
+    const openRouterApiKey = apiKey.trim()
+    set({ openRouterApiKey })
+    await api.llm.setConfig({ openRouterApiKey })
+    if ((!openRouterApiKey || !get().openRouterEnabled) && get().provider === 'openrouter') {
+      await get().setProvider('lmstudio')
+    } else if (get().provider === 'openrouter') {
+      await get().refreshModels()
+    }
+  },
+
+  setOpenRouterModel(openRouterModel) {
+    set({ openRouterModel })
+    void api.llm.setConfig({ openRouterModel })
+    get().persistWorkspaceLlm()
   },
 
   async setCodexPath(path) {
@@ -2021,6 +2074,7 @@ export const useApp = create<AppState>((set, get) => ({
       set({
         provider: saved.provider,
         model: saved.model,
+        openRouterModel: saved.openRouterModel ?? DEFAULT_LLM_CONFIG.openRouterModel,
         codexModel: saved.codexModel,
         codexSandbox: saved.codexSandbox,
         codexReasoning: saved.codexReasoning,
@@ -2030,6 +2084,23 @@ export const useApp = create<AppState>((set, get) => ({
       })
     }
     const provider = get().provider
+    if (provider === 'openrouter' && (!get().openRouterEnabled || !get().openRouterApiKey.trim())) {
+      set({ provider: 'lmstudio' })
+      await api.llm.setConfig({ provider: 'lmstudio' })
+      await get().refreshModels()
+      return
+    }
+    await api.llm.setConfig({
+      provider,
+      model: get().model,
+      openRouterModel: get().openRouterModel,
+      codexModel: get().codexModel,
+      codexSandbox: get().codexSandbox,
+      codexReasoning: get().codexReasoning,
+      claudeModel: get().claudeModel,
+      claudePermission: get().claudePermission,
+      glmMode: get().glmMode
+    })
     if (provider === 'codex') await get().checkCodex()
     else if (provider === 'claude') await get().checkClaude()
     else if (provider === 'glm') await get().checkGlm()
@@ -2338,6 +2409,7 @@ export const useApp = create<AppState>((set, get) => ({
         return // skip the LM Studio loop; finally still resets state + saves
       }
 
+      const isOpenRouter = agentProvider === 'openrouter'
       for (let step = 0; step < MAX_STEPS && !runAborted; step += 1) {
         // 1) Stream one model turn into a fresh assistant bubble.
         const replyId = crypto.randomUUID()
@@ -2350,7 +2422,7 @@ export const useApp = create<AppState>((set, get) => ({
         const messages: LlmMessage[] = [{ role: 'system', content: systemPrompt }, ...get().convo]
         const result = await api.llm.chat(
           crypto.randomUUID(),
-          { model: get().model, messages, tools: TOOLS },
+          { model: isOpenRouter ? get().openRouterModel : get().model, messages, tools: TOOLS },
           (delta) => {
             streamedChars += delta.length
             set((s) => ({
@@ -2378,8 +2450,8 @@ export const useApp = create<AppState>((set, get) => ({
             workspaceId: active.id,
             workspaceName: active.name,
             taskId,
-            provider: 'lmstudio',
-            model: get().model || 'local-model',
+            provider: isOpenRouter ? 'openrouter' : 'lmstudio',
+            model: isOpenRouter ? get().openRouterModel || 'openrouter/free' : get().model || 'local-model',
             inputTokens: usage.inputTokens,
             outputTokens: usage.outputTokens,
             userMessages: step === 0 ? 1 : 0,

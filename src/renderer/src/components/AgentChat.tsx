@@ -463,7 +463,9 @@ function sameProjectPath(left: string | undefined, right: string): boolean {
 
 function GitBranchBadge(): JSX.Element | null {
   const activePath = useApp((s) => s.active?.path)
+  const provider = useApp((s) => s.provider)
   const model = useApp((s) => s.model)
+  const openRouterModel = useApp((s) => s.openRouterModel)
   const rootRef = useRef<HTMLDivElement>(null)
   const [status, setStatus] = useState<GitStatusResult | null>(null)
   const [branches, setBranches] = useState<GitBranch[]>([])
@@ -604,7 +606,7 @@ function GitBranchBadge(): JSX.Element | null {
       const result = await api.llm.chat(
         crypto.randomUUID(),
         {
-          model,
+          model: provider === 'openrouter' ? openRouterModel : model,
           temperature: 0.2,
           messages: [
             {

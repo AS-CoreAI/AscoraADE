@@ -15,6 +15,21 @@ interface ToolCallDelta {
   function?: { name?: string; arguments?: string }
 }
 
+const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1'
+
+function stripWrappingQuotes(value: string): string {
+  return value.replace(/^['"]|['"]$/g, '').trim()
+}
+
+export function normalizeOpenRouterApiKey(value: string): string {
+  let key = stripWrappingQuotes(value.trim())
+  const header = key.match(/^authorization\s*:\s*(.+)$/i)
+  if (header) key = header[1].trim()
+  const bearer = key.match(/^bearer\s+(.+)$/i)
+  if (bearer) key = bearer[1].trim()
+  return stripWrappingQuotes(key)
+}
+
 /**
  * Minimal client for an LM Studio (OpenAI-compatible) server.
  *
@@ -46,19 +61,23 @@ function isAbort(err: unknown): boolean {
   return err instanceof Error && err.name === 'AbortError'
 }
 
-function connectionError(url: string, err: unknown): LmStudioError {
+function providerName(config: LlmConfig): string {
+  return config.provider === 'openrouter' ? 'OpenRouter' : 'LM Studio'
+}
+
+function connectionError(name: string, url: string, err: unknown): LmStudioError {
   if (isAbort(err)) return new LmStudioError('Request aborted', 'aborted')
   const code =
     (err as { cause?: { code?: string }; code?: string })?.cause?.code ??
     (err as { code?: string })?.code
   const suffix = code ? ` (${code})` : ''
   return new LmStudioError(
-    `Cannot reach LM Studio at ${url}${suffix}. Is the local server running and the URL correct?`,
+    `Cannot reach ${name} at ${url}${suffix}. Check the connection settings and try again.`,
     'connection'
   )
 }
 
-async function httpError(url: string, res: Response): Promise<LmStudioError> {
+async function httpError(name: string, url: string, res: Response): Promise<LmStudioError> {
   const text = await res.text().catch(() => '')
   let detail = text
   try {
@@ -67,8 +86,15 @@ async function httpError(url: string, res: Response): Promise<LmStudioError> {
   } catch {
     /* not JSON */
   }
+  if (name === 'OpenRouter' && res.status === 401 && /missing authentication header/i.test(detail)) {
+    return new LmStudioError(
+      'OpenRouter did not receive an Authorization header. Re-save the OpenRouter API key in Agent backend settings and try again.',
+      'http',
+      res.status
+    )
+  }
   const tail = detail ? ` — ${String(detail).slice(0, 300)}` : ''
-  return new LmStudioError(`LM Studio responded ${res.status} for ${url}${tail}`, 'http', res.status)
+  return new LmStudioError(`${name} responded ${res.status} for ${url}${tail}`, 'http', res.status)
 }
 
 export class LmStudioClient {
@@ -79,24 +105,57 @@ export class LmStudioClient {
   }
 
   get baseUrl(): string {
-    return stripTrailingSlash(this.config.baseUrl)
+    return this.config.provider === 'openrouter'
+      ? OPENROUTER_BASE_URL
+      : stripTrailingSlash(this.config.baseUrl)
+  }
+
+  private get providerName(): string {
+    return providerName(this.config)
+  }
+
+  private headers(): Record<string, string> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    if (this.config.provider === 'openrouter') {
+      const apiKey = normalizeOpenRouterApiKey(this.config.openRouterApiKey)
+      if (apiKey) headers.authorization = `Bearer ${apiKey}`
+      headers['HTTP-Referer'] = 'https://ade.ascoreai.com'
+      headers['X-OpenRouter-Title'] = 'Ascora ADE'
+    }
+    return headers
+  }
+
+  private requireOpenRouterKey(): void {
+    if (this.config.provider !== 'openrouter') return
+    if (!this.config.openRouterEnabled || !normalizeOpenRouterApiKey(this.config.openRouterApiKey)) {
+      throw new LmStudioError('OpenRouter is not enabled or its API key is empty.', 'connection')
+    }
+  }
+
+  private model(params: ChatParams): string {
+    if (params.model) return params.model
+    return this.config.provider === 'openrouter'
+      ? this.config.openRouterModel || 'openrouter/free'
+      : this.config.model
   }
 
   /** GET /models — never throws for empty lists, only for real failures. */
   async listModels(signal?: AbortSignal): Promise<LlmModel[]> {
+    this.requireOpenRouterKey()
+    const name = this.providerName
     const url = `${this.baseUrl}/models`
     let res: Response
     try {
-      res = await fetch(url, { signal })
+      res = await fetch(url, { headers: this.headers(), signal })
     } catch (err) {
-      throw connectionError(url, err)
+      throw connectionError(name, url, err)
     }
-    if (!res.ok) throw await httpError(url, res)
+    if (!res.ok) throw await httpError(name, url, res)
     let json: { data?: { id: string }[] }
     try {
       json = (await res.json()) as { data?: { id: string }[] }
     } catch (err) {
-      throw new LmStudioError(`Could not parse model list from LM Studio: ${String(err)}`, 'parse')
+      throw new LmStudioError(`Could not parse model list from ${name}: ${String(err)}`, 'parse')
     }
     return (json.data ?? []).map((m) => ({ id: m.id }))
   }
@@ -108,14 +167,16 @@ export class LmStudioClient {
    * Throws `LmStudioError` (kind 'aborted' when cancelled via signal).
    */
   async *streamChat(params: ChatParams, signal?: AbortSignal): AsyncGenerator<string, StreamReturn> {
+    this.requireOpenRouterKey()
+    const name = this.providerName
     const url = `${this.baseUrl}/chat/completions`
     const body = JSON.stringify({
-      model: params.model || this.config.model,
+      model: this.model(params),
       messages: params.messages,
       temperature: params.temperature ?? 0.7,
       stream: true,
       // Ask OpenAI-compatible servers to append a final usage frame.
-      stream_options: { include_usage: true },
+      ...(this.config.provider === 'openrouter' ? {} : { stream_options: { include_usage: true } }),
       ...(params.tools && params.tools.length > 0 ? { tools: params.tools } : {})
     })
 
@@ -123,15 +184,15 @@ export class LmStudioClient {
     try {
       res = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: this.headers(),
         body,
         signal
       })
     } catch (err) {
-      throw connectionError(url, err)
+      throw connectionError(name, url, err)
     }
-    if (!res.ok) throw await httpError(url, res)
-    if (!res.body) throw new LmStudioError('LM Studio returned an empty response body', 'parse')
+    if (!res.ok) throw await httpError(name, url, res)
+    if (!res.body) throw new LmStudioError(`${name} returned an empty response body`, 'parse')
 
     const reader = res.body.getReader()
     const decoder = new TextDecoder()

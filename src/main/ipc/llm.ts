@@ -13,7 +13,7 @@ import {
   type ListModelsResult
 } from '@shared/ipc'
 import { getStore } from '../store'
-import { LmStudioClient, LmStudioError } from '../llm/client'
+import { LmStudioClient, LmStudioError, normalizeOpenRouterApiKey } from '../llm/client'
 
 let client: LmStudioClient | null = null
 /** In-flight chat requests, keyed by the renderer-supplied request id. */
@@ -21,10 +21,25 @@ const aborters = new Map<string, AbortController>()
 
 function readConfig(): LlmConfig {
   const store = getStore()
+  const openRouterEnabled =
+    store.getSetting<boolean>('openrouter.enabled') ?? DEFAULT_LLM_CONFIG.openRouterEnabled
+  const openRouterApiKey =
+    normalizeOpenRouterApiKey(
+      store.getSetting<string>('openrouter.apiKey') ?? DEFAULT_LLM_CONFIG.openRouterApiKey
+    )
+  const savedProvider = store.getSetting<LlmProvider>('llm.provider') ?? DEFAULT_LLM_CONFIG.provider
+  const provider =
+    savedProvider === 'openrouter' && (!openRouterEnabled || !openRouterApiKey.trim())
+      ? DEFAULT_LLM_CONFIG.provider
+      : savedProvider
   return {
-    provider: store.getSetting<LlmProvider>('llm.provider') ?? DEFAULT_LLM_CONFIG.provider,
+    provider,
     baseUrl: store.getSetting<string>('llm.baseUrl') ?? DEFAULT_LLM_CONFIG.baseUrl,
     model: store.getSetting<string>('llm.model') ?? DEFAULT_LLM_CONFIG.model,
+    openRouterEnabled,
+    openRouterApiKey,
+    openRouterModel:
+      store.getSetting<string>('openrouter.model') ?? DEFAULT_LLM_CONFIG.openRouterModel,
     codexPath: store.getSetting<string>('codex.path') ?? DEFAULT_LLM_CONFIG.codexPath,
     codexModel: store.getSetting<string>('codex.model') ?? DEFAULT_LLM_CONFIG.codexModel,
     codexSandbox: store.getSetting<CodexSandbox>('codex.sandbox') ?? DEFAULT_LLM_CONFIG.codexSandbox,
@@ -59,6 +74,15 @@ export function registerLlmHandlers(): void {
     if (typeof patch.provider === 'string') store.setSetting('llm.provider', patch.provider)
     if (typeof patch.baseUrl === 'string') store.setSetting('llm.baseUrl', patch.baseUrl.trim())
     if (typeof patch.model === 'string') store.setSetting('llm.model', patch.model)
+    if (typeof patch.openRouterEnabled === 'boolean') {
+      store.setSetting('openrouter.enabled', patch.openRouterEnabled)
+    }
+    if (typeof patch.openRouterApiKey === 'string') {
+      store.setSetting('openrouter.apiKey', normalizeOpenRouterApiKey(patch.openRouterApiKey))
+    }
+    if (typeof patch.openRouterModel === 'string') {
+      store.setSetting('openrouter.model', patch.openRouterModel.trim())
+    }
     if (typeof patch.codexPath === 'string') store.setSetting('codex.path', patch.codexPath.trim())
     if (typeof patch.codexModel === 'string') store.setSetting('codex.model', patch.codexModel.trim())
     if (typeof patch.codexSandbox === 'string') store.setSetting('codex.sandbox', patch.codexSandbox)

@@ -39,6 +39,7 @@ export function StatusBar(): JSX.Element {
   const active = useApp((s) => s.active)
   const provider = useApp((s) => s.provider)
   const model = useApp((s) => s.model)
+  const openRouterModel = useApp((s) => s.openRouterModel)
   const mode = useApp((s) => s.mode)
   const connection = useApp((s) => s.connection)
   const models = useApp((s) => s.models)
@@ -73,6 +74,7 @@ export function StatusBar(): JSX.Element {
   const isCodex = provider === 'codex'
   const isClaude = provider === 'claude'
   const isGlm = provider === 'glm'
+  const isOpenRouter = provider === 'openrouter'
 
   // Keep the Claude usage indicator fresh while Claude is the active backend.
   useEffect(() => {
@@ -114,6 +116,18 @@ export function StatusBar(): JSX.Element {
       connection === 'connected' && models.length > 0
         ? `LM Studio: connected · ${models.length} model${models.length === 1 ? '' : 's'}`
         : CONN_LABEL[connection]
+    if (isOpenRouter) {
+      label =
+        connection === 'connected' && models.length > 0
+          ? `OpenRouter: connected - ${models.length} model${models.length === 1 ? '' : 's'}`
+          : `OpenRouter: ${
+              connection === 'connecting'
+                ? 'connecting...'
+                : connection === 'error'
+                  ? 'not connected'
+                  : '-'
+            }`
+    }
   }
 
   const modelLabel = isGlm
@@ -122,6 +136,8 @@ export function StatusBar(): JSX.Element {
       ? claudeModel || 'claude (default)'
       : isCodex
         ? codexModel || 'codex (default)'
+        : isOpenRouter
+          ? openRouterModel || 'openrouter/free'
         : model || '(no model)'
 
   const accessLabel = isCodex
