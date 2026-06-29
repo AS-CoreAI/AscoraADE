@@ -3,6 +3,7 @@ import { TitleBar } from '@/components/TitleBar'
 import { LeftRail } from '@/components/LeftRail'
 import { StatusBar } from '@/components/StatusBar'
 import { ConnectionSettings } from '@/components/ConnectionSettings'
+import { CopilotAuthModal } from '@/components/CopilotAuthModal'
 import { SkillsModal } from '@/components/SkillsModal'
 import { SshModal } from '@/components/SshModal'
 import { UsageModal } from '@/components/UsageModal'
@@ -53,6 +54,7 @@ export function App(): JSX.Element {
         </div>
       </div>
       <ConnectionSettings />
+      <CopilotAuthModal />
       <SkillsModal />
       <SshModal />
       <UsageModal />

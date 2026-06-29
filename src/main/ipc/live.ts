@@ -101,16 +101,42 @@ function broadcastReload(instance: LiveInstance): void {
 
 function startWatcher(root: string, onChange: () => void): FSWatcher | null {
   const ignored = [...EXCLUDED_DIRS]
+  // Last-seen modification time per file. Windows' recursive watcher also reports
+  // access/attribute events, so without this gate simply *serving* a file (which
+  // the preview does on every load) would look like an edit and trigger an endless
+  // reload loop. We only reload when a file's mtime actually advances.
+  const mtimes = new Map<string, number>()
   try {
     let timer: NodeJS.Timeout | null = null
+    const schedule = (): void => {
+      if (timer) clearTimeout(timer)
+      timer = setTimeout(onChange, 120)
+    }
     return watch(root, { recursive: true }, (_event, filename) => {
       const name = filename?.toString() ?? ''
+      // Empty filename = a watcher hiccup we can't attribute to a file; ignore it.
+      if (!name) return
       // Skip churn from dependency/build/VCS directories.
       if (ignored.some((dir) => name === dir || name.startsWith(dir + sep) || name.includes(sep + dir + sep))) {
         return
       }
-      if (timer) clearTimeout(timer)
-      timer = setTimeout(onChange, 120)
+      // Editor scratch / atomic-write artefacts aren't the file being previewed.
+      if (/(?:\.tmp|\.swp|\.swx|\.crswap|~)$/i.test(name)) return
+
+      void stat(join(root, name)).then(
+        (info) => {
+          // Only a real content change (newer mtime) counts; pure access/attribute
+          // events leave mtime untouched and are ignored.
+          if (mtimes.get(name) === info.mtimeMs) return
+          mtimes.set(name, info.mtimeMs)
+          schedule()
+        },
+        () => {
+          // Gone (delete/rename) — a genuine change worth reloading for.
+          mtimes.delete(name)
+          schedule()
+        }
+      )
     })
   } catch {
     // Recursive watch can be unsupported on some platforms — preview still works

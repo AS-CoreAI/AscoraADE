@@ -1,6 +1,6 @@
 {
   "name": "ascora-ade",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Ascora ADE — Agentic Development Environment for local LLMs (LM Studio)",
   "author": "Ascora",
   "homepage": "https://ade.ascoreai.com",
@@ -24,6 +24,7 @@
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/xterm": "^5.5.0",
     "allotment": "^1.20.2",
+    "cross-spawn": "^7.0.6",
     "dockview": "^7.0.2",
     "dockview-react": "^7.0.2",
     "monaco-editor": "^0.52.2",

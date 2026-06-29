@@ -6,6 +6,8 @@ import {
   type ChatParams,
   type ChatResult,
   type ClaudePermissionMode,
+  type CopilotPermissionMode,
+  type CopilotReasoning,
   type CodexReasoning,
   type CodexSandbox,
   type GlmMode,
@@ -46,6 +48,12 @@ function readConfig(): LlmConfig {
     codexSandbox: store.getSetting<CodexSandbox>('codex.sandbox') ?? DEFAULT_LLM_CONFIG.codexSandbox,
     codexReasoning:
       store.getSetting<CodexReasoning | ''>('codex.reasoning') ?? DEFAULT_LLM_CONFIG.codexReasoning,
+    copilotPath: store.getSetting<string>('copilot.path') ?? DEFAULT_LLM_CONFIG.copilotPath,
+    copilotModel: store.getSetting<string>('copilot.model') ?? DEFAULT_LLM_CONFIG.copilotModel,
+    copilotPermission:
+      store.getSetting<CopilotPermissionMode>('copilot.permission') ?? DEFAULT_LLM_CONFIG.copilotPermission,
+    copilotReasoning:
+      store.getSetting<CopilotReasoning | ''>('copilot.reasoning') ?? DEFAULT_LLM_CONFIG.copilotReasoning,
     claudePath: store.getSetting<string>('claude.path') ?? DEFAULT_LLM_CONFIG.claudePath,
     claudeModel: store.getSetting<string>('claude.model') ?? DEFAULT_LLM_CONFIG.claudeModel,
     claudePermission:
@@ -88,6 +96,10 @@ export function registerLlmHandlers(): void {
     if (typeof patch.codexModel === 'string') store.setSetting('codex.model', patch.codexModel.trim())
     if (typeof patch.codexSandbox === 'string') store.setSetting('codex.sandbox', patch.codexSandbox)
     if (typeof patch.codexReasoning === 'string') store.setSetting('codex.reasoning', patch.codexReasoning)
+    if (typeof patch.copilotPath === 'string') store.setSetting('copilot.path', patch.copilotPath.trim())
+    if (typeof patch.copilotModel === 'string') store.setSetting('copilot.model', patch.copilotModel.trim())
+    if (typeof patch.copilotPermission === 'string') store.setSetting('copilot.permission', patch.copilotPermission)
+    if (typeof patch.copilotReasoning === 'string') store.setSetting('copilot.reasoning', patch.copilotReasoning)
     if (typeof patch.claudePath === 'string') store.setSetting('claude.path', patch.claudePath.trim())
     if (typeof patch.claudeModel === 'string') store.setSetting('claude.model', patch.claudeModel.trim())
     if (typeof patch.claudePermission === 'string') store.setSetting('claude.permission', patch.claudePermission)

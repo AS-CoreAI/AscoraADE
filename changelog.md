@@ -1,27 +1,3 @@
-## Ascora ADE 1.2.0
-What's new?
-
-### Added
-- New Composer component for chat input with enhanced UI.
-- AgentChat view for interactive agent communication.
-- Copilot authentication modal and IPC support for Copilot integration.
-- Expanded global styling (styles/global.css) with new UI tweaks.
-- Updated ConnectionSettings component with additional provider options and UI improvements.
-- UsageModal enhancements for better usage analytics display.
-- Store (state/store.ts) extended with new slices for Copilot and UI state.
-- New IPC modules for Copilot handling (`src/main/ipc/copilot.ts`) and usage tracking (`src/main/codex/usage.ts`).
-
-### Fixed
-- Various UI glitches and TypeScript type issues across renderer components.
-- Corrected copy‑text shortcuts in terminals (Ctrl/Cmd+C) and right‑click behavior.
-- Fixed header casing for OpenRouter Authorization (already in 1.1.0, but reaffirmed).
-
-### Changed
-- StatusBar component updated to reflect new connection status indicators.
-- ConnectionSettings UI now dynamically shows backend availability.
-- Global CSS updated with new layout rules and theme adjustments.
-- Store logic refined for better state persistence and performance.
-
 ## Ascora ADE 1.1.0
 What's new?
 
@@ -32,6 +8,14 @@ What's new?
 - Agent runs can now keep progressing in the background when switching workspaces, tasks, SSH terminals, or starting a new task, then restore their live state when reopened.
 - Claude usage now opens an in-app breakdown modal from the status bar with per-window bars, reset times, refresh, and a detailed usage link.
 - LM Studio reachability is now probed in the background so provider pickers can reflect whether the local server is available even when another backend is selected.
+- New Composer component for chat input with enhanced UI.
+- AgentChat view for interactive agent communication.
+- Copilot authentication modal and IPC support for Copilot integration.
+- Expanded global styling with new UI tweaks.
+- Updated ConnectionSettings component with additional provider options and UI improvements.
+- UsageModal enhancements for better usage analytics display.
+- Store extended with new slices for Copilot and UI state.
+- New IPC modules for Copilot handling.
 
 ### Fixed
 - OpenRouter API keys pasted as `Authorization:` or `Bearer ...` values are normalized before saving and sending requests.
@@ -46,10 +30,17 @@ What's new?
 - Deleting a running task now stops that run, removes its live snapshot, and prevents a late save from restoring the deleted task.
 - Agent runs now keep the provider, model, permission mode, workspace, and SSH context captured at submit time so later UI switches do not change an in-flight task.
 - Failed model refreshes now clear stale model lists and update LM Studio availability instead of showing models from a previous backend.
+- Various UI glitches and TypeScript type issues across renderer components.
+- Corrected copy‑text shortcuts in terminals (Ctrl/Cmd+C) and right‑click behavior.
+- Fixed header casing for OpenRouter Authorization (already in 1.1.0, but reaffirmed).
 
 ### Changed
 - LM Studio is shown in backend pickers only while it is reachable or already selected, and OpenRouter setup controls only appear when OpenRouter is active.
 - **Version bumped to 1.1** in the About menu (left rail).
+- StatusBar component updated to reflect new connection status indicators.
+- ConnectionSettings UI now dynamically shows backend availability.
+- Global CSS updated with new layout rules and theme adjustments.
+- Store logic refined for better state persistence and performance.
 
 ## Ascora ADE 1.0.0 — Initial release 28.06.2026
 

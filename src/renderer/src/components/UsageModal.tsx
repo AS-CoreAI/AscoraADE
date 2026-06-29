@@ -3,7 +3,7 @@ import { Icon } from './Icon'
 import { resetLabel } from './StatusBar'
 import { useApp } from '@/state/store'
 import { api } from '@/lib/api'
-import type { ClaudeUsageWindow } from '@shared/ipc'
+import type { UsageLimitWindow } from '@shared/ipc'
 
 /** Where the "view detailed usage" link sends the user. */
 const USAGE_PAGE = 'https://claude.ai/settings/usage'
@@ -29,7 +29,7 @@ function resetDetail(iso?: string): string {
   return `${rel.charAt(0).toUpperCase()}${rel.slice(1)} · ${abs}`
 }
 
-function UsageItem({ win }: { win: ClaudeUsageWindow }): JSX.Element {
+function UsageItem({ win }: { win: UsageLimitWindow }): JSX.Element {
   const reset = resetDetail(win.resetsAt)
   return (
     <div className="usage-item">
@@ -49,25 +49,31 @@ function UsageItem({ win }: { win: ClaudeUsageWindow }): JSX.Element {
 }
 
 /**
- * Claude subscription usage breakdown, mirroring the Claude Code IDE extension's
- * popover: a bar per limit window (session / weekly / per-model) with reset
+ * Subscription/account usage breakdown: a bar per limit window with reset
  * times. Opened from the status-bar usage indicator.
  */
 export function UsageModal(): JSX.Element | null {
   const open = useApp((s) => s.usageOpen)
   const setOpen = useApp((s) => s.setUsageOpen)
-  const usage = useApp((s) => s.claudeUsage)
-  const refresh = useApp((s) => s.refreshClaudeUsage)
+  const provider = useApp((s) => s.provider)
+  const codexUsage = useApp((s) => s.codexUsage)
+  const claudeUsage = useApp((s) => s.claudeUsage)
+  const refreshCodex = useApp((s) => s.refreshCodexUsage)
+  const refreshClaude = useApp((s) => s.refreshClaudeUsage)
 
   if (!open) return null
 
+  const isCodex = provider === 'codex'
+  const usage = isCodex ? codexUsage : claudeUsage
+  const refresh = isCodex ? refreshCodex : refreshClaude
+  const title = isCodex ? 'Codex usage' : 'Claude usage'
   const windows = usage?.windows ?? []
 
   return (
     <div className="modal-backdrop" onClick={() => setOpen(false)}>
       <div className="modal modal-usage" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          Claude usage
+          {title}
           <button className="modal-close" onClick={() => setOpen(false)} title="Close">
             <Icon name="x" size={15} />
           </button>
@@ -83,7 +89,7 @@ export function UsageModal(): JSX.Element | null {
           ) : (
             <div className="usage-empty">
               {usage && !usage.loggedIn
-                ? 'Sign in to Claude Code to see your subscription usage.'
+                ? `Sign in to ${isCodex ? 'Codex' : 'Claude Code'} to see your subscription usage.`
                 : usage?.error
                   ? usage.error
                   : 'No usage data reported yet.'}
@@ -91,9 +97,11 @@ export function UsageModal(): JSX.Element | null {
           )}
 
           <div className="usage-footer">
-            <button className="usage-link" onClick={() => void api.live.openExternal(USAGE_PAGE)}>
-              <Icon name="external" size={12} /> Detailed usage
-            </button>
+            {!isCodex && (
+              <button className="usage-link" onClick={() => void api.live.openExternal(USAGE_PAGE)}>
+                <Icon name="external" size={12} /> Detailed usage
+              </button>
+            )}
             <button className="btn btn-icon" onClick={() => void refresh()}>
               <Icon name="refresh" size={13} /> Refresh
             </button>

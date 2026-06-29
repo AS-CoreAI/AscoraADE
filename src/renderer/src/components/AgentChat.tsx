@@ -149,9 +149,22 @@ async function copyText(text: string): Promise<void> {
   if (!copied) throw new Error('Clipboard write failed')
 }
 
+function isCopilotAuthError(m: ChatMessage): boolean {
+  if (m.role !== 'assistant') return false
+  const haystack = `${m.model ?? ''}\n${m.text}`
+  return (
+    /copilot/i.test(haystack) &&
+    /(No authentication information found|Authentication token found but could not be validated|Bad credentials|copilot login|gh auth login|COPILOT_GITHUB_TOKEN|GH_TOKEN|GITHUB_TOKEN)/i.test(
+      m.text
+    )
+  )
+}
+
 function TextMessage({ m }: { m: ChatMessage }): JSX.Element {
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'error'>('idle')
   const resetTimer = useRef<number | null>(null)
+  const setCopilotAuthOpen = useApp((s) => s.setCopilotAuthOpen)
+  const showCopilotAuth = isCopilotAuthError(m)
 
   useEffect(
     () => () => {
@@ -193,6 +206,14 @@ function TextMessage({ m }: { m: ChatMessage }): JSX.Element {
         )}
       </div>
       <div className="bubble">{m.text}</div>
+      {showCopilotAuth && (
+        <div className="msg-actions">
+          <button type="button" className="msg-action" onClick={() => setCopilotAuthOpen(true)}>
+            <Icon name="terminal" size={13} />
+            Authorize Copilot
+          </button>
+        </div>
+      )}
     </div>
   )
 }

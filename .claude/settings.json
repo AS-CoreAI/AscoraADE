@@ -10,7 +10,13 @@
       "Read(//e/AscoraADE-website/node_modules/**)",
       "Bash(grep -o '.\\\\{120\\\\}weekly limit.\\\\{120\\\\}' /c/Users/strazewicz/.vscode/extensions/anthropic.claude-code-2.1.195-win32-x64/webview/index.js | head -20)",
       "Read(//c/Users/strazewicz/.vscode/extensions/anthropic.claude-code-2.1.195-win32-x64/webview/**)",
-      "Read(//e/AscoraADE-website/**)"
+      "Read(//e/AscoraADE-website/**)",
+      "Bash(grep -oi '[^\"]*copilot[^\"]*' /c/Users/strazewicz/AppData/Roaming/ascora-ade/ascora-store.json 2>/dev/null | head *)",
+      "Read(//c/Users/strazewicz/AppData/Roaming/ascora-ade/**)",
+      "Bash(ls electron.vite.config.* electron-builder.*)",
+      "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\('deps:', JSON.stringify\\(p.dependencies,null,1\\)\\); console.log\\('engines/electronVersion devDep electron:', p.devDependencies&&p.devDependencies.electron\\)\")",
+      "Bash(npm install *)",
+      "Bash(node -e \"const l=require\\('./package-lock.json'\\); const root=l.packages&&l.packages['']; console.log\\('root deps has cross-spawn:', !!\\(root&&root.dependencies&&root.dependencies['cross-spawn']\\), root&&root.dependencies&&root.dependencies['cross-spawn']\\); console.log\\('node_modules/cross-spawn version:', l.packages&&l.packages['node_modules/cross-spawn']&&l.packages['node_modules/cross-spawn'].version\\)\")"
     ],
     "additionalDirectories": [
       "e:\\AscoraADE-website\\lib",

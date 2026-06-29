@@ -73,7 +73,15 @@ export const IPC = {
     check: 'codex:check',
     run: 'codex:run',
     abort: 'codex:abort',
-    event: 'codex:event'
+    event: 'codex:event',
+    usage: 'codex:usage'
+  },
+  copilot: {
+    check: 'copilot:check',
+    login: 'copilot:login',
+    run: 'copilot:run',
+    abort: 'copilot:abort',
+    event: 'copilot:event'
   },
   claude: {
     check: 'claude:check',
@@ -214,7 +222,7 @@ export interface TaskRecord extends TaskSummary {
 // ---------- LLM (provider-agnostic; LM Studio, OpenRouter or CLI agents) ----------
 
 /** Which backend drives the agent chat. */
-export type LlmProvider = 'lmstudio' | 'openrouter' | 'codex' | 'claude' | 'glm'
+export type LlmProvider = 'lmstudio' | 'openrouter' | 'codex' | 'copilot' | 'claude' | 'glm'
 
 export type LlmRole = 'system' | 'user' | 'assistant' | 'tool'
 
@@ -287,6 +295,22 @@ export const CLAUDE_PERMISSION_MODES: ClaudePermissionMode[] = [
 export const CLAUDE_MODEL_PRESETS = ['default', 'opus', 'sonnet', 'haiku']
 
 /**
+ * GitHub Copilot CLI permission profile. `plan` keeps Copilot in planning mode,
+ * `workspace` allows read/write/shell tools inside the current folder, and
+ * `full` maps to Copilot's own --allow-all / --yolo behavior.
+ */
+export type CopilotPermissionMode = 'plan' | 'workspace' | 'full'
+
+/** Selectable GitHub Copilot CLI permission profiles, from most to least restrictive. */
+export const COPILOT_PERMISSION_MODES: CopilotPermissionMode[] = ['plan', 'workspace', 'full']
+
+/** Reasoning effort for GitHub Copilot CLI models (`--reasoning-effort`). */
+export type CopilotReasoning = 'low' | 'medium' | 'high' | 'xhigh' | 'max'
+
+/** Selectable Copilot reasoning levels, in ascending order of effort. */
+export const COPILOT_REASONING_LEVELS: CopilotReasoning[] = ['low', 'medium', 'high', 'xhigh', 'max']
+
+/**
  * Permission mode for the GLM / ZCode CLI (`zcode --prompt … --mode <mode>`).
  * `plan` is read-only; `yolo` auto-approves everything (the CLI's own default
  * for `--prompt`). `build`/`edit` may prompt for approval, which can stall a
@@ -318,6 +342,14 @@ export interface LlmConfig {
   codexSandbox: CodexSandbox
   /** Reasoning effort for Codex; empty → use Codex's own default. */
   codexReasoning: CodexReasoning | ''
+  /** Path to the `copilot` binary; empty -> auto-detect from PATH. */
+  copilotPath: string
+  /** Model passed to `copilot --model`; empty -> Copilot CLI's own default. */
+  copilotModel: string
+  /** Permission profile used for Copilot CLI runs. */
+  copilotPermission: CopilotPermissionMode
+  /** Reasoning effort for Copilot CLI; empty -> use Copilot's own default. */
+  copilotReasoning: CopilotReasoning | ''
   /** Path to the `claude` binary; empty → auto-detect (PATH / bundled extension). */
   claudePath: string
   /** Model passed to `claude --model`; empty → Claude Code's own default. */
@@ -345,6 +377,10 @@ export const DEFAULT_LLM_CONFIG: LlmConfig = {
   codexModel: '',
   codexSandbox: 'workspace-write',
   codexReasoning: '',
+  copilotPath: '',
+  copilotModel: '',
+  copilotPermission: 'workspace',
+  copilotReasoning: '',
   claudePath: '',
   claudeModel: '',
   claudePermission: 'acceptEdits',
@@ -489,12 +525,32 @@ export interface ClaudeRunParams {
   permission?: ClaudePermissionMode
 }
 
-/**
- * One rate-limit window from Claude's subscription usage feed
- * (`/api/oauth/usage`), normalized for display. Mirrors what Claude Code's own
- * IDE extension surfaces ("You've used 85% of your weekly limit").
- */
-export interface ClaudeUsageWindow {
+// ---------- GitHub Copilot CLI (`copilot -p --output-format=json`) ----------
+// The Copilot backend reuses Codex's normalized CodexEvent / CodexItem /
+// CodexRunResult / CodexCheckResult shapes so the renderer drives every CLI
+// backend with one code path.
+
+export interface CopilotRunParams {
+  prompt: string
+  /** Working root the spawned `copilot` runs in. */
+  cwd: string
+  /** Resume or create this Copilot CLI session (`--session-id <id>`). */
+  sessionId?: string
+  /** Overrides the configured model (`--model`); empty -> config/default. */
+  model?: string
+  /** Overrides the configured permission profile. */
+  permission?: CopilotPermissionMode
+  /** Overrides the configured reasoning effort (`--reasoning-effort`). */
+  reasoning?: CopilotReasoning | ''
+}
+
+export interface CopilotLoginResult {
+  ok: boolean
+  error?: string
+}
+
+/** One normalized account rate-limit window for the status-bar usage indicator. */
+export interface UsageLimitWindow {
   /** Display label, e.g. "session limit" / "weekly limit" / "weekly Opus limit". */
   label: string
   /** Percent of the window consumed, 0–100 (rounded). */
@@ -505,15 +561,15 @@ export interface ClaudeUsageWindow {
   resetsAt?: string
 }
 
-/** Result of probing Claude's subscription usage limits (`/api/oauth/usage`). */
-export interface ClaudeUsageResult {
+/** Result of probing an account/subscription usage-limit feed. */
+export interface UsageLimitResult {
   ok: boolean
-  /** False when no Claude Code OAuth credentials were found on disk. */
+  /** False when local credentials are missing or expired. */
   loggedIn: boolean
   /** All reported limit windows, most-consumed first. */
-  windows: ClaudeUsageWindow[]
+  windows: UsageLimitWindow[]
   /** The window worth headlining (the most-consumed one), if any. */
-  headline?: ClaudeUsageWindow
+  headline?: UsageLimitWindow
   error?: string
 }
 
@@ -522,6 +578,10 @@ export interface ClaudeUsageResult {
 // fork that runs GLM/Zhipu & other Chinese models). It reuses Codex's
 // normalized CodexEvent / CodexItem / CodexRunResult / CodexCheckResult shapes
 // so the renderer drives all CLI backends with one code path.
+
+export type ClaudeUsageWindow = UsageLimitWindow
+export type ClaudeUsageResult = UsageLimitResult
+export type CodexUsageResult = UsageLimitResult
 
 export interface GlmRunParams {
   prompt: string

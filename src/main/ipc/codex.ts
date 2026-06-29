@@ -6,10 +6,12 @@ import {
   type CodexReasoning,
   type CodexRunParams,
   type CodexRunResult,
-  type CodexSandbox
+  type CodexSandbox,
+  type CodexUsageResult
 } from '@shared/ipc'
 import { getStore } from '../store'
 import { checkCodex, killRun, runCodex } from '../codex/runner'
+import { fetchCodexUsage } from '../codex/usage'
 
 function readCodexConfig(): {
   codexPath: string
@@ -37,4 +39,6 @@ export function registerCodexHandlers(): void {
   )
 
   ipcMain.handle(IPC.codex.abort, (_e, id: string) => killRun(id))
+
+  ipcMain.handle(IPC.codex.usage, (): Promise<CodexUsageResult> => fetchCodexUsage(readCodexConfig().codexPath))
 }

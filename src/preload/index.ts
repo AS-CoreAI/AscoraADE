@@ -24,6 +24,9 @@ import {
   type CodexRunResult,
   type CodexEvent,
   type CodexEventPayload,
+  type CodexUsageResult,
+  type CopilotLoginResult,
+  type CopilotRunParams,
   type ClaudeRunParams,
   type ClaudeUsageResult,
   type GlmRunParams,
@@ -183,7 +186,28 @@ const api = {
         .invoke(IPC.codex.run, id, params)
         .finally(() => ipcRenderer.removeListener(IPC.codex.event, listener))
     },
-    abort: (id: string): Promise<void> => ipcRenderer.invoke(IPC.codex.abort, id)
+    abort: (id: string): Promise<void> => ipcRenderer.invoke(IPC.codex.abort, id),
+    /** Read the user's Codex account rate limits through the CLI app-server. */
+    usage: (): Promise<CodexUsageResult> => ipcRenderer.invoke(IPC.codex.usage)
+  },
+  copilot: {
+    check: (verifyAuth = false): Promise<CodexCheckResult> => ipcRenderer.invoke(IPC.copilot.check, verifyAuth),
+    login: (): Promise<CopilotLoginResult> => ipcRenderer.invoke(IPC.copilot.login),
+    /** Runs a GitHub Copilot CLI turn; `onEvent` fires per normalized stream event. */
+    run: (
+      id: string,
+      params: CopilotRunParams,
+      onEvent: (event: CodexEvent) => void
+    ): Promise<CodexRunResult> => {
+      const listener = (_e: IpcRendererEvent, payload: CodexEventPayload): void => {
+        if (payload.id === id) onEvent(payload.event)
+      }
+      ipcRenderer.on(IPC.copilot.event, listener)
+      return ipcRenderer
+        .invoke(IPC.copilot.run, id, params)
+        .finally(() => ipcRenderer.removeListener(IPC.copilot.event, listener))
+    },
+    abort: (id: string): Promise<void> => ipcRenderer.invoke(IPC.copilot.abort, id)
   },
   claude: {
     check: (): Promise<CodexCheckResult> => ipcRenderer.invoke(IPC.claude.check),

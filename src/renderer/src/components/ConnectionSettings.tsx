@@ -1,16 +1,26 @@
 import { useState, type JSX } from 'react'
 import { Icon } from './Icon'
-import { REASONING_LABEL, CODEX_MODEL_PRESETS, openRouterModelOptions } from './Composer'
+import {
+  REASONING_LABEL,
+  COPILOT_REASONING_LABEL,
+  CODEX_MODEL_PRESETS,
+  COPILOT_MODEL_PRESETS,
+  openRouterModelOptions
+} from './Composer'
 import { useApp } from '@/state/store'
 import {
   DEFAULT_LLM_CONFIG,
   CODEX_REASONING_LEVELS,
+  COPILOT_PERMISSION_MODES,
+  COPILOT_REASONING_LEVELS,
   CLAUDE_MODEL_PRESETS,
   CLAUDE_PERMISSION_MODES,
   GLM_MODES,
   normalizeOpenRouterApiKey,
   type CodexReasoning,
   type CodexSandbox,
+  type CopilotPermissionMode,
+  type CopilotReasoning,
   type ClaudePermissionMode,
   type GlmMode,
   type LlmProvider
@@ -27,6 +37,12 @@ const SANDBOX_LABEL: Record<CodexSandbox, string> = {
   'read-only': 'Read-only (no edits or commands)',
   'workspace-write': 'Workspace write (edit this folder, sandboxed)',
   'danger-full-access': 'Full access (no sandbox — dangerous)'
+}
+
+const COPILOT_PERMISSION_LABEL: Record<CopilotPermissionMode, string> = {
+  plan: 'Plan only (no autonomous edits)',
+  workspace: 'Workspace write (read/write/shell in this folder)',
+  full: 'Full access (--allow-all / yolo)'
 }
 
 const GLM_MODE_LABEL: Record<GlmMode, string> = {
@@ -226,6 +242,137 @@ function CodexPanel(): JSX.Element {
       <button className="btn" style={{ alignSelf: 'flex-start' }} onClick={() => void checkCodex()} disabled={checking}>
         Re-check
       </button>
+    </>
+  )
+}
+
+function CopilotPanel(): JSX.Element {
+  const copilotPath = useApp((s) => s.copilotPath)
+  const setCopilotPath = useApp((s) => s.setCopilotPath)
+  const copilotModel = useApp((s) => s.copilotModel)
+  const setCopilotModel = useApp((s) => s.setCopilotModel)
+  const copilotPermission = useApp((s) => s.copilotPermission)
+  const setCopilotPermission = useApp((s) => s.setCopilotPermission)
+  const copilotReasoning = useApp((s) => s.copilotReasoning)
+  const setCopilotReasoning = useApp((s) => s.setCopilotReasoning)
+  const check = useApp((s) => s.copilotCheck)
+  const checking = useApp((s) => s.copilotChecking)
+  const checkCopilot = useApp((s) => s.checkCopilot)
+  const setCopilotAuthOpen = useApp((s) => s.setCopilotAuthOpen)
+
+  const [path, setPath] = useState(copilotPath)
+
+  const apply = async (): Promise<void> => {
+    await setCopilotPath(path.trim())
+  }
+
+  return (
+    <>
+      <label className="field">
+        <span className="field-label">Copilot binary</span>
+        <div className="field-row">
+          <input
+            className="text-input"
+            value={path}
+            spellCheck={false}
+            placeholder="(auto-detect: PATH)"
+            onChange={(e) => setPath(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && void apply()}
+          />
+          <button className="btn" onClick={() => void apply()} disabled={checking}>
+            {checking ? 'Checking...' : 'Check'}
+          </button>
+        </div>
+        <span className="field-hint">
+          Leave blank to use `copilot` from PATH. Uses your existing GitHub Copilot login.
+        </span>
+      </label>
+
+      <label className="field">
+        <span className="field-label">Model</span>
+        <input
+          className="text-input"
+          list="copilot-model-presets"
+          value={copilotModel}
+          spellCheck={false}
+          placeholder="Copilot default or auto"
+          onChange={(e) => setCopilotModel(e.target.value)}
+        />
+        <datalist id="copilot-model-presets">
+          {COPILOT_MODEL_PRESETS.map((m) => (
+            <option key={m} value={m} />
+          ))}
+        </datalist>
+      </label>
+
+      <label className="field">
+        <span className="field-label">Permission profile</span>
+        <select
+          className="text-input"
+          value={copilotPermission}
+          onChange={(e) => setCopilotPermission(e.target.value as CopilotPermissionMode)}
+        >
+          {COPILOT_PERMISSION_MODES.map((p) => (
+            <option key={p} value={p}>
+              {COPILOT_PERMISSION_LABEL[p]}
+            </option>
+          ))}
+        </select>
+        <span className="field-hint">
+          Workspace mode runs `copilot -p` with read/write/shell tools allowed for this folder.
+        </span>
+      </label>
+
+      <label className="field">
+        <span className="field-label">Reasoning effort</span>
+        <select
+          className="text-input"
+          value={copilotReasoning}
+          onChange={(e) => setCopilotReasoning(e.target.value as CopilotReasoning | '')}
+        >
+          <option value="">Auto (Copilot default)</option>
+          {COPILOT_REASONING_LEVELS.map((r) => (
+            <option key={r} value={r}>
+              {COPILOT_REASONING_LABEL[r]}
+            </option>
+          ))}
+        </select>
+        <span className="field-hint">
+          Applies to Copilot CLI models that support `--reasoning-effort`.
+        </span>
+      </label>
+
+      <div
+        className={`conn-line ${
+          checking ? 'connecting' : !check ? 'unknown' : check.installed ? 'connected' : 'error'
+        }`}
+      >
+        {checking && 'Checking Copilot...'}
+        {!checking && !check && 'Not checked yet.'}
+        {!checking && check && !check.installed && `x ${check.error ?? 'GitHub Copilot CLI not found.'}`}
+        {!checking && check && check.installed && (
+          <>
+            ✓ {check.version ?? 'copilot'} · {check.authNote ?? 'ready'}
+            {check.path ? <div className="field-hint">{check.path}</div> : null}
+          </>
+        )}
+      </div>
+
+      {!checking && check?.installed && !check.loggedIn && (
+        <div className="field-hint">
+          If Copilot asks for authentication, sign in once from a terminal: <code>copilot login</code>.
+        </div>
+      )}
+
+      <div className="field-row" style={{ alignSelf: 'flex-start' }}>
+        <button className="btn btn-icon" onClick={() => setCopilotAuthOpen(true)}>
+          <Icon name="terminal" size={14} />
+          Authorize
+        </button>
+        <button className="btn" onClick={() => void checkCopilot()} disabled={checking}>
+          Re-check
+        </button>
+      </div>
     </>
   )
 }
@@ -560,6 +707,7 @@ export function ConnectionSettings(): JSX.Element | null {
               )}
               {openRouterReady && <option value="openrouter">OpenRouter (cloud, OpenAI-compatible)</option>}
               <option value="codex">Codex CLI (OpenAI's coding agent)</option>
+              <option value="copilot">GitHub Copilot CLI (GitHub's coding agent)</option>
               <option value="claude">Claude Code (Anthropic's coding agent)</option>
               <option value="glm">GLM / ZCode (Zhipu coding agent)</option>
             </select>
@@ -569,6 +717,8 @@ export function ConnectionSettings(): JSX.Element | null {
 
           {provider === 'codex' ? (
             <CodexPanel />
+          ) : provider === 'copilot' ? (
+            <CopilotPanel />
           ) : provider === 'claude' ? (
             <ClaudePanel />
           ) : provider === 'glm' ? (

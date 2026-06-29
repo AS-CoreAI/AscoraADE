@@ -12,11 +12,14 @@ import type {
   LlmProvider,
   CodexSandbox,
   CodexReasoning,
+  CopilotPermissionMode,
+  CopilotReasoning,
   ClaudePermissionMode,
   GlmMode,
   CodexEvent,
   CodexItem,
   CodexCheckResult,
+  CodexUsageResult,
   ClaudeUsageResult,
   AgentListResult,
   AgentReadResult,
@@ -690,6 +693,7 @@ function modelLabel(s: {
   model: string
   openRouterModel: string
   codexModel: string
+  copilotModel: string
   claudeModel: string
 }): string {
   switch (s.provider) {
@@ -699,6 +703,8 @@ function modelLabel(s: {
       return s.openRouterModel || 'openrouter/free'
     case 'codex':
       return s.codexModel || 'Codex'
+    case 'copilot':
+      return s.copilotModel || 'Copilot'
     case 'claude':
       return s.claudeModel && s.claudeModel !== 'default' ? s.claudeModel : 'Claude'
     case 'glm':
@@ -824,6 +830,9 @@ interface WorkspaceLlm {
   codexModel: string
   codexSandbox: CodexSandbox
   codexReasoning: CodexReasoning | ''
+  copilotModel: string
+  copilotPermission: CopilotPermissionMode
+  copilotReasoning: CopilotReasoning | ''
   claudeModel: string
   claudePermission: ClaudePermissionMode
   glmMode: GlmMode
@@ -837,6 +846,9 @@ function snapshotLlm(s: {
   codexModel: string
   codexSandbox: CodexSandbox
   codexReasoning: CodexReasoning | ''
+  copilotModel: string
+  copilotPermission: CopilotPermissionMode
+  copilotReasoning: CopilotReasoning | ''
   claudeModel: string
   claudePermission: ClaudePermissionMode
   glmMode: GlmMode
@@ -848,6 +860,9 @@ function snapshotLlm(s: {
     codexModel: s.codexModel,
     codexSandbox: s.codexSandbox,
     codexReasoning: s.codexReasoning,
+    copilotModel: s.copilotModel,
+    copilotPermission: s.copilotPermission,
+    copilotReasoning: s.copilotReasoning,
     claudeModel: s.claudeModel,
     claudePermission: s.claudePermission,
     glmMode: s.glmMode
@@ -929,6 +944,7 @@ interface RunState {
   thinkingTokens: number
   thinkingStartedAt: number | null
   codexThreadId: string | null
+  copilotSessionId: string | null
   claudeSessionId: string | null
   glmSessionId: string | null
 }
@@ -944,6 +960,7 @@ type RunFields = Pick<
   | 'thinkingTokens'
   | 'thinkingStartedAt'
   | 'codexThreadId'
+  | 'copilotSessionId'
   | 'claudeSessionId'
   | 'glmSessionId'
 >
@@ -1027,6 +1044,17 @@ interface AppState {
   codexThreadId: string | null
   codexCheck: CodexCheckResult | null
   codexChecking: boolean
+  /** Latest Codex account rate limits (for the status-bar indicator). */
+  codexUsage: CodexUsageResult | null
+  // GitHub Copilot CLI
+  copilotPath: string
+  copilotModel: string
+  copilotPermission: CopilotPermissionMode
+  copilotReasoning: CopilotReasoning | ''
+  copilotSessionId: string | null
+  copilotCheck: CodexCheckResult | null
+  copilotChecking: boolean
+  copilotAuthOpen: boolean
   // Claude Code
   claudePath: string
   claudeModel: string
@@ -1146,6 +1174,13 @@ interface AppState {
   setCodexSandbox: (s: CodexSandbox) => void
   setCodexReasoning: (r: CodexReasoning | '') => void
   checkCodex: () => Promise<void>
+  refreshCodexUsage: () => Promise<void>
+  setCopilotPath: (path: string) => Promise<void>
+  setCopilotModel: (m: string) => void
+  setCopilotPermission: (p: CopilotPermissionMode) => void
+  setCopilotReasoning: (r: CopilotReasoning | '') => void
+  checkCopilot: (verifyAuth?: boolean) => Promise<void>
+  setCopilotAuthOpen: (open: boolean) => void
   setClaudePath: (path: string) => Promise<void>
   setClaudeModel: (m: string) => void
   setClaudePermission: (p: ClaudePermissionMode) => void
@@ -1213,6 +1248,7 @@ export const useApp = create<AppState>((set, get) => {
     thinkingTokens: s.thinkingTokens,
     thinkingStartedAt: s.thinkingStartedAt,
     codexThreadId: s.codexThreadId,
+    copilotSessionId: s.copilotSessionId,
     claudeSessionId: s.claudeSessionId,
     glmSessionId: s.glmSessionId
   })
@@ -1286,6 +1322,7 @@ export const useApp = create<AppState>((set, get) => {
         thinkingTokens: r.thinkingTokens,
         thinkingStartedAt: r.thinkingStartedAt,
         codexThreadId: r.codexThreadId,
+        copilotSessionId: r.copilotSessionId,
         claudeSessionId: r.claudeSessionId,
         glmSessionId: r.glmSessionId
       }
@@ -1343,6 +1380,15 @@ export const useApp = create<AppState>((set, get) => {
   codexThreadId: null,
   codexCheck: null,
   codexChecking: false,
+  codexUsage: null,
+  copilotPath: DEFAULT_LLM_CONFIG.copilotPath,
+  copilotModel: DEFAULT_LLM_CONFIG.copilotModel,
+  copilotPermission: DEFAULT_LLM_CONFIG.copilotPermission,
+  copilotReasoning: DEFAULT_LLM_CONFIG.copilotReasoning,
+  copilotSessionId: null,
+  copilotCheck: null,
+  copilotChecking: false,
+  copilotAuthOpen: false,
   claudePath: DEFAULT_LLM_CONFIG.claudePath,
   claudeModel: DEFAULT_LLM_CONFIG.claudeModel,
   claudePermission: DEFAULT_LLM_CONFIG.claudePermission,
@@ -1425,6 +1471,10 @@ export const useApp = create<AppState>((set, get) => {
       codexModel: cfg.codexModel,
       codexSandbox: cfg.codexSandbox,
       codexReasoning: cfg.codexReasoning,
+      copilotPath: cfg.copilotPath,
+      copilotModel: cfg.copilotModel,
+      copilotPermission: cfg.copilotPermission,
+      copilotReasoning: cfg.copilotReasoning,
       claudePath: cfg.claudePath,
       claudeModel: cfg.claudeModel,
       claudePermission: cfg.claudePermission,
@@ -1440,6 +1490,7 @@ export const useApp = create<AppState>((set, get) => {
     } else {
       await get().refreshModels()
       if (cfg.provider === 'codex') await get().checkCodex()
+      if (cfg.provider === 'copilot') await get().checkCopilot()
       if (cfg.provider === 'claude') await get().checkClaude()
       if (cfg.provider === 'glm') await get().checkGlm()
     }
@@ -1493,6 +1544,7 @@ export const useApp = create<AppState>((set, get) => {
       activeTaskId: null,
       activeTaskTitle: '',
       codexThreadId: null,
+      copilotSessionId: null,
       claudeSessionId: null,
       glmSessionId: null,
       // Selecting a workspace makes it the active context, not an SSH host.
@@ -1523,6 +1575,7 @@ export const useApp = create<AppState>((set, get) => {
       activeTaskId: null,
       activeTaskTitle: '',
       codexThreadId: null,
+      copilotSessionId: null,
       claudeSessionId: null,
       glmSessionId: null,
       view: 'workspace'
@@ -1607,6 +1660,7 @@ export const useApp = create<AppState>((set, get) => {
         thinkingTokens: 0,
         thinkingStartedAt: null,
         codexThreadId: null,
+        copilotSessionId: null,
         claudeSessionId: null,
         glmSessionId: null,
         // Opening a task returns the active context to its workspace, not an SSH host.
@@ -1647,6 +1701,7 @@ export const useApp = create<AppState>((set, get) => {
             thinkingTokens: 0,
             thinkingStartedAt: null,
             codexThreadId: null,
+            copilotSessionId: null,
             claudeSessionId: null,
             glmSessionId: null,
             view: state.active ? 'home' : state.view
@@ -2126,6 +2181,7 @@ export const useApp = create<AppState>((set, get) => {
     await api.llm.setConfig({ provider })
     get().persistWorkspaceLlm()
     if (provider === 'codex') await get().checkCodex()
+    else if (provider === 'copilot') await get().checkCopilot()
     else if (provider === 'claude') await get().checkClaude()
     else if (provider === 'glm') await get().checkGlm()
     else await get().refreshModels()
@@ -2187,12 +2243,65 @@ export const useApp = create<AppState>((set, get) => {
     try {
       const res = await api.codex.check()
       set({ codexCheck: res, codexChecking: false })
+      if (res.installed && res.loggedIn) void get().refreshCodexUsage()
     } catch (err) {
       set({
         codexCheck: { ok: false, installed: false, error: err instanceof Error ? err.message : String(err) },
         codexChecking: false
       })
     }
+  },
+
+  async refreshCodexUsage() {
+    try {
+      const res = await api.codex.usage()
+      set({ codexUsage: res })
+    } catch (err) {
+      set({
+        codexUsage: { ok: false, loggedIn: false, windows: [], error: err instanceof Error ? err.message : String(err) }
+      })
+    }
+  },
+
+  async setCopilotPath(path) {
+    set({ copilotPath: path })
+    await api.llm.setConfig({ copilotPath: path })
+    await get().checkCopilot()
+  },
+
+  setCopilotModel(copilotModel) {
+    set({ copilotModel })
+    void api.llm.setConfig({ copilotModel })
+    get().persistWorkspaceLlm()
+  },
+
+  setCopilotPermission(copilotPermission) {
+    set({ copilotPermission })
+    void api.llm.setConfig({ copilotPermission })
+    get().persistWorkspaceLlm()
+  },
+
+  setCopilotReasoning(copilotReasoning) {
+    set({ copilotReasoning })
+    void api.llm.setConfig({ copilotReasoning })
+    get().persistWorkspaceLlm()
+  },
+
+  async checkCopilot(verifyAuth = false) {
+    set({ copilotChecking: true })
+    try {
+      const res = await api.copilot.check(verifyAuth)
+      set({ copilotCheck: res, copilotChecking: false })
+    } catch (err) {
+      set({
+        copilotCheck: { ok: false, installed: false, error: err instanceof Error ? err.message : String(err) },
+        copilotChecking: false
+      })
+    }
+  },
+
+  setCopilotAuthOpen(open) {
+    set({ copilotAuthOpen: open })
   },
 
   async setClaudePath(path) {
@@ -2284,6 +2393,9 @@ export const useApp = create<AppState>((set, get) => {
         codexModel: saved.codexModel,
         codexSandbox: saved.codexSandbox,
         codexReasoning: saved.codexReasoning,
+        copilotModel: saved.copilotModel ?? DEFAULT_LLM_CONFIG.copilotModel,
+        copilotPermission: saved.copilotPermission ?? DEFAULT_LLM_CONFIG.copilotPermission,
+        copilotReasoning: saved.copilotReasoning ?? DEFAULT_LLM_CONFIG.copilotReasoning,
         claudeModel: saved.claudeModel,
         claudePermission: saved.claudePermission,
         glmMode: saved.glmMode
@@ -2303,11 +2415,15 @@ export const useApp = create<AppState>((set, get) => {
       codexModel: get().codexModel,
       codexSandbox: get().codexSandbox,
       codexReasoning: get().codexReasoning,
+      copilotModel: get().copilotModel,
+      copilotPermission: get().copilotPermission,
+      copilotReasoning: get().copilotReasoning,
       claudeModel: get().claudeModel,
       claudePermission: get().claudePermission,
       glmMode: get().glmMode
     })
     if (provider === 'codex') await get().checkCodex()
+    else if (provider === 'copilot') await get().checkCopilot()
     else if (provider === 'claude') await get().checkClaude()
     else if (provider === 'glm') await get().checkGlm()
     else await get().refreshModels()
@@ -2320,7 +2436,11 @@ export const useApp = create<AppState>((set, get) => {
   setUsageOpen(open) {
     set({ usageOpen: open })
     // Pull the freshest numbers each time the breakdown is opened.
-    if (open) void get().refreshClaudeUsage()
+    if (open) {
+      const provider = get().provider
+      if (provider === 'codex') void get().refreshCodexUsage()
+      else if (provider === 'claude') void get().refreshClaudeUsage()
+    }
   },
 
   setThemePreference(themePreference) {
@@ -2411,6 +2531,9 @@ export const useApp = create<AppState>((set, get) => {
     const codexModel = get().codexModel
     const codexSandbox = get().codexSandbox
     const codexReasoning = get().codexReasoning
+    const copilotModel = get().copilotModel
+    const copilotPermission = get().copilotPermission
+    const copilotReasoning = get().copilotReasoning
     const claudeModel = get().claudeModel
     const claudePermission = get().claudePermission
     const glmMode = get().glmMode
@@ -2452,14 +2575,17 @@ export const useApp = create<AppState>((set, get) => {
     await get().saveTaskRun(taskId, 'running')
 
     try {
-      // ===== Codex / Claude / GLM CLI backends: delegate the turn to the agent CLI =====
+      // ===== Codex / Copilot / Claude / GLM CLI backends: delegate the turn to the agent CLI =====
       const agentProvider = provider
       // The CLI backends run on THIS machine in the workspace folder — they can't
       // target a remote host. If an SSH session is the active context, refuse
       // loudly instead of silently working on the local project.
       if (
         sshId &&
-        (agentProvider === 'codex' || agentProvider === 'claude' || agentProvider === 'glm')
+        (agentProvider === 'codex' ||
+          agentProvider === 'copilot' ||
+          agentProvider === 'claude' ||
+          agentProvider === 'glm')
       ) {
         finalStatus = 'error'
         addMsg({
@@ -2469,12 +2595,19 @@ export const useApp = create<AppState>((set, get) => {
           model: assistantModel,
           text:
             '⚠ This SSH session can only be driven by the local (LM Studio) agent. The ' +
-            "Codex / Claude / GLM CLIs run on your machine and can't target the remote host. " +
+            "Codex / Copilot / Claude / GLM CLIs run on your machine and can't target the remote host. " +
             'Switch the model to LM Studio to work over SSH, or pick a workspace to work locally.'
         })
         return
       }
-      if (agentProvider === 'codex' || agentProvider === 'claude' || agentProvider === 'glm') {
+      if (
+        agentProvider === 'codex' ||
+        agentProvider === 'copilot' ||
+        agentProvider === 'claude' ||
+        agentProvider === 'glm'
+      ) {
+        const isCodex = agentProvider === 'codex'
+        const isCopilot = agentProvider === 'copilot'
         const isClaude = agentProvider === 'claude'
         const isGlm = agentProvider === 'glm'
         let glmCaptcha: { captchaVerifyParam?: string; captchaRegion?: string } = {}
@@ -2501,10 +2634,19 @@ export const useApp = create<AppState>((set, get) => {
             return
           }
         }
+        const hadCopilotSession = Boolean(readRun(taskId)?.copilotSessionId)
+        const copilotRunSessionId = readRun(taskId)?.copilotSessionId ?? taskId
+        if (isCopilot) writeRun(taskId, { copilotSessionId: copilotRunSessionId })
         const setSession = (threadId: string): void =>
           writeRun(
             taskId,
-            isGlm ? { glmSessionId: threadId } : isClaude ? { claudeSessionId: threadId } : { codexThreadId: threadId }
+            isGlm
+              ? { glmSessionId: threadId }
+              : isClaude
+                ? { claudeSessionId: threadId }
+                : isCopilot
+                  ? { copilotSessionId: threadId }
+                  : { codexThreadId: threadId }
           )
         const runId = crypto.randomUUID()
         writeRun(taskId, { streamId: runId })
@@ -2591,6 +2733,19 @@ export const useApp = create<AppState>((set, get) => {
                 },
                 handleEvent
               )
+            : isCopilot
+              ? await api.copilot.run(
+                  runId,
+                  {
+                    prompt: skillsPrompt(hadCopilotSession),
+                    cwd: root,
+                    sessionId: copilotRunSessionId,
+                    model: copilotModel || undefined,
+                    permission: copilotPermission,
+                    reasoning: copilotReasoning || undefined
+                  },
+                  handleEvent
+                )
             : await api.codex.run(
                 runId,
                 {
@@ -2606,7 +2761,8 @@ export const useApp = create<AppState>((set, get) => {
 
         writeRun(taskId, { streamId: null, thinking: false })
         if (res.threadId) setSession(res.threadId)
-        // A Claude turn just consumed quota — refresh the usage indicator.
+        // A CLI-agent turn just consumed quota; refresh the active usage indicator.
+        if (isCodex) void get().refreshCodexUsage()
         if (isClaude) void get().refreshClaudeUsage()
 
         // Record usage for the dashboard (real token counts when reported).
@@ -2623,7 +2779,9 @@ export const useApp = create<AppState>((set, get) => {
                 ? claudeModel && claudeModel !== 'default'
                   ? claudeModel
                   : 'claude'
-                : codexModel || 'codex',
+                : isCopilot
+                  ? copilotModel || 'copilot'
+                  : codexModel || 'codex',
             inputTokens: usage.inputTokens,
             outputTokens: usage.outputTokens,
             userMessages: 1,
@@ -2639,7 +2797,7 @@ export const useApp = create<AppState>((set, get) => {
             role: 'assistant',
             kind: 'text',
             model: assistantModel,
-            text: `⚠ ${res.error ?? (isGlm ? 'ZCode run failed.' : isClaude ? 'Claude run failed.' : 'Codex run failed.')}`
+            text: `⚠ ${res.error ?? (isGlm ? 'ZCode run failed.' : isClaude ? 'Claude run failed.' : isCopilot ? 'Copilot run failed.' : 'Codex run failed.')}`
           })
         } else if (sawError) {
           finalStatus = 'error'
@@ -3038,6 +3196,7 @@ export const useApp = create<AppState>((set, get) => {
     if (streamId) {
       const p = runProviders.get(id) ?? get().provider
       if (p === 'codex') void api.codex.abort(streamId)
+      else if (p === 'copilot') void api.copilot.abort(streamId)
       else if (p === 'claude') void api.claude.abort(streamId)
       else if (p === 'glm') void api.glm.abort(streamId)
       else void api.llm.abort(streamId)
@@ -3065,6 +3224,7 @@ export const useApp = create<AppState>((set, get) => {
       thinkingTokens: 0,
       thinkingStartedAt: null,
       codexThreadId: null,
+      copilotSessionId: null,
       claudeSessionId: null,
       glmSessionId: null,
       view: 'home'

@@ -1,7 +1,13 @@
 import { useEffect, type JSX } from 'react'
 import { useApp } from '@/state/store'
 import { Icon } from './Icon'
-import { REASONING_LABEL, PERMISSION_SHORT, GLM_MODE_SHORT } from './Composer'
+import {
+  REASONING_LABEL,
+  COPILOT_REASONING_LABEL,
+  COPILOT_PERMISSION_SHORT,
+  PERMISSION_SHORT,
+  GLM_MODE_SHORT
+} from './Composer'
 
 /** Re-poll Claude usage every few minutes while it's the active backend. */
 const USAGE_POLL_MS = 3 * 60 * 1000
@@ -45,6 +51,13 @@ export function StatusBar(): JSX.Element {
   const codexChecking = useApp((s) => s.codexChecking)
   const codexSandbox = useApp((s) => s.codexSandbox)
   const codexReasoning = useApp((s) => s.codexReasoning)
+  const codexUsage = useApp((s) => s.codexUsage)
+  const refreshCodexUsage = useApp((s) => s.refreshCodexUsage)
+  const copilotModel = useApp((s) => s.copilotModel)
+  const copilotCheck = useApp((s) => s.copilotCheck)
+  const copilotChecking = useApp((s) => s.copilotChecking)
+  const copilotPermission = useApp((s) => s.copilotPermission)
+  const copilotReasoning = useApp((s) => s.copilotReasoning)
   const claudeModel = useApp((s) => s.claudeModel)
   const claudeCheck = useApp((s) => s.claudeCheck)
   const claudeChecking = useApp((s) => s.claudeChecking)
@@ -70,28 +83,30 @@ export function StatusBar(): JSX.Element {
   const isHtml = !!current && /\.html?$/i.test(current.name)
 
   const isCodex = provider === 'codex'
+  const isCopilot = provider === 'copilot'
   const isClaude = provider === 'claude'
   const isGlm = provider === 'glm'
   const isOpenRouter = provider === 'openrouter'
 
-  // Keep the Claude usage indicator fresh while Claude is the active backend.
+  // Keep the usage indicator fresh while a metered CLI backend is active.
   useEffect(() => {
-    if (!isClaude) return
-    void refreshClaudeUsage()
-    const timer = setInterval(() => void refreshClaudeUsage(), USAGE_POLL_MS)
+    if (!isCodex && !isClaude) return
+    const refresh = isCodex ? refreshCodexUsage : refreshClaudeUsage
+    void refresh()
+    const timer = setInterval(() => void refresh(), USAGE_POLL_MS)
     return () => clearInterval(timer)
-  }, [isClaude, refreshClaudeUsage])
+  }, [isCodex, isClaude, refreshCodexUsage, refreshClaudeUsage])
 
   // Headline usage window (most-consumed) for the status-bar indicator.
-  const usageWin = isClaude ? claudeUsage?.headline : undefined
+  const usageWin = isCodex ? codexUsage?.headline : isClaude ? claudeUsage?.headline : undefined
 
   // Status dot color + label for the active backend.
   let dotColor: string
   let label: string
-  if (isCodex || isClaude || isGlm) {
-    const name = isClaude ? 'Claude' : isGlm ? 'GLM' : 'Codex'
-    const check = isClaude ? claudeCheck : isGlm ? glmCheck : codexCheck
-    const checking = isClaude ? claudeChecking : isGlm ? glmChecking : codexChecking
+  if (isCodex || isCopilot || isClaude || isGlm) {
+    const name = isCopilot ? 'Copilot' : isClaude ? 'Claude' : isGlm ? 'GLM' : 'Codex'
+    const check = isCopilot ? copilotCheck : isClaude ? claudeCheck : isGlm ? glmCheck : codexCheck
+    const checking = isCopilot ? copilotChecking : isClaude ? claudeChecking : isGlm ? glmChecking : codexChecking
     if (checking) {
       dotColor = CONN_COLOR.connecting
       label = `${name}: checking…`
@@ -132,6 +147,8 @@ export function StatusBar(): JSX.Element {
     ? 'GLM (ZCode)'
     : isClaude
       ? claudeModel || 'claude (default)'
+      : isCopilot
+        ? copilotModel || 'copilot (default)'
       : isCodex
         ? codexModel || 'codex (default)'
         : isOpenRouter
@@ -140,6 +157,8 @@ export function StatusBar(): JSX.Element {
 
   const accessLabel = isCodex
     ? `sandbox: ${codexSandbox}${codexReasoning ? ` · ${REASONING_LABEL[codexReasoning]}` : ''}`
+    : isCopilot
+      ? `access: ${COPILOT_PERMISSION_SHORT[copilotPermission]}${copilotReasoning ? ` · ${COPILOT_REASONING_LABEL[copilotReasoning]}` : ''}`
     : isClaude
       ? `access: ${PERMISSION_SHORT[claudePermission]}`
       : isGlm
