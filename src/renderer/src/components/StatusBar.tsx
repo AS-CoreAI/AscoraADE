@@ -1,11 +1,8 @@
 import { useEffect, type JSX } from 'react'
 import { useApp } from '@/state/store'
-import { api } from '@/lib/api'
 import { Icon } from './Icon'
 import { REASONING_LABEL, PERMISSION_SHORT, GLM_MODE_SHORT } from './Composer'
 
-/** Where the usage indicator sends the user ("view usage"). */
-const USAGE_PAGE = 'https://claude.ai/settings/usage'
 /** Re-poll Claude usage every few minutes while it's the active backend. */
 const USAGE_POLL_MS = 3 * 60 * 1000
 
@@ -24,7 +21,7 @@ const CONN_COLOR: Record<string, string> = {
 }
 
 /** Compact "resets in 4h" label from an ISO reset timestamp. */
-function resetLabel(iso?: string): string {
+export function resetLabel(iso?: string): string {
   if (!iso) return ''
   const ms = new Date(iso).getTime() - Date.now()
   if (!Number.isFinite(ms) || ms <= 0) return 'resets soon'
@@ -60,6 +57,7 @@ export function StatusBar(): JSX.Element {
   const openFiles = useApp((s) => s.openFiles)
   const activeFile = useApp((s) => s.activeFile)
   const setSettingsOpen = useApp((s) => s.setSettingsOpen)
+  const setUsageOpen = useApp((s) => s.setUsageOpen)
   const liveUrl = useApp((s) => s.liveUrl)
   const livePort = useApp((s) => s.livePort)
   const goLive = useApp((s) => s.goLive)
@@ -165,10 +163,10 @@ export function StatusBar(): JSX.Element {
       {usageWin && (
         <button
           className={`seg seg-btn usage-seg${usageWin.severity !== 'normal' ? ' usage-warn' : ''}`}
-          onClick={() => void api.live.openExternal(USAGE_PAGE)}
+          onClick={() => setUsageOpen(true)}
           title={`You've used ${usageWin.percent}% of your ${usageWin.label}${
             usageWin.resetsAt ? ` · ${resetLabel(usageWin.resetsAt)}` : ''
-          } — click to view usage`}
+          } — click for the breakdown`}
         >
           <Icon name="barChart" size={12} /> {usageWin.percent}% {usageWin.label}
         </button>

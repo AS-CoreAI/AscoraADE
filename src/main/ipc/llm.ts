@@ -105,6 +105,19 @@ export function registerLlmHandlers(): void {
     }
   })
 
+  // Probe LM Studio specifically (provider forced) so the renderer can tell
+  // whether the local server is up even while another backend is active. Uses a
+  // throwaway client and a short timeout so a down server fails fast.
+  ipcMain.handle(IPC.llm.checkLmStudio, async (): Promise<boolean> => {
+    const probe = new LmStudioClient({ ...readConfig(), provider: 'lmstudio' })
+    try {
+      await probe.listModels(AbortSignal.timeout(2500))
+      return true
+    } catch {
+      return false
+    }
+  })
+
   ipcMain.handle(
     IPC.llm.chat,
     async (e, id: string, params: ChatParams): Promise<ChatResult> => {

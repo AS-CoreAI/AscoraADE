@@ -1867,6 +1867,86 @@ button.changes-badge:hover {
   filter: brightness(1.15);
 }
 
+/* ---------- Claude usage modal (breakdown of subscription limits) ---------- */
+.modal-usage {
+  width: min(440px, 92%);
+}
+.usage-list {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.usage-item {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.usage-item-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+.usage-item-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  text-transform: capitalize;
+}
+.usage-item-pct {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.usage-bar {
+  height: 7px;
+  border-radius: 999px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+.usage-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+  transition: width 0.25s ease;
+}
+.usage-bar-fill.warn {
+  background: #e0a83e;
+}
+.usage-bar-fill.crit {
+  background: var(--danger);
+}
+.usage-item-reset {
+  font-size: 11.5px;
+  color: var(--text-faint);
+}
+.usage-empty {
+  font-size: 12.5px;
+  color: var(--text-faint);
+}
+.usage-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.usage-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--blue);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+.usage-link:hover {
+  text-decoration: underline;
+}
+
 /* ---------- Dockview (VS Code-style dockable panels) ---------- */
 .dock-host {
   height: 100%;

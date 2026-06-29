@@ -152,6 +152,9 @@ const api = {
     setConfig: (patch: Partial<LlmConfig>): Promise<void> =>
       ipcRenderer.invoke(IPC.llm.setConfig, patch),
     listModels: (): Promise<ListModelsResult> => ipcRenderer.invoke(IPC.llm.listModels),
+    /** Probe whether the local LM Studio server is reachable, regardless of the
+     *  active provider — drives showing/hiding LM Studio in the backend list. */
+    checkLmStudio: (): Promise<boolean> => ipcRenderer.invoke(IPC.llm.checkLmStudio),
     /** Streams a chat completion; `onChunk` fires per content delta. */
     chat: (id: string, params: ChatParams, onChunk: (delta: string) => void): Promise<ChatResult> => {
       const listener = (_e: IpcRendererEvent, payload: ChatChunkPayload): void => {

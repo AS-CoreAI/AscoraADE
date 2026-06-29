@@ -64,6 +64,7 @@ export const IPC = {
     config: 'llm:config',
     setConfig: 'llm:setConfig',
     listModels: 'llm:listModels',
+    checkLmStudio: 'llm:checkLmStudio',
     chat: 'llm:chat',
     chunk: 'llm:chunk',
     abort: 'llm:abort'

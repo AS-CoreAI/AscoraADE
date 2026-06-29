@@ -5,6 +5,9 @@ What's new?
 - OpenRouter can now be enabled as a cloud OpenAI-compatible backend with a saved local API key, provider picker entry, model refresh, chat streaming, and OpenRouter-specific connection status.
 - OpenRouter model selection is persisted with workspace LLM settings and used consistently for agent chat, Git branch naming, Git commit message generation, and usage analytics.
 - Agent backend settings are now reachable from the left rail.
+- Agent runs can now keep progressing in the background when switching workspaces, tasks, SSH terminals, or starting a new task, then restore their live state when reopened.
+- Claude usage now opens an in-app breakdown modal from the status bar with per-window bars, reset times, refresh, and a detailed usage link.
+- LM Studio reachability is now probed in the background so provider pickers can reflect whether the local server is available even when another backend is selected.
 
 ### Fixed
 - OpenRouter API keys pasted as `Authorization:` or `Bearer ...` values are normalized before saving and sending requests.
@@ -15,7 +18,14 @@ What's new?
 - OpenRouter API key normalization is now shared between main and renderer processes (moved to `@shared/ipc.ts`), with improved parsing for `Authorization: Bearer <key>`, `Bearer <key>`, and quoted keys.
 - OpenRouter request header uses correct casing (`Authorization` instead of `authorization`).
 - Renderer normalizes and displays the cleaned API key immediately after saving.
+- Stopping a task or rejecting Ask-mode approvals now only affects the targeted run instead of any other task that is still running.
+- Deleting a running task now stops that run, removes its live snapshot, and prevents a late save from restoring the deleted task.
+- Agent runs now keep the provider, model, permission mode, workspace, and SSH context captured at submit time so later UI switches do not change an in-flight task.
+- Failed model refreshes now clear stale model lists and update LM Studio availability instead of showing models from a previous backend.
 
+### Changed
+- LM Studio is shown in backend pickers only while it is reachable or already selected, and OpenRouter setup controls only appear when OpenRouter is active.
+- **Version bumped to 1.1** in the About menu (left rail).
 
 ## Ascora ADE 1.0.0 — Initial release 28.06.2026
 

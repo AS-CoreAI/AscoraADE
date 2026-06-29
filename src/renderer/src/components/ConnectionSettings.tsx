@@ -530,6 +530,7 @@ export function ConnectionSettings(): JSX.Element | null {
   const setOpen = useApp((s) => s.setSettingsOpen)
   const provider = useApp((s) => s.provider)
   const setProvider = useApp((s) => s.setProvider)
+  const lmStudioReachable = useApp((s) => s.lmStudioReachable)
   const openRouterReady = useApp(
     (s) => s.openRouterEnabled && s.openRouterApiKey.trim().length > 0
   )
@@ -554,7 +555,9 @@ export function ConnectionSettings(): JSX.Element | null {
               value={provider}
               onChange={(e) => void setProvider(e.target.value as LlmProvider)}
             >
-              <option value="lmstudio">LM Studio (local, OpenAI-compatible)</option>
+              {(lmStudioReachable || provider === 'lmstudio') && (
+                <option value="lmstudio">LM Studio (local, OpenAI-compatible)</option>
+              )}
               {openRouterReady && <option value="openrouter">OpenRouter (cloud, OpenAI-compatible)</option>}
               <option value="codex">Codex CLI (OpenAI's coding agent)</option>
               <option value="claude">Claude Code (Anthropic's coding agent)</option>
@@ -562,7 +565,7 @@ export function ConnectionSettings(): JSX.Element | null {
             </select>
           </label>
 
-          <OpenRouterSetup />
+          {provider === 'openrouter' && <OpenRouterSetup />}
 
           {provider === 'codex' ? (
             <CodexPanel />

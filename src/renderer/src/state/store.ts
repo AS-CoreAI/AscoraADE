@@ -362,12 +362,19 @@ function buildSystemPrompt(sshHost?: string, sshRoot?: string): string {
   ].join('\n')
 }
 
-// ---- agent-loop helpers (module scope; one task runs at a time) ----
+// ---- agent-loop helpers (module scope; tasks run concurrently) ----
 
-/** Pending Ask-mode approvals: card id → resolver. */
-const pendingApprovals = new Map<string, (approved: boolean) => void>()
-/** Set by stopStreaming to break the loop and reject pending approvals. */
-let runAborted = false
+/**
+ * Pending Ask-mode approvals: card id → its task + resolver. Tagged with the
+ * owning task so stopping one run only rejects that run's pending cards.
+ */
+const pendingApprovals = new Map<string, { taskId: string; resolve: (approved: boolean) => void }>()
+/** Task ids whose run was asked to stop; the loop checks this to bail out. */
+const abortedRuns = new Set<string>()
+/** Provider each in-flight run uses, so stopStreaming aborts on the right channel. */
+const runProviders = new Map<string, LlmProvider>()
+/** Tasks deleted mid-run, so their trailing save can't resurrect them. */
+const deletedRuns = new Set<string>()
 
 interface ParsedCall {
   id: string
@@ -901,6 +908,46 @@ function skillsToPrompt(skills: Skill[]): string {
   return `The user enabled these skills — follow them throughout this task:\n\n${body}`
 }
 
+/**
+ * The live state of a single task's agent run. For the *active* task this lives
+ * in the top-level store fields below (so the UI reads it unchanged); when the
+ * user switches away from a still-running task its snapshot is stashed in
+ * `runs` (keyed by task id) so the run keeps progressing in the background and
+ * can be restored live when the task is reopened.
+ */
+interface RunState {
+  workspaceId: string
+  workspaceName: string
+  title: string
+  /** Backend the run is using, kept for abort routing after a model switch. */
+  provider: LlmProvider
+  messages: ChatMessage[]
+  convo: LlmMessage[]
+  streaming: boolean
+  streamId: string | null
+  thinking: boolean
+  thinkingTokens: number
+  thinkingStartedAt: number | null
+  codexThreadId: string | null
+  claudeSessionId: string | null
+  glmSessionId: string | null
+}
+
+/** The subset of run fields that mirror top-level store keys of the same name. */
+type RunFields = Pick<
+  RunState,
+  | 'messages'
+  | 'convo'
+  | 'streaming'
+  | 'streamId'
+  | 'thinking'
+  | 'thinkingTokens'
+  | 'thinkingStartedAt'
+  | 'codexThreadId'
+  | 'claudeSessionId'
+  | 'glmSessionId'
+>
+
 interface AppState {
   view: View
   workspaces: Workspace[]
@@ -912,6 +959,8 @@ interface AppState {
   tasksByWorkspace: Record<string, TaskSummary[]>
   activeTaskId: string | null
   activeTaskTitle: string
+  /** Backgrounded runs (task id → live state) for tasks not currently foreground. */
+  runs: Record<string, RunState>
 
   treeRoots: TreeNode[]
   childrenByPath: Record<string, TreeNode[]>
@@ -963,6 +1012,9 @@ interface AppState {
   models: string[]
   connection: Connection
   connectionError?: string
+  /** Whether the local LM Studio server is reachable (background-probed), used
+   *  to show/hide LM Studio in the backend list independent of the active one. */
+  lmStudioReachable: boolean
   // OpenRouter
   openRouterEnabled: boolean
   openRouterApiKey: string
@@ -991,6 +1043,8 @@ interface AppState {
   glmCheck: CodexCheckResult | null
   glmChecking: boolean
   settingsOpen: boolean
+  /** Whether the Claude usage breakdown modal is open. */
+  usageOpen: boolean
   themePreference: ThemePreference
   resolvedTheme: ResolvedTheme
   /** Whether the left sidebar (rail) is collapsed out of view (persisted). */
@@ -1020,7 +1074,7 @@ interface AppState {
   reorderWorkspaces: (draggedId: string, targetId: string) => void
   openTask: (ws: Workspace, taskId: string) => Promise<void>
   deleteTask: (ws: Workspace, taskId: string) => Promise<void>
-  saveActiveTask: (status: TaskSummary['status']) => Promise<void>
+  saveTaskRun: (taskId: string, status: TaskSummary['status']) => Promise<void>
   goHome: () => void
   openAnalytics: () => void
   closeAnalytics: () => void
@@ -1105,6 +1159,7 @@ interface AppState {
   /** Load a workspace's saved backend selection and re-check the connection. */
   syncWorkspaceLlm: (workspaceId: string) => Promise<void>
   setSettingsOpen: (open: boolean) => void
+  setUsageOpen: (open: boolean) => void
   setThemePreference: (theme: ThemePreference) => void
   syncSystemTheme: () => void
   toggleSidebar: () => void
@@ -1122,11 +1177,123 @@ interface AppState {
   submitTask: (text: string) => Promise<void>
   approveTool: (id: string) => void
   rejectTool: (id: string) => void
-  stopStreaming: () => void
+  /** Stop a run; defaults to the active task when no id is given. */
+  stopStreaming: (taskId?: string) => void
   newTask: () => void
 }
 
-export const useApp = create<AppState>((set, get) => ({
+/**
+ * Background probe of the local LM Studio server so its backend option appears
+ * when the server comes up and disappears when it goes down — even while another
+ * provider is active. Skipped while LM Studio itself is selected, since
+ * refreshModels already tracks that connection and the option stays listed.
+ */
+async function probeLmStudio(): Promise<void> {
+  if (useApp.getState().provider === 'lmstudio') return
+  const reachable = await api.llm.checkLmStudio().catch(() => false)
+  if (useApp.getState().lmStudioReachable !== reachable) {
+    useApp.setState({ lmStudioReachable: reachable })
+  }
+}
+
+let lmStudioProbeTimer: ReturnType<typeof setInterval> | null = null
+
+export const useApp = create<AppState>((set, get) => {
+  /** Snapshot the foreground (active task) state as a RunState. */
+  const foregroundRun = (s: AppState): RunState => ({
+    workspaceId: s.active?.id ?? '',
+    workspaceName: s.active?.name ?? '',
+    title: s.activeTaskTitle,
+    provider: s.provider,
+    messages: s.messages,
+    convo: s.convo,
+    streaming: s.streaming,
+    streamId: s.streamId,
+    thinking: s.thinking,
+    thinkingTokens: s.thinkingTokens,
+    thinkingStartedAt: s.thinkingStartedAt,
+    codexThreadId: s.codexThreadId,
+    claudeSessionId: s.claudeSessionId,
+    glmSessionId: s.glmSessionId
+  })
+
+  /** Read a run's live state, whether it's the foreground task or backgrounded. */
+  const readRun = (taskId: string): RunState | null => {
+    const s = get()
+    return s.activeTaskId === taskId ? foregroundRun(s) : (s.runs[taskId] ?? null)
+  }
+
+  /**
+   * Patch a run's state, routing to the top-level foreground fields when it's
+   * the active task or into `runs[taskId]` when it's backgrounded. This lets the
+   * agent loop keep updating its own task even after the user switches away.
+   */
+  const writeRun = (
+    taskId: string,
+    patch: Partial<RunFields> | ((r: RunState) => Partial<RunFields>)
+  ): void =>
+    set((s) => {
+      if (s.activeTaskId === taskId) {
+        return typeof patch === 'function' ? patch(foregroundRun(s)) : patch
+      }
+      const cur = s.runs[taskId]
+      if (!cur) return {}
+      const p = typeof patch === 'function' ? patch(cur) : patch
+      return { runs: { ...s.runs, [taskId]: { ...cur, ...p } } }
+    })
+
+  /**
+   * Detach the foreground task before switching away from it: if it's still
+   * streaming, snapshot it into `runs` (so it keeps running in the background)
+   * and clear the foreground run pointers so its in-flight updates land in the
+   * snapshot, not on whatever task becomes active next. A no-op when idle.
+   */
+  const stashAndDetach = (): void =>
+    set((s) => {
+      if (!s.streaming || !s.activeTaskId || !s.active) return {}
+      return {
+        runs: { ...s.runs, [s.activeTaskId]: foregroundRun(s) },
+        activeTaskId: null,
+        activeTaskTitle: '',
+        streaming: false,
+        streamId: null,
+        thinking: false,
+        thinkingTokens: 0,
+        thinkingStartedAt: null
+      }
+    })
+
+  /**
+   * Move a backgrounded run into the foreground (e.g. reopening a task that's
+   * still running) so the UI shows it live again. Returns false when there is
+   * no live run for the task (caller falls back to loading it from disk).
+   */
+  const hydrateForeground = (taskId: string): boolean => {
+    const r = get().runs[taskId]
+    if (!r) return false
+    set((s) => {
+      const runs = { ...s.runs }
+      delete runs[taskId]
+      return {
+        runs,
+        activeTaskId: taskId,
+        activeTaskTitle: r.title,
+        messages: r.messages,
+        convo: r.convo,
+        streaming: r.streaming,
+        streamId: r.streamId,
+        thinking: r.thinking,
+        thinkingTokens: r.thinkingTokens,
+        thinkingStartedAt: r.thinkingStartedAt,
+        codexThreadId: r.codexThreadId,
+        claudeSessionId: r.claudeSessionId,
+        glmSessionId: r.glmSessionId
+      }
+    })
+    return true
+  }
+
+  return {
   view: 'home',
   workspaces: [],
   workspaceOrder: [],
@@ -1135,6 +1302,7 @@ export const useApp = create<AppState>((set, get) => ({
   tasksByWorkspace: {},
   activeTaskId: null,
   activeTaskTitle: '',
+  runs: {},
   treeRoots: [],
   childrenByPath: {},
   expanded: {},
@@ -1164,6 +1332,7 @@ export const useApp = create<AppState>((set, get) => ({
   model: '',
   models: [],
   connection: 'unknown',
+  lmStudioReachable: false,
   openRouterEnabled: DEFAULT_LLM_CONFIG.openRouterEnabled,
   openRouterApiKey: DEFAULT_LLM_CONFIG.openRouterApiKey,
   openRouterModel: DEFAULT_LLM_CONFIG.openRouterModel,
@@ -1187,6 +1356,7 @@ export const useApp = create<AppState>((set, get) => ({
   glmCheck: null,
   glmChecking: false,
   settingsOpen: false,
+  usageOpen: false,
   themePreference: 'dark',
   resolvedTheme: 'dark',
   sidebarCollapsed: false,
@@ -1273,6 +1443,9 @@ export const useApp = create<AppState>((set, get) => ({
       if (cfg.provider === 'claude') await get().checkClaude()
       if (cfg.provider === 'glm') await get().checkGlm()
     }
+    // Keep the LM Studio backend option in sync with the local server's state.
+    void probeLmStudio()
+    if (!lmStudioProbeTimer) lmStudioProbeTimer = setInterval(() => void probeLmStudio(), 5000)
   },
 
   async openFolder() {
@@ -1303,13 +1476,14 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   async openWorkspace(ws) {
-    // Don't reset a streaming conversation when the workspace is re-selected in
-    // the rail: re-selecting the active one returns to the live view; switching
-    // to another mid-stream is suppressed so the running turn isn't orphaned.
-    if (get().streaming) {
-      if (get().active?.id === ws.id) set({ view: 'workspace' })
+    // Re-selecting the workspace that's actively streaming just returns to its
+    // live view (don't blank the in-progress task). Switching to a different
+    // workspace stashes the running task to the background so it keeps going.
+    if (get().streaming && get().active?.id === ws.id) {
+      set({ view: 'workspace' })
       return
     }
+    stashAndDetach()
     await get().loadWorkspaceData(ws)
     const tasks = await api.workspace.tasks(ws.id)
     set((state) => ({
@@ -1332,6 +1506,8 @@ export const useApp = create<AppState>((set, get) => ({
   async loadSshData(id) {
     const conn = get().sshConnections.find((c) => c.id === id)
     if (!conn) return
+    // Keep any foreground run alive in the background before switching to SSH.
+    stashAndDetach()
     const placeholder = sshWorkspace(conn)
     set({
       active: placeholder,
@@ -1401,70 +1577,97 @@ export const useApp = create<AppState>((set, get) => ({
   async openTask(ws, taskId) {
     // Re-selecting the task that's already open (e.g. coming back from Analytics
     // while it's still streaming) just returns to it — never reload it from disk,
-    // which would clobber the in-flight messages/convo. Switching to a *different*
-    // task is still suppressed mid-stream to protect the running turn.
+    // which would clobber the in-flight messages/convo.
     if (get().activeTaskId === taskId) {
       set({ view: 'workspace' })
       return
     }
-    if (get().streaming) return
-    const task = await api.workspace.task(taskId)
-    if (!task || task.workspaceId !== ws.id) return
+    // Stash whatever is streaming in the foreground so it keeps running while we
+    // switch — and so its async updates land in its snapshot, not on this task.
+    stashAndDetach()
     const switchingWorkspace = get().active?.id !== ws.id
     if (switchingWorkspace) await get().loadWorkspaceData(ws)
-    set({
-      active: ws,
-      activeTaskId: task.id,
-      activeTaskTitle: task.title,
-      messages: task.messages,
-      convo: task.convo,
-      codexThreadId: null,
-      claudeSessionId: null,
-      glmSessionId: null,
-      // Opening a task returns the active context to its workspace, not an SSH host.
-      activeSsh: null,
-      view: 'workspace'
-    })
+    // If this task has a live run in the background, restore it as-is; otherwise
+    // load its persisted history from disk.
+    if (get().runs[taskId]) {
+      set({ active: ws, activeSsh: null, view: 'workspace' })
+      hydrateForeground(taskId)
+    } else {
+      const task = await api.workspace.task(taskId)
+      if (!task || task.workspaceId !== ws.id) return
+      set({
+        active: ws,
+        activeTaskId: task.id,
+        activeTaskTitle: task.title,
+        messages: task.messages,
+        convo: task.convo,
+        streaming: false,
+        streamId: null,
+        thinking: false,
+        thinkingTokens: 0,
+        thinkingStartedAt: null,
+        codexThreadId: null,
+        claudeSessionId: null,
+        glmSessionId: null,
+        // Opening a task returns the active context to its workspace, not an SSH host.
+        activeSsh: null,
+        view: 'workspace'
+      })
+    }
     // Opening a task in a different project switches to that project's model.
     if (switchingWorkspace) await get().syncWorkspaceLlm(ws.id)
   },
 
   async deleteTask(ws, taskId) {
+    const liveRun = readRun(taskId)
+    if (liveRun?.streaming) {
+      deletedRuns.add(taskId)
+      get().stopStreaming(taskId)
+    }
     await api.workspace.deleteTask(taskId)
     set((state) => {
       const tasks = state.tasksByWorkspace[ws.id] ?? []
       const nextTasks = tasks.filter((task) => task.id !== taskId)
       const next = { ...state.tasksByWorkspace, [ws.id]: nextTasks }
+      const runs = { ...state.runs }
+      delete runs[taskId]
       // If the deleted task was open, drop its draft state and return home.
       const wasActive = state.activeTaskId === taskId
       return wasActive
         ? {
             tasksByWorkspace: next,
+            runs,
             messages: [],
             convo: [],
             activeTaskId: null,
             activeTaskTitle: '',
+            streaming: false,
+            streamId: null,
+            thinking: false,
+            thinkingTokens: 0,
+            thinkingStartedAt: null,
             codexThreadId: null,
             claudeSessionId: null,
             glmSessionId: null,
             view: state.active ? 'home' : state.view
           }
-        : { tasksByWorkspace: next }
+        : { tasksByWorkspace: next, runs }
     })
   },
 
-  async saveActiveTask(status) {
-    const state = get()
-    if (!state.active || !state.activeTaskId) return
+  async saveTaskRun(taskId, status) {
+    if (deletedRuns.has(taskId)) return
+    const run = readRun(taskId)
+    if (!run || !run.workspaceId) return
     try {
       const summary = await api.workspace.saveTask({
-        id: state.activeTaskId,
-        workspaceId: state.active.id,
-        title: state.activeTaskTitle,
+        id: taskId,
+        workspaceId: run.workspaceId,
+        title: run.title,
         status,
         updatedAt: Date.now(),
-        messages: state.messages,
-        convo: state.convo
+        messages: run.messages,
+        convo: run.convo
       })
       set((current) => {
         const tasks = current.tasksByWorkspace[summary.workspaceId] ?? []
@@ -1837,10 +2040,6 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   openSshTerminal(id) {
-    if (get().streaming) {
-      if (get().activeSsh === id) set({ view: 'workspace' })
-      return
-    }
     const alreadyActive = get().activeSsh === id && isSshWorkspaceId(get().active?.id)
     set((state) => ({
       openSshTerminals: state.openSshTerminals.includes(id)
@@ -1886,20 +2085,27 @@ export const useApp = create<AppState>((set, get) => ({
   async refreshModels() {
     set({ connection: 'connecting', connectionError: undefined })
     const res = await api.llm.listModels()
+    const isOpenRouter = get().provider === 'openrouter'
     if (res.ok) {
       const models = (res.models ?? []).map((m) => m.id)
-      const isOpenRouter = get().provider === 'openrouter'
       const selected = (isOpenRouter ? get().openRouterModel : get().model) || models[0] || ''
       set(
         isOpenRouter
           ? { models, connection: 'connected', openRouterModel: selected }
-          : { models, connection: 'connected', model: selected }
+          : { models, connection: 'connected', model: selected, lmStudioReachable: true }
       )
       if (selected) {
         void api.llm.setConfig(isOpenRouter ? { openRouterModel: selected } : { model: selected })
       }
     } else {
-      set({ connection: 'error', connectionError: res.error })
+      // Drop the previous backend's model list so a failed provider never shows
+      // another's models (e.g. OpenRouter's list under a down LM Studio).
+      set({
+        connection: 'error',
+        connectionError: res.error,
+        models: [],
+        ...(isOpenRouter ? {} : { lmStudioReachable: false })
+      })
     }
   },
 
@@ -2111,6 +2317,12 @@ export const useApp = create<AppState>((set, get) => ({
     set({ settingsOpen: open })
   },
 
+  setUsageOpen(open) {
+    set({ usageOpen: open })
+    // Pull the freshest numbers each time the breakdown is opened.
+    if (open) void get().refreshClaudeUsage()
+  },
+
   setThemePreference(themePreference) {
     const resolvedTheme = applyTheme(themePreference)
     set({ themePreference, resolvedTheme })
@@ -2182,11 +2394,29 @@ export const useApp = create<AppState>((set, get) => ({
     const active = get().active
     if (!trimmed || !active || get().streaming) return
     const root = active.path
+    const workspaceId = active.id
+    const workspaceName = active.name
     const taskId = get().activeTaskId ?? crypto.randomUUID()
     const title = get().activeTaskTitle || taskTitle(trimmed)
     let finalStatus: TaskSummary['status'] = 'idle'
 
-    runAborted = false
+    abortedRuns.delete(taskId)
+    // Capture the whole backend selection up front so switching the foreground
+    // model or workspace while this run is in flight never changes it mid-task.
+    const provider = get().provider
+    const sshId = get().activeSsh
+    const mode = get().mode
+    const lmModel = get().model
+    const orModel = get().openRouterModel
+    const codexModel = get().codexModel
+    const codexSandbox = get().codexSandbox
+    const codexReasoning = get().codexReasoning
+    const claudeModel = get().claudeModel
+    const claudePermission = get().claudePermission
+    const glmMode = get().glmMode
+    const sshConn = get().sshConnections.find((c) => c.id === sshId)
+    const sshHost = sshConn ? `${sshConn.username}@${sshConn.host}` : undefined
+    runProviders.set(taskId, provider)
     // Model name stamped on this turn's assistant messages (captured now so a
     // later model switch leaves these messages labelled with their real model).
     const assistantModel = modelLabel(get())
@@ -2195,12 +2425,18 @@ export const useApp = create<AppState>((set, get) => ({
     const skillsBlock = skillsToPrompt(get().skills)
     // Cumulative streamed output length → live token estimate for the Thinking… badge.
     let streamedChars = 0
+    const aborted = (): boolean => abortedRuns.has(taskId)
+    // Every run-state write routes to THIS task — whether it's the foreground
+    // task or stashed in the background — so the loop keeps updating its own
+    // task even after the user switches workspace and starts another.
     const patch = (id: string, p: Partial<ChatMessage>): void =>
-      set((s) => ({ messages: s.messages.map((m) => (m.id === id ? { ...m, ...p } : m)) }))
-    const addMsg = (m: ChatMessage): void => set((s) => ({ messages: [...s.messages, m] }))
+      writeRun(taskId, (r) => ({ messages: r.messages.map((m) => (m.id === id ? { ...m, ...p } : m)) }))
+    const addMsg = (m: ChatMessage): void =>
+      writeRun(taskId, (r) => ({ messages: [...r.messages, m] }))
     const removeMsg = (id: string): void =>
-      set((s) => ({ messages: s.messages.filter((m) => m.id !== id) }))
-    const pushConvo = (m: LlmMessage): void => set((s) => ({ convo: [...s.convo, m] }))
+      writeRun(taskId, (r) => ({ messages: r.messages.filter((m) => m.id !== id) }))
+    const pushConvo = (m: LlmMessage): void =>
+      writeRun(taskId, (r) => ({ convo: [...r.convo, m] }))
 
     set((s) => ({
       view: 'workspace',
@@ -2213,16 +2449,16 @@ export const useApp = create<AppState>((set, get) => ({
       messages: [...s.messages, { id: crypto.randomUUID(), role: 'user', kind: 'text', text: trimmed }],
       convo: [...s.convo, { role: 'user', content: trimmed }]
     }))
-    await get().saveActiveTask('running')
+    await get().saveTaskRun(taskId, 'running')
 
     try {
       // ===== Codex / Claude / GLM CLI backends: delegate the turn to the agent CLI =====
-      const agentProvider = get().provider
+      const agentProvider = provider
       // The CLI backends run on THIS machine in the workspace folder — they can't
       // target a remote host. If an SSH session is the active context, refuse
       // loudly instead of silently working on the local project.
       if (
-        get().activeSsh &&
+        sshId &&
         (agentProvider === 'codex' || agentProvider === 'claude' || agentProvider === 'glm')
       ) {
         finalStatus = 'error'
@@ -2266,9 +2502,12 @@ export const useApp = create<AppState>((set, get) => ({
           }
         }
         const setSession = (threadId: string): void =>
-          set(isGlm ? { glmSessionId: threadId } : isClaude ? { claudeSessionId: threadId } : { codexThreadId: threadId })
+          writeRun(
+            taskId,
+            isGlm ? { glmSessionId: threadId } : isClaude ? { claudeSessionId: threadId } : { codexThreadId: threadId }
+          )
         const runId = crypto.randomUUID()
-        set({ streamId: runId })
+        writeRun(taskId, { streamId: runId })
         const itemCards = new Map<string, string>() // agent item id → chat card id
         const itemChars = new Map<string, number>() // agent item id → chars already counted
         let sawError = false
@@ -2280,11 +2519,11 @@ export const useApp = create<AppState>((set, get) => ({
           if (text.length <= prev) return
           streamedChars += text.length - prev
           itemChars.set(key, text.length)
-          set({ thinkingTokens: tokensFromChars(streamedChars) })
+          writeRun(taskId, { thinkingTokens: tokensFromChars(streamedChars) })
         }
 
         const handleEvent = (event: CodexEvent): void => {
-          if (runAborted) return
+          if (aborted()) return
           if (event.kind === 'thread') {
             if (event.threadId) setSession(event.threadId)
           } else if (event.kind === 'item') {
@@ -2332,10 +2571,10 @@ export const useApp = create<AppState>((set, get) => ({
           ? await api.glm.run(
               runId,
               {
-                prompt: skillsPrompt(!!get().glmSessionId),
+                prompt: skillsPrompt(!!readRun(taskId)?.glmSessionId),
                 cwd: root,
-                sessionId: get().glmSessionId ?? undefined,
-                mode: get().glmMode,
+                sessionId: readRun(taskId)?.glmSessionId ?? undefined,
+                mode: glmMode,
                 ...glmCaptcha
               },
               handleEvent
@@ -2344,28 +2583,28 @@ export const useApp = create<AppState>((set, get) => ({
             ? await api.claude.run(
                 runId,
                 {
-                  prompt: skillsPrompt(!!get().claudeSessionId),
+                  prompt: skillsPrompt(!!readRun(taskId)?.claudeSessionId),
                   cwd: root,
-                  sessionId: get().claudeSessionId ?? undefined,
-                  model: get().claudeModel || undefined,
-                  permission: get().claudePermission
+                  sessionId: readRun(taskId)?.claudeSessionId ?? undefined,
+                  model: claudeModel || undefined,
+                  permission: claudePermission
                 },
                 handleEvent
               )
             : await api.codex.run(
                 runId,
                 {
-                  prompt: skillsPrompt(!!get().codexThreadId),
+                  prompt: skillsPrompt(!!readRun(taskId)?.codexThreadId),
                   cwd: root,
-                  threadId: get().codexThreadId ?? undefined,
-                  model: get().codexModel || undefined,
-                  sandbox: get().codexSandbox,
-                  reasoning: get().codexReasoning || undefined
+                  threadId: readRun(taskId)?.codexThreadId ?? undefined,
+                  model: codexModel || undefined,
+                  sandbox: codexSandbox,
+                  reasoning: codexReasoning || undefined
                 },
                 handleEvent
               )
 
-        set({ streamId: null, thinking: false })
+        writeRun(taskId, { streamId: null, thinking: false })
         if (res.threadId) setSession(res.threadId)
         // A Claude turn just consumed quota — refresh the usage indicator.
         if (isClaude) void get().refreshClaudeUsage()
@@ -2373,10 +2612,9 @@ export const useApp = create<AppState>((set, get) => ({
         // Record usage for the dashboard (real token counts when reported).
         {
           const usage = res.usage ?? { inputTokens: estTokens(trimmed), outputTokens: 0 }
-          const claudeModel = get().claudeModel
           void api.analytics.record({
-            workspaceId: active.id,
-            workspaceName: active.name,
+            workspaceId,
+            workspaceName,
             taskId,
             provider: agentProvider,
             model: isGlm
@@ -2385,7 +2623,7 @@ export const useApp = create<AppState>((set, get) => ({
                 ? claudeModel && claudeModel !== 'default'
                   ? claudeModel
                   : 'claude'
-                : get().codexModel || 'codex',
+                : codexModel || 'codex',
             inputTokens: usage.inputTokens,
             outputTokens: usage.outputTokens,
             userMessages: 1,
@@ -2410,32 +2648,37 @@ export const useApp = create<AppState>((set, get) => ({
       }
 
       const isOpenRouter = agentProvider === 'openrouter'
-      for (let step = 0; step < MAX_STEPS && !runAborted; step += 1) {
+      for (let step = 0; step < MAX_STEPS && !aborted(); step += 1) {
         // 1) Stream one model turn into a fresh assistant bubble.
         const replyId = crypto.randomUUID()
         addMsg({ id: replyId, role: 'assistant', kind: 'text', model: assistantModel, text: '' })
-        set({ streamId: replyId, thinking: true })
-        const sshConn = get().sshConnections.find((c) => c.id === get().activeSsh)
-        const sshHost = sshConn ? `${sshConn.username}@${sshConn.host}` : undefined
+        writeRun(taskId, { streamId: replyId, thinking: true })
         const base = buildSystemPrompt(sshHost, sshHost ? root : undefined)
         const systemPrompt = skillsBlock ? `${base}\n\n${skillsBlock}` : base
-        const messages: LlmMessage[] = [{ role: 'system', content: systemPrompt }, ...get().convo]
+        const messages: LlmMessage[] = [
+          { role: 'system', content: systemPrompt },
+          ...(readRun(taskId)?.convo ?? [])
+        ]
         const result = await api.llm.chat(
           crypto.randomUUID(),
-          { model: isOpenRouter ? get().openRouterModel : get().model, messages, tools: TOOLS },
+          { model: isOpenRouter ? orModel : lmModel, messages, tools: TOOLS },
           (delta) => {
             streamedChars += delta.length
-            set((s) => ({
+            writeRun(taskId, (r) => ({
               thinkingTokens: tokensFromChars(streamedChars),
-              messages: s.messages.map((m) => (m.id === replyId ? { ...m, text: m.text + delta } : m))
+              messages: r.messages.map((m) => (m.id === replyId ? { ...m, text: m.text + delta } : m))
             }))
           }
         )
-        set({ streamId: null, thinking: false, connection: result.ok ? 'connected' : get().connection })
+        writeRun(taskId, { streamId: null, thinking: false })
+        // The connection indicator only reflects the foreground backend.
+        if (get().activeTaskId === taskId) {
+          set({ connection: result.ok ? 'connected' : get().connection })
+        }
 
         if (!result.ok) {
           finalStatus = 'error'
-          const prev = get().messages.find((m) => m.id === replyId)?.text ?? ''
+          const prev = readRun(taskId)?.messages.find((m) => m.id === replyId)?.text ?? ''
           patch(replyId, { text: prev ? `${prev}\n\n⚠ ${result.error}` : `⚠ ${result.error}` })
           break
         }
@@ -2447,11 +2690,11 @@ export const useApp = create<AppState>((set, get) => ({
             outputTokens: estTokens(result.content)
           }
           void api.analytics.record({
-            workspaceId: active.id,
-            workspaceName: active.name,
+            workspaceId,
+            workspaceName,
             taskId,
             provider: isOpenRouter ? 'openrouter' : 'lmstudio',
-            model: isOpenRouter ? get().openRouterModel || 'openrouter/free' : get().model || 'local-model',
+            model: isOpenRouter ? orModel || 'openrouter/free' : lmModel || 'local-model',
             inputTokens: usage.inputTokens,
             outputTokens: usage.outputTokens,
             userMessages: step === 0 ? 1 : 0,
@@ -2505,7 +2748,7 @@ export const useApp = create<AppState>((set, get) => ({
 
         // 3) Execute each requested tool.
         for (const call of calls) {
-          if (runAborted) break
+          if (aborted()) break
 
           if (!isToolName(call.name)) {
             const note = `Unknown tool: ${call.name}`
@@ -2520,8 +2763,7 @@ export const useApp = create<AppState>((set, get) => ({
           const cardId = crypto.randomUUID()
           const mutating =
             call.name === 'write_file' || call.name === 'edit_file' || call.name === 'run_command'
-          // When an SSH session is the target, the tools run on the remote host.
-          const sshId = get().activeSsh
+          // The SSH target (if any) was captured for this run at submit time.
 
           // For file changes, read the current file first so the card can show a diff.
           let oldContent = ''
@@ -2546,7 +2788,7 @@ export const useApp = create<AppState>((set, get) => ({
 
           const isEdit = call.name === 'write_file' || call.name === 'edit_file'
           const stat = isEdit ? diffStat(oldContent, newContent) : null
-          const needsApproval = mutating && get().mode === 'ask'
+          const needsApproval = mutating && mode === 'ask'
           addMsg({
             id: cardId, role: 'assistant', kind: 'tool', text: '',
             tool: call.name, args: call.args,
@@ -2558,7 +2800,7 @@ export const useApp = create<AppState>((set, get) => ({
 
           if (needsApproval) {
             const approved = await new Promise<boolean>((resolve) =>
-              pendingApprovals.set(cardId, resolve)
+              pendingApprovals.set(cardId, { taskId, resolve })
             )
             pendingApprovals.delete(cardId)
             if (!approved) {
@@ -2572,7 +2814,7 @@ export const useApp = create<AppState>((set, get) => ({
             patch(cardId, { status: 'running' })
           }
 
-          if (runAborted) {
+          if (aborted()) {
             patch(cardId, { status: 'rejected' })
             break
           }
@@ -2743,9 +2985,9 @@ export const useApp = create<AppState>((set, get) => ({
         }
       }
 
-      if (!runAborted && get().convo.length > 0) {
+      if (!aborted() && (readRun(taskId)?.convo.length ?? 0) > 0) {
         // Surface a hint if we bailed out at the step cap mid-task.
-        const last = get().messages.at(-1)
+        const last = readRun(taskId)?.messages.at(-1)
         if (last?.kind === 'tool') {
           addMsg({
             id: crypto.randomUUID(), role: 'assistant', kind: 'text', model: assistantModel,
@@ -2754,54 +2996,79 @@ export const useApp = create<AppState>((set, get) => ({
         }
       }
     } finally {
-      set({ streaming: false, streamId: null, thinking: false, thinkingStartedAt: null })
-      await get().saveActiveTask(finalStatus)
+      writeRun(taskId, { streaming: false, streamId: null, thinking: false, thinkingStartedAt: null })
+      await get().saveTaskRun(taskId, finalStatus)
+      abortedRuns.delete(taskId)
+      runProviders.delete(taskId)
+      deletedRuns.delete(taskId)
+      // A finished background run no longer needs its snapshot; reopening it
+      // loads the freshly-saved history from disk.
+      if (get().activeTaskId !== taskId) {
+        set((s) => {
+          const runs = { ...s.runs }
+          delete runs[taskId]
+          return { runs }
+        })
+      }
     }
   },
 
   approveTool(id) {
-    const resolve = pendingApprovals.get(id)
-    if (resolve) {
+    const entry = pendingApprovals.get(id)
+    if (entry) {
       pendingApprovals.delete(id)
-      resolve(true)
+      entry.resolve(true)
     }
   },
 
   rejectTool(id) {
-    const resolve = pendingApprovals.get(id)
-    if (resolve) {
+    const entry = pendingApprovals.get(id)
+    if (entry) {
       pendingApprovals.delete(id)
-      resolve(false)
+      entry.resolve(false)
     }
   },
 
-  stopStreaming() {
-    runAborted = true
-    set({ thinking: false })
-    const id = get().streamId
-    if (id) {
-      const p = get().provider
-      if (p === 'codex') void api.codex.abort(id)
-      else if (p === 'claude') void api.claude.abort(id)
-      else if (p === 'glm') void api.glm.abort(id)
-      else void api.llm.abort(id)
+  stopStreaming(taskId) {
+    const id = taskId ?? get().activeTaskId
+    if (!id) return
+    abortedRuns.add(id)
+    writeRun(id, { thinking: false })
+    const streamId = readRun(id)?.streamId
+    if (streamId) {
+      const p = runProviders.get(id) ?? get().provider
+      if (p === 'codex') void api.codex.abort(streamId)
+      else if (p === 'claude') void api.claude.abort(streamId)
+      else if (p === 'glm') void api.glm.abort(streamId)
+      else void api.llm.abort(streamId)
     }
-    for (const [cardId, resolve] of pendingApprovals) {
-      pendingApprovals.delete(cardId)
-      resolve(false)
+    // Reject only this run's pending Ask-mode approvals.
+    for (const [cardId, entry] of pendingApprovals) {
+      if (entry.taskId === id) {
+        pendingApprovals.delete(cardId)
+        entry.resolve(false)
+      }
     }
   },
 
   newTask() {
+    // Keep any running task alive in the background, then open a blank composer.
+    stashAndDetach()
     set({
       messages: [],
       convo: [],
       activeTaskId: null,
       activeTaskTitle: '',
+      streaming: false,
+      streamId: null,
+      thinking: false,
+      thinkingTokens: 0,
+      thinkingStartedAt: null,
       codexThreadId: null,
       claudeSessionId: null,
       glmSessionId: null,
       view: 'home'
     })
   }
-}))
+  }
+})

@@ -76,6 +76,7 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
   const model = useApp((s) => s.model)
   const models = useApp((s) => s.models)
   const setModel = useApp((s) => s.setModel)
+  const lmStudioReachable = useApp((s) => s.lmStudioReachable)
   const openRouterEnabled = useApp((s) => s.openRouterEnabled)
   const openRouterApiKey = useApp((s) => s.openRouterApiKey)
   const openRouterModel = useApp((s) => s.openRouterModel)
@@ -225,7 +226,9 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
           onChange={(e) => void setProvider(e.target.value as LlmProvider)}
           title="Agent backend"
         >
-          <option value="lmstudio">LM Studio</option>
+          {(lmStudioReachable || provider === 'lmstudio') && (
+            <option value="lmstudio">LM Studio</option>
+          )}
           {openRouterReady && <option value="openrouter">OpenRouter</option>}
           <option value="codex">Codex</option>
           <option value="claude">Claude</option>
@@ -318,7 +321,7 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
         )}
 
         {streaming ? (
-          <button className="send-btn" onClick={stopStreaming} title="Stop">
+          <button className="send-btn" onClick={() => stopStreaming()} title="Stop">
             <Icon name="maximize" size={12} />
           </button>
         ) : (
