@@ -1,3 +1,27 @@
+## Ascora ADE 1.2.0
+What's new?
+
+### Added
+- New Composer component for chat input with enhanced UI.
+- AgentChat view for interactive agent communication.
+- Copilot authentication modal and IPC support for Copilot integration.
+- Expanded global styling (styles/global.css) with new UI tweaks.
+- Updated ConnectionSettings component with additional provider options and UI improvements.
+- UsageModal enhancements for better usage analytics display.
+- Store (state/store.ts) extended with new slices for Copilot and UI state.
+- New IPC modules for Copilot handling (`src/main/ipc/copilot.ts`) and usage tracking (`src/main/codex/usage.ts`).
+
+### Fixed
+- Various UI glitches and TypeScript type issues across renderer components.
+- Corrected copy‑text shortcuts in terminals (Ctrl/Cmd+C) and right‑click behavior.
+- Fixed header casing for OpenRouter Authorization (already in 1.1.0, but reaffirmed).
+
+### Changed
+- StatusBar component updated to reflect new connection status indicators.
+- ConnectionSettings UI now dynamically shows backend availability.
+- Global CSS updated with new layout rules and theme adjustments.
+- Store logic refined for better state persistence and performance.
+
 ## Ascora ADE 1.1.0
 What's new?
 
