@@ -250,12 +250,48 @@ function formatTokenCount(n: number): string {
   return `${k < 10 ? k.toFixed(1) : Math.round(k)}k`
 }
 
+/**
+ * VS Code / Copilot–style whimsical progress verbs cycled while a Claude turn
+ * generates, in place of the static "Thinking…" label.
+ */
+const CLAUDE_STATUS_VERBS = [
+  'Unfurling',
+  'Puzzling',
+  'Incubating',
+  'Mulling',
+  'Tinkering',
+  'Crafting',
+  'Pondering',
+  'Ruminating',
+  'Percolating',
+  'Noodling',
+  'Cogitating',
+  'Marinating',
+  'Simmering',
+  'Brewing',
+  'Conjuring',
+  'Synthesizing',
+  'Wrangling',
+  'Finagling',
+  'Spelunking',
+  'Deliberating',
+  'Contemplating',
+  'Formulating',
+  'Reticulating',
+  'Distilling'
+] as const
+
+const pickStatusVerb = (): string =>
+  CLAUDE_STATUS_VERBS[Math.floor(Math.random() * CLAUDE_STATUS_VERBS.length)]
+
 /** Blinking "Thinking… (N tokens · Ms)" badge shown while a model turn generates. */
 function ThinkingIndicator(): JSX.Element | null {
   const thinking = useApp((s) => s.thinking)
   const tokens = useApp((s) => s.thinkingTokens)
   const startedAt = useApp((s) => s.thinkingStartedAt)
+  const provider = useApp((s) => s.provider)
   const [elapsed, setElapsed] = useState(0)
+  const [verb, setVerb] = useState(pickStatusVerb)
 
   useEffect(() => {
     if (!thinking || startedAt == null) return
@@ -265,11 +301,20 @@ function ThinkingIndicator(): JSX.Element | null {
     return () => window.clearInterval(timer)
   }, [thinking, startedAt])
 
+  // Rotate through VS Code–style status verbs while Claude is generating.
+  useEffect(() => {
+    if (!thinking || provider !== 'claude') return
+    setVerb(pickStatusVerb())
+    const timer = window.setInterval(() => setVerb(pickStatusVerb()), 3000)
+    return () => window.clearInterval(timer)
+  }, [thinking, provider])
+
   if (!thinking) return null
+  const label = provider === 'claude' ? `${verb}…` : 'Thinking…'
   return (
     <div className="thinking" aria-live="polite">
       <span className="thinking-dot" />
-      <span className="thinking-label">Thinking…</span>
+      <span className="thinking-label">{label}</span>
       <span className="thinking-meta">
         {formatTokenCount(tokens)} tokens{elapsed > 0 ? ` · ${elapsed}s` : ''}
       </span>

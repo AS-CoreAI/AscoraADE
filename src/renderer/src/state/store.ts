@@ -1021,8 +1021,10 @@ interface AppState {
 
   // LLM provider
   provider: LlmProvider
-  /** Per-workspace saved backend selections (workspace id → choice). */
+  /** Per-workspace saved backend selections (workspace id → choice); the default a new chat inherits. */
   workspaceLlm: Record<string, WorkspaceLlm>
+  /** Per-chat saved backend selections (task id → choice), so each chat keeps its own model/provider. */
+  taskLlm: Record<string, WorkspaceLlm>
   // LM Studio
   baseUrl: string
   model: string
@@ -1330,6 +1332,57 @@ export const useApp = create<AppState>((set, get) => {
     return true
   }
 
+  /**
+   * Apply a saved backend selection (from a workspace or a chat) to the live
+   * composer fields, push it to the LLM config, and re-check that provider's
+   * connection. A missing selection keeps the current one. Shared by
+   * syncWorkspaceLlm and openTask so workspace- and chat-scoped restores agree.
+   */
+  const applyLlm = async (saved?: WorkspaceLlm): Promise<void> => {
+    if (saved) {
+      set({
+        provider: saved.provider,
+        model: saved.model,
+        openRouterModel: saved.openRouterModel ?? DEFAULT_LLM_CONFIG.openRouterModel,
+        codexModel: saved.codexModel,
+        codexSandbox: saved.codexSandbox,
+        codexReasoning: saved.codexReasoning,
+        copilotModel: saved.copilotModel ?? DEFAULT_LLM_CONFIG.copilotModel,
+        copilotPermission: saved.copilotPermission ?? DEFAULT_LLM_CONFIG.copilotPermission,
+        copilotReasoning: saved.copilotReasoning ?? DEFAULT_LLM_CONFIG.copilotReasoning,
+        claudeModel: saved.claudeModel,
+        claudePermission: saved.claudePermission,
+        glmMode: saved.glmMode
+      })
+    }
+    const provider = get().provider
+    if (provider === 'openrouter' && (!get().openRouterEnabled || !get().openRouterApiKey.trim())) {
+      set({ provider: 'lmstudio' })
+      await api.llm.setConfig({ provider: 'lmstudio' })
+      await get().refreshModels()
+      return
+    }
+    await api.llm.setConfig({
+      provider,
+      model: get().model,
+      openRouterModel: get().openRouterModel,
+      codexModel: get().codexModel,
+      codexSandbox: get().codexSandbox,
+      codexReasoning: get().codexReasoning,
+      copilotModel: get().copilotModel,
+      copilotPermission: get().copilotPermission,
+      copilotReasoning: get().copilotReasoning,
+      claudeModel: get().claudeModel,
+      claudePermission: get().claudePermission,
+      glmMode: get().glmMode
+    })
+    if (provider === 'codex') await get().checkCodex()
+    else if (provider === 'copilot') await get().checkCopilot()
+    else if (provider === 'claude') await get().checkClaude()
+    else if (provider === 'glm') await get().checkGlm()
+    else await get().refreshModels()
+  }
+
   return {
   view: 'home',
   workspaces: [],
@@ -1365,6 +1418,7 @@ export const useApp = create<AppState>((set, get) => {
 
   provider: DEFAULT_LLM_CONFIG.provider,
   workspaceLlm: {},
+  taskLlm: {},
   baseUrl: DEFAULT_LLM_CONFIG.baseUrl,
   model: '',
   models: [],
@@ -1426,6 +1480,7 @@ export const useApp = create<AppState>((set, get) => {
       savedOrder,
       savedCollapsed,
       savedLlm,
+      savedTaskLlm,
       savedSidebar,
       savedSkills,
       savedSsh
@@ -1436,6 +1491,7 @@ export const useApp = create<AppState>((set, get) => {
         api.settings.get<string[]>('workspace.order'),
         api.settings.get<Record<string, boolean>>('workspace.collapsed'),
         api.settings.get<Record<string, WorkspaceLlm>>('workspace.llm'),
+        api.settings.get<Record<string, WorkspaceLlm>>('task.llm'),
         api.settings.get<boolean>('sidebar.collapsed'),
         api.settings.get<Skill[]>('skills'),
         api.settings.get<SshConnection[]>('ssh.connections')
@@ -1444,6 +1500,7 @@ export const useApp = create<AppState>((set, get) => {
     const collapsedWorkspaces =
       savedCollapsed && typeof savedCollapsed === 'object' ? savedCollapsed : {}
     const workspaceLlm = savedLlm && typeof savedLlm === 'object' ? savedLlm : {}
+    const taskLlm = savedTaskLlm && typeof savedTaskLlm === 'object' ? savedTaskLlm : {}
     const ordered = sortWorkspaces(workspaces, workspaceOrder)
     const themePreference = isThemePreference(savedTheme) ? savedTheme : 'dark'
     const resolvedTheme = applyTheme(themePreference)
@@ -1455,6 +1512,7 @@ export const useApp = create<AppState>((set, get) => {
       workspaceOrder,
       collapsedWorkspaces,
       workspaceLlm,
+      taskLlm,
       tasksByWorkspace: Object.fromEntries(taskLists),
       sidebarCollapsed: savedSidebar === true,
       // First run (no saved value) seeds the defaults; an empty saved array is
@@ -1668,8 +1726,11 @@ export const useApp = create<AppState>((set, get) => {
         view: 'workspace'
       })
     }
-    // Opening a task in a different project switches to that project's model.
-    if (switchingWorkspace) await get().syncWorkspaceLlm(ws.id)
+    // Restore this chat's own model/provider; fall back to the project default
+    // when the chat has no saved selection yet (e.g. older tasks).
+    const savedTaskLlm = get().taskLlm[taskId]
+    if (savedTaskLlm) await applyLlm(savedTaskLlm)
+    else if (switchingWorkspace) await get().syncWorkspaceLlm(ws.id)
   },
 
   async deleteTask(ws, taskId) {
@@ -1685,12 +1746,19 @@ export const useApp = create<AppState>((set, get) => {
       const next = { ...state.tasksByWorkspace, [ws.id]: nextTasks }
       const runs = { ...state.runs }
       delete runs[taskId]
+      // Drop the deleted chat's pinned model selection.
+      const taskLlm = { ...state.taskLlm }
+      if (taskId in taskLlm) {
+        delete taskLlm[taskId]
+        void api.settings.set('task.llm', taskLlm)
+      }
       // If the deleted task was open, drop its draft state and return home.
       const wasActive = state.activeTaskId === taskId
       return wasActive
         ? {
             tasksByWorkspace: next,
             runs,
+            taskLlm,
             messages: [],
             convo: [],
             activeTaskId: null,
@@ -1706,7 +1774,7 @@ export const useApp = create<AppState>((set, get) => {
             glmSessionId: null,
             view: state.active ? 'home' : state.view
           }
-        : { tasksByWorkspace: next, runs }
+        : { tasksByWorkspace: next, runs, taskLlm }
     })
   },
 
@@ -2374,59 +2442,26 @@ export const useApp = create<AppState>((set, get) => {
   },
 
   persistWorkspaceLlm() {
+    const snapshot = snapshotLlm(get())
     const id = get().active?.id
-    if (!id) return
-    const workspaceLlm = { ...get().workspaceLlm, [id]: snapshotLlm(get()) }
-    set({ workspaceLlm })
-    void api.settings.set('workspace.llm', workspaceLlm)
+    if (id) {
+      const workspaceLlm = { ...get().workspaceLlm, [id]: snapshot }
+      set({ workspaceLlm })
+      void api.settings.set('workspace.llm', workspaceLlm)
+    }
+    // Also pin the selection to the open chat so each chat keeps its own model.
+    const taskId = get().activeTaskId
+    if (taskId) {
+      const taskLlm = { ...get().taskLlm, [taskId]: snapshot }
+      set({ taskLlm })
+      void api.settings.set('task.llm', taskLlm)
+    }
   },
 
   async syncWorkspaceLlm(workspaceId) {
-    const saved = get().workspaceLlm[workspaceId]
     // No saved choice yet → keep the current selection (it becomes this
     // workspace's pinned choice the first time the user picks a model here).
-    if (saved) {
-      set({
-        provider: saved.provider,
-        model: saved.model,
-        openRouterModel: saved.openRouterModel ?? DEFAULT_LLM_CONFIG.openRouterModel,
-        codexModel: saved.codexModel,
-        codexSandbox: saved.codexSandbox,
-        codexReasoning: saved.codexReasoning,
-        copilotModel: saved.copilotModel ?? DEFAULT_LLM_CONFIG.copilotModel,
-        copilotPermission: saved.copilotPermission ?? DEFAULT_LLM_CONFIG.copilotPermission,
-        copilotReasoning: saved.copilotReasoning ?? DEFAULT_LLM_CONFIG.copilotReasoning,
-        claudeModel: saved.claudeModel,
-        claudePermission: saved.claudePermission,
-        glmMode: saved.glmMode
-      })
-    }
-    const provider = get().provider
-    if (provider === 'openrouter' && (!get().openRouterEnabled || !get().openRouterApiKey.trim())) {
-      set({ provider: 'lmstudio' })
-      await api.llm.setConfig({ provider: 'lmstudio' })
-      await get().refreshModels()
-      return
-    }
-    await api.llm.setConfig({
-      provider,
-      model: get().model,
-      openRouterModel: get().openRouterModel,
-      codexModel: get().codexModel,
-      codexSandbox: get().codexSandbox,
-      codexReasoning: get().codexReasoning,
-      copilotModel: get().copilotModel,
-      copilotPermission: get().copilotPermission,
-      copilotReasoning: get().copilotReasoning,
-      claudeModel: get().claudeModel,
-      claudePermission: get().claudePermission,
-      glmMode: get().glmMode
-    })
-    if (provider === 'codex') await get().checkCodex()
-    else if (provider === 'copilot') await get().checkCopilot()
-    else if (provider === 'claude') await get().checkClaude()
-    else if (provider === 'glm') await get().checkGlm()
-    else await get().refreshModels()
+    await applyLlm(get().workspaceLlm[workspaceId])
   },
 
   setSettingsOpen(open) {
@@ -2572,6 +2607,9 @@ export const useApp = create<AppState>((set, get) => {
       messages: [...s.messages, { id: crypto.randomUUID(), role: 'user', kind: 'text', text: trimmed }],
       convo: [...s.convo, { role: 'user', content: trimmed }]
     }))
+    // Pin the composer selection to this chat now that it has an id (a brand-new
+    // chat had no task to persist against until this first submit).
+    get().persistWorkspaceLlm()
     await get().saveTaskRun(taskId, 'running')
 
     try {

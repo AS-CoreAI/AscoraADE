@@ -55,6 +55,8 @@ linux:
       arch: [x64]
     - target: pacman
       arch: [x64]
+    - target: AppImage
+      arch: [x64]
 
 deb:
   artifactName: Ascora-ADE-${version}-${arch}.${ext}
@@ -63,4 +65,7 @@ rpm:
   artifactName: Ascora-ADE-${version}-${arch}.${ext}
 
 pacman:
+  artifactName: Ascora-ADE-${version}-${arch}.${ext}
+
+appImage:
   artifactName: Ascora-ADE-${version}-${arch}.${ext}
