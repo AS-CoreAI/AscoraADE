@@ -1,12 +1,22 @@
 ## Ascora ADE 1.2.0
 What's new?
 
+### Added
+- **Per-task (per-chat) model/provider pinning** — each chat/task now remembers its own model/provider selection independently of the workspace default. Opening a task restores its pinned model; new chats inherit the workspace default until the user picks a model, then that choice is pinned to that chat.
+- Task-specific model/provider is persisted per task (`task.llm` settings) and restored when opening a task, even after switching workspaces or restarting the app.
+- New task's model selection is pinned on first user message (first submit), so a brand-new chat gets its own pinned model from the first interaction.
+- Deleting a task also removes its pinned model/provider selection from settings.
+- Workspace LLM persistence (`persistWorkspaceLlm`) now also pins the current selection to the active task, so each chat keeps its own model.
+
 ### Changed
-- Included current uncommitted changes in this release (see git status):
-  - .claude/settings.json — local Claude settings updated
-  - electron-builder.yml — packaging/build configuration updated
-  - src/renderer/src/components/AgentChat.tsx — AgentChat component updates
-  - src/renderer/src/state/store.ts — store updates and new slices
+- **Simplified workspace model sync** — `syncWorkspaceLlm` now delegates to a shared `applyLlm` helper, reducing duplication and ensuring consistent provider/model/permission handling across workspaces and tasks.
+- Opening a task in a different workspace now restores that task's own pinned model/provider (falling back to the workspace default only if the task has no saved selection).
+- Deleting a running task now also removes its pinned model/provider from settings.
+- Workspace LLM persistence (`persistWorkspaceLlm`) now also pins the current selection to the active task, so each chat keeps its own model.
+
+### Fixed
+- Deleting a running task now correctly removes its pinned model/provider from settings, preventing stale selections from persisting.
+- Switching to a task in a different workspace now correctly restores that task's own model/provider instead of always switching to the workspace default.
 
 ## Ascora ADE 1.1.0
 What's new?
