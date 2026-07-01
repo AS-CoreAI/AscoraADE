@@ -1,3 +1,13 @@
+## Ascora ADE 1.2.0
+What's new?
+
+### Changed
+- Included current uncommitted changes in this release (see git status):
+  - .claude/settings.json — local Claude settings updated
+  - electron-builder.yml — packaging/build configuration updated
+  - src/renderer/src/components/AgentChat.tsx — AgentChat component updates
+  - src/renderer/src/state/store.ts — store updates and new slices
+
 ## Ascora ADE 1.1.0
 What's new?
 
