@@ -5,6 +5,7 @@ import {
   COPILOT_REASONING_LABEL,
   CODEX_MODEL_PRESETS,
   COPILOT_MODEL_PRESETS,
+  GEMINI_MODEL_PRESETS,
   openRouterModelOptions
 } from './Composer'
 import { useApp } from '@/state/store'
@@ -15,6 +16,7 @@ import {
   COPILOT_REASONING_LEVELS,
   CLAUDE_MODEL_PRESETS,
   CLAUDE_PERMISSION_MODES,
+  GEMINI_APPROVAL_MODES,
   GLM_MODES,
   normalizeOpenRouterApiKey,
   type CodexReasoning,
@@ -22,6 +24,7 @@ import {
   type CopilotPermissionMode,
   type CopilotReasoning,
   type ClaudePermissionMode,
+  type GeminiApprovalMode,
   type GlmMode,
   type LlmProvider
 } from '@shared/ipc'
@@ -43,6 +46,13 @@ const COPILOT_PERMISSION_LABEL: Record<CopilotPermissionMode, string> = {
   plan: 'Plan only (no autonomous edits)',
   workspace: 'Workspace write (read/write/shell in this folder)',
   full: 'Full access (--allow-all / yolo)'
+}
+
+const GEMINI_PERMISSION_LABEL: Record<GeminiApprovalMode, string> = {
+  plan: 'Plan only (read-only; proposes a plan)',
+  default: 'Ask (prompts for tool approval; can stall headless)',
+  auto_edit: 'Auto-edit (auto-approve edit tools)',
+  yolo: 'Full access (auto-approve everything; recommended headless)'
 }
 
 const GLM_MODE_LABEL: Record<GlmMode, string> = {
@@ -479,6 +489,115 @@ function ClaudePanel(): JSX.Element {
   )
 }
 
+function GeminiPanel(): JSX.Element {
+  const geminiPath = useApp((s) => s.geminiPath)
+  const setGeminiPath = useApp((s) => s.setGeminiPath)
+  const geminiModel = useApp((s) => s.geminiModel)
+  const setGeminiModel = useApp((s) => s.setGeminiModel)
+  const geminiPermission = useApp((s) => s.geminiPermission)
+  const setGeminiPermission = useApp((s) => s.setGeminiPermission)
+  const check = useApp((s) => s.geminiCheck)
+  const checking = useApp((s) => s.geminiChecking)
+  const checkGemini = useApp((s) => s.checkGemini)
+
+  const [path, setPath] = useState(geminiPath)
+  const apply = async (): Promise<void> => {
+    await setGeminiPath(path.trim())
+  }
+
+  return (
+    <>
+      <label className="field">
+        <span className="field-label">Gemini binary</span>
+        <div className="field-row">
+          <input
+            className="text-input"
+            value={path}
+            spellCheck={false}
+            placeholder="(auto-detect: PATH)"
+            onChange={(e) => setPath(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && void apply()}
+          />
+          <button className="btn" onClick={() => void apply()} disabled={checking}>
+            {checking ? 'Checking...' : 'Check'}
+          </button>
+        </div>
+        <span className="field-hint">
+          Leave blank to use `gemini` from PATH. Install with `npm i -g @google/gemini-cli`,
+          then run `gemini` once to sign in or set GEMINI_API_KEY.
+        </span>
+      </label>
+
+      <label className="field">
+        <span className="field-label">Model</span>
+        <input
+          className="text-input"
+          list="gemini-model-presets"
+          value={geminiModel}
+          spellCheck={false}
+          placeholder="Gemini CLI default"
+          onChange={(e) => setGeminiModel(e.target.value)}
+        />
+        <datalist id="gemini-model-presets">
+          {GEMINI_MODEL_PRESETS.map((m) => (
+            <option key={m} value={m} />
+          ))}
+        </datalist>
+      </label>
+
+      <label className="field">
+        <span className="field-label">Approval mode</span>
+        <select
+          className="text-input"
+          value={geminiPermission}
+          onChange={(e) => setGeminiPermission(e.target.value as GeminiApprovalMode)}
+        >
+          {GEMINI_APPROVAL_MODES.map((p) => (
+            <option key={p} value={p}>
+              {GEMINI_PERMISSION_LABEL[p]}
+            </option>
+          ))}
+        </select>
+        <span className="field-hint">
+          Gemini CLI runs in headless stream-json mode. Full access uses Gemini&apos;s own
+          auto-approval path so tasks do not wait for terminal prompts.
+        </span>
+      </label>
+
+      <div
+        className={`conn-line ${
+          checking ? 'connecting' : !check ? 'unknown' : check.installed ? 'connected' : 'error'
+        }`}
+      >
+        {checking && 'Checking Gemini...'}
+        {!checking && !check && 'Not checked yet.'}
+        {!checking && check && !check.installed && `✗ ${check.error ?? 'Gemini CLI not found.'}`}
+        {!checking && check && check.installed && (
+          <>
+            ✓ {check.version ?? 'gemini'} · {check.authNote ?? 'ready'}
+            {check.path ? <div className="field-hint">{check.path}</div> : null}
+          </>
+        )}
+      </div>
+
+      {!checking && check?.installed && !check.loggedIn && (
+        <div className="field-hint">
+          Sign in once from a terminal: <code>gemini</code>, or set <code>GEMINI_API_KEY</code>.
+        </div>
+      )}
+
+      <button
+        className="btn"
+        style={{ alignSelf: 'flex-start' }}
+        onClick={() => void checkGemini()}
+        disabled={checking}
+      >
+        Re-check
+      </button>
+    </>
+  )
+}
+
 function GlmPanel(): JSX.Element {
   const glmPath = useApp((s) => s.glmPath)
   const setGlmPath = useApp((s) => s.setGlmPath)
@@ -709,6 +828,7 @@ export function ConnectionSettings(): JSX.Element | null {
               <option value="codex">Codex CLI (OpenAI's coding agent)</option>
               <option value="copilot">GitHub Copilot CLI (GitHub's coding agent)</option>
               <option value="claude">Claude Code (Anthropic's coding agent)</option>
+              <option value="gemini">Gemini CLI (Google's coding agent)</option>
               <option value="glm">GLM / ZCode (Zhipu coding agent)</option>
             </select>
           </label>
@@ -721,6 +841,8 @@ export function ConnectionSettings(): JSX.Element | null {
             <CopilotPanel />
           ) : provider === 'claude' ? (
             <ClaudePanel />
+          ) : provider === 'gemini' ? (
+            <GeminiPanel />
           ) : provider === 'glm' ? (
             <GlmPanel />
           ) : provider === 'openrouter' ? (

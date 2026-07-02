@@ -16,6 +16,7 @@ const PROVIDER_LABEL: Record<string, string> = {
   openrouter: 'OpenRouter',
   codex: 'Codex',
   claude: 'Claude Code',
+  gemini: 'Gemini CLI',
   glm: 'GLM (ZCode)'
 }
 const providerLabel = (p: string): string => PROVIDER_LABEL[p] ?? p

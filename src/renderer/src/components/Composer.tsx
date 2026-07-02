@@ -1,6 +1,7 @@
-import { useRef, useState, type JSX, type KeyboardEvent } from 'react'
+import { useEffect, useRef, useState, type DragEvent, type JSX, type KeyboardEvent } from 'react'
 import { Icon } from './Icon'
 import { useApp, type AgentMode } from '@/state/store'
+import { api } from '@/lib/api'
 import {
   DEFAULT_LLM_CONFIG,
   CODEX_REASONING_LEVELS,
@@ -8,6 +9,7 @@ import {
   COPILOT_REASONING_LEVELS,
   CLAUDE_MODEL_PRESETS,
   CLAUDE_PERMISSION_MODES,
+  GEMINI_APPROVAL_MODES,
   GLM_MODES,
   type LlmProvider,
   type CodexReasoning,
@@ -15,7 +17,9 @@ import {
   type CopilotPermissionMode,
   type CopilotReasoning,
   type ClaudePermissionMode,
-  type GlmMode
+  type GeminiApprovalMode,
+  type GlmMode,
+  type AttachmentFile
 } from '@shared/ipc'
 
 const MODE_LABEL: Record<AgentMode, string> = {
@@ -53,6 +57,14 @@ export const COPILOT_PERMISSION_SHORT: Record<CopilotPermissionMode, string> = {
   full: 'Full access'
 }
 
+/** Short access labels for the Gemini CLI approval selector. */
+export const GEMINI_PERMISSION_SHORT: Record<GeminiApprovalMode, string> = {
+  plan: 'Plan only',
+  default: 'Ask',
+  auto_edit: 'Auto-edit',
+  yolo: 'Full access'
+}
+
 /**
  * Suggested Codex models (current gpt-5.x family, mirroring the Codex VS Code
  * extension's picker). An empty value lets Codex use the model from its own
@@ -68,6 +80,13 @@ export const COPILOT_MODEL_PRESETS = [
   'claude-haiku-4.5',
   'gpt-5.3-codex',
   'gemini-3.1-pro-preview'
+]
+
+export const GEMINI_MODEL_PRESETS = [
+  'gemini-3-pro-preview',
+  'gemini-3-flash-preview',
+  'gemini-2.5-pro',
+  'gemini-2.5-flash'
 ]
 
 export const REASONING_LABEL: Record<CodexReasoning, string> = {
@@ -97,8 +116,37 @@ export function openRouterModelOptions(models: string[], selectedModel: string):
     })
 }
 
+function hasDraggedFiles(dataTransfer: DataTransfer): boolean {
+  return (
+    Array.from(dataTransfer.types).includes('Files') ||
+    Array.from(dataTransfer.items).some((item) => item.kind === 'file')
+  )
+}
+
+function droppedFilePath(file: File): string {
+  try {
+    const path = api.system.filePath(file)
+    if (path) return path
+  } catch {
+    // Fall back to older Electron builds that exposed File.path directly.
+  }
+  return (file as File & { path?: string }).path ?? ''
+}
+
+function droppedFilePaths(files: FileList): string[] {
+  const direct = Array.from(files).map(droppedFilePath).filter(Boolean)
+  const fallback = api.system.lastDroppedFilePaths()
+  return [...new Set([...direct, ...fallback])]
+}
+
+function attachmentBlock(files: AttachmentFile[]): string {
+  const title = files.length === 1 ? 'Attached file:' : 'Attached files:'
+  return [title, ...files.map((file) => `- @${file.path}`)].join('\n')
+}
+
 export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.Element {
   const active = useApp((s) => s.active)
+  const activeSsh = useApp((s) => s.activeSsh)
   const provider = useApp((s) => s.provider)
   const setProvider = useApp((s) => s.setProvider)
   const model = useApp((s) => s.model)
@@ -125,6 +173,10 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
   const setClaudeModel = useApp((s) => s.setClaudeModel)
   const claudePermission = useApp((s) => s.claudePermission)
   const setClaudePermission = useApp((s) => s.setClaudePermission)
+  const geminiModel = useApp((s) => s.geminiModel)
+  const setGeminiModel = useApp((s) => s.setGeminiModel)
+  const geminiPermission = useApp((s) => s.geminiPermission)
+  const setGeminiPermission = useApp((s) => s.setGeminiPermission)
   const glmMode = useApp((s) => s.glmMode)
   const setGlmMode = useApp((s) => s.setGlmMode)
   const mode = useApp((s) => s.mode)
@@ -133,9 +185,17 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
   const stopStreaming = useApp((s) => s.stopStreaming)
   const streaming = useApp((s) => s.streaming)
   const openFolder = useApp((s) => s.openFolder)
+  const refreshDirectory = useApp((s) => s.refreshDirectory)
 
   const [text, setText] = useState('')
+  const [draggingFiles, setDraggingFiles] = useState(false)
+  const [attaching, setAttaching] = useState(false)
+  const [attachStatus, setAttachStatus] = useState<{
+    kind: 'ok' | 'error'
+    text: string
+  } | null>(null)
   const ref = useRef<HTMLTextAreaElement>(null)
+  const attachStatusTimer = useRef<number | null>(null)
 
   const openRouterReady = openRouterEnabled && openRouterApiKey.trim().length > 0
   const modelOptions =
@@ -145,12 +205,81 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
         ? models
         : [model || 'local-model']
   const canSend = text.trim().length > 0 && !!active && !streaming
+  const canAttach = !!active && !activeSsh && !attaching
 
   const grow = (): void => {
     const el = ref.current
     if (!el) return
     el.style.height = 'auto'
     el.style.height = `${Math.min(el.scrollHeight, 220)}px`
+  }
+
+  const growSoon = (): void => {
+    window.requestAnimationFrame(grow)
+  }
+
+  const showAttachStatus = (kind: 'ok' | 'error', statusText: string): void => {
+    if (attachStatusTimer.current !== null) window.clearTimeout(attachStatusTimer.current)
+    setAttachStatus({ kind, text: statusText })
+    attachStatusTimer.current = window.setTimeout(() => setAttachStatus(null), 2600)
+  }
+
+  useEffect(
+    () => () => {
+      if (attachStatusTimer.current !== null) window.clearTimeout(attachStatusTimer.current)
+    },
+    []
+  )
+
+  const insertAttachments = (files: AttachmentFile[]): void => {
+    const block = attachmentBlock(files)
+    setText((current) => {
+      const base = current.trimEnd()
+      return base ? `${base}\n\n${block}` : block
+    })
+    ref.current?.focus()
+    growSoon()
+  }
+
+  const attachFiles = async (filePaths: string[]): Promise<void> => {
+    const root = active?.path
+    const paths = [...new Set(filePaths.map((path) => path.trim()).filter(Boolean))]
+    if (paths.length === 0) {
+      showAttachStatus('error', 'Could not read file paths.')
+      return
+    }
+    if (!root) {
+      showAttachStatus('error', 'Open a folder before attaching files.')
+      return
+    }
+    if (activeSsh) {
+      showAttachStatus('error', 'Attachments are available for local workspaces.')
+      return
+    }
+
+    setAttaching(true)
+    try {
+      const result = await api.fs.importFiles(root, paths)
+      if (!result.ok) {
+        showAttachStatus('error', result.error ?? 'Failed to attach files.')
+        return
+      }
+      const files = result.files ?? []
+      if (files.length === 0) return
+      insertAttachments(files)
+      showAttachStatus('ok', `Attached ${files.length} file${files.length === 1 ? '' : 's'}.`)
+      void refreshDirectory(root)
+    } catch (err) {
+      showAttachStatus('error', err instanceof Error ? err.message : 'Failed to attach files.')
+    } finally {
+      setAttaching(false)
+    }
+  }
+
+  const openAttachmentPicker = async (): Promise<void> => {
+    if (!canAttach) return
+    const paths = await api.dialog.openFiles()
+    if (paths?.length) await attachFiles(paths)
   }
 
   const send = (): void => {
@@ -167,8 +296,34 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
     }
   }
 
+  const onDragEnter = (e: DragEvent<HTMLTextAreaElement>): void => {
+    if (!hasDraggedFiles(e.dataTransfer)) return
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'copy'
+    setDraggingFiles(true)
+  }
+
+  const onDragOver = (e: DragEvent<HTMLTextAreaElement>): void => {
+    if (!hasDraggedFiles(e.dataTransfer)) return
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'copy'
+    if (!draggingFiles) setDraggingFiles(true)
+  }
+
+  const onDragLeave = (e: DragEvent<HTMLTextAreaElement>): void => {
+    if (e.currentTarget.contains(e.relatedTarget as Node | null)) return
+    setDraggingFiles(false)
+  }
+
+  const onDrop = (e: DragEvent<HTMLTextAreaElement>): void => {
+    if (!hasDraggedFiles(e.dataTransfer)) return
+    e.preventDefault()
+    setDraggingFiles(false)
+    void attachFiles(droppedFilePaths(e.dataTransfer.files))
+  }
+
   return (
-    <div className="composer">
+    <div className={`composer${draggingFiles ? ' dragging-files' : ''}`}>
       {showFolder && (
         <button className="composer-folder" onClick={openFolder} title="Change folder">
           <Icon name="folder" size={15} />
@@ -188,13 +343,26 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
           grow()
         }}
         onKeyDown={onKeyDown}
+        onDragEnter={onDragEnter}
+        onDragOver={onDragOver}
+        onDragLeave={onDragLeave}
+        onDrop={onDrop}
         rows={1}
       />
 
       <div className="composer-toolbar">
-        <button className="composer-tool icon-only" title="Attach">
+        <button
+          type="button"
+          className="composer-tool icon-only"
+          title={activeSsh ? 'Attach is available for local workspaces' : 'Attach files'}
+          disabled={!canAttach}
+          onClick={() => void openAttachmentPicker()}
+        >
           <Icon name="plus" size={16} />
         </button>
+        {attachStatus && (
+          <span className={`composer-attach-status ${attachStatus.kind}`}>{attachStatus.text}</span>
+        )}
         {provider === 'codex' ? (
           <div className="composer-tool" title="Codex access level (sandbox)">
             <Icon name="hand" size={15} />
@@ -236,6 +404,21 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
               {CLAUDE_PERMISSION_MODES.map((p) => (
                 <option key={p} value={p}>
                   {PERMISSION_SHORT[p]}
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : provider === 'gemini' ? (
+          <div className="composer-tool" title="Gemini approval mode">
+            <Icon name="hand" size={15} />
+            <select
+              className="composer-tool-select"
+              value={geminiPermission}
+              onChange={(e) => setGeminiPermission(e.target.value as GeminiApprovalMode)}
+            >
+              {GEMINI_APPROVAL_MODES.map((p) => (
+                <option key={p} value={p}>
+                  {GEMINI_PERMISSION_SHORT[p]}
                 </option>
               ))}
             </select>
@@ -282,6 +465,7 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
           <option value="codex">Codex</option>
           <option value="copilot">GitHub Copilot</option>
           <option value="claude">Claude</option>
+          <option value="gemini">Gemini CLI</option>
           <option value="glm">GLM (ZCode)</option>
         </select>
 
@@ -363,6 +547,23 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
             ))}
             {claudeModel && !CLAUDE_MODEL_PRESETS.includes(claudeModel) && (
               <option value={claudeModel}>{claudeModel}</option>
+            )}
+          </select>
+        ) : provider === 'gemini' ? (
+          <select
+            className="composer-select"
+            value={geminiModel}
+            onChange={(e) => setGeminiModel(e.target.value)}
+            title="Gemini model"
+          >
+            <option value="">Gemini default</option>
+            {GEMINI_MODEL_PRESETS.map((m) => (
+              <option key={m} value={m}>
+                {m}
+              </option>
+            ))}
+            {geminiModel && !GEMINI_MODEL_PRESETS.includes(geminiModel) && (
+              <option value={geminiModel}>{geminiModel}</option>
             )}
           </select>
         ) : provider === 'glm' ? (

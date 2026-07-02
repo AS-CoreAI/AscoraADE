@@ -10,7 +10,14 @@ commands, and shows a diff before applying changes.
 > a local LM Studio model are wired. The agent tool-loop, terminal PTY, and Git
 > integration land in later milestones.
 
-## LM Studio integration
+## LLM & AI Integrations
+
+The environment supports multiple AI providers to power the agentic loop:
+
+- **LM Studio** (Default): Local LLM support via OpenAI-compatible API.
+- **GitHub Copilot**: Seamless integration for autocomplete and chat.
+- **Google Gemini**: High-context window support for large-scale codebase analysis.
+- **OpenAI / Anthropic**: Standard API support for GPT and Claude models.
 
 The OpenAI-compatible client lives in the **main process** (`src/main/llm/client.ts`)
 and is exposed to the renderer over IPC:
@@ -77,6 +84,6 @@ npm run typecheck   # tsc for main and renderer
 
 Local path: E:\\Ascora-ADE
 
-Note: this README entry is intended for the release/distribution branch (not the active development branch). Several integrations are intentionally not included in this release build and should be added or enabled in the main development branch or future releases. Examples of missing integrations: GitHub Copilot integration and Gemini (Gemeni) support.
+Note: this README entry is intended for the release/distribution branch (not the active development branch). Several integrations are enabled in this release build. Missing integrations should be added or enabled in the main development branch or future releases.
 
 

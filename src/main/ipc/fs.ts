@@ -1,16 +1,19 @@
 import { ipcMain, shell } from 'electron'
-import { mkdir, readdir, readFile, rename, rm, stat, unlink, writeFile } from 'node:fs/promises'
-import { join, basename, dirname, extname } from 'node:path'
+import { copyFile, mkdir, readdir, readFile, rename, rm, stat, unlink, writeFile } from 'node:fs/promises'
+import { join, basename, dirname, extname, isAbsolute, relative, resolve } from 'node:path'
 import {
   IPC,
   EXCLUDED_DIRS,
   type TreeNode,
   type FileActionResult,
-  type FileContent
+  type FileContent,
+  type AttachmentFile,
+  type AttachmentImportResult
 } from '@shared/ipc'
 
 /** Max file size we'll read into the editor (2 MB) before flagging as truncated. */
 const MAX_FILE_BYTES = 2 * 1024 * 1024
+const ATTACHMENTS_DIR = '.ascora-attachments'
 
 /**
  * Read one directory level into TreeNodes, excluding ignored dirs (spec 5.1).
@@ -96,6 +99,37 @@ function safeEntryName(name: string): string | null {
   return trimmed
 }
 
+function toWorkspacePath(path: string): string {
+  return path.replace(/\\/g, '/')
+}
+
+function isInside(parent: string, child: string): boolean {
+  const rel = relative(parent, child)
+  return rel === '' || (!!rel && !rel.startsWith('..') && !isAbsolute(rel))
+}
+
+async function pathExists(path: string): Promise<boolean> {
+  try {
+    await stat(path)
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function nextAttachmentPath(root: string, name: string): Promise<string> {
+  const dir = join(root, ATTACHMENTS_DIR)
+  await mkdir(dir, { recursive: true })
+  const safeName = safeEntryName(name) ?? 'attachment'
+  const ext = extname(safeName)
+  const stem = ext ? safeName.slice(0, -ext.length) : safeName
+  let target = join(dir, safeName)
+  for (let i = 2; await pathExists(target); i += 1) {
+    target = join(dir, `${stem}-${i}${ext}`)
+  }
+  return target
+}
+
 export function registerFsHandlers(): void {
   ipcMain.handle(IPC.fs.readTree, async (_e, dir: string): Promise<TreeNode[]> => {
     return readDir(dir)
@@ -137,6 +171,49 @@ export function registerFsHandlers(): void {
     if (!info.isDirectory()) return 'The selected path is not a file or directory.'
     return shell.openPath(targetPath)
   })
+
+  ipcMain.handle(
+    IPC.fs.importFiles,
+    async (_e, rootPath: string, filePaths: string[]): Promise<AttachmentImportResult> => {
+      try {
+        const root = resolve(rootPath)
+        const rootInfo = await stat(root)
+        if (!rootInfo.isDirectory()) return { ok: false, error: 'The workspace root is not a directory.' }
+        const files: AttachmentFile[] = []
+        const seen = new Set<string>()
+
+        for (const filePath of filePaths) {
+          const source = resolve(filePath)
+          if (seen.has(source)) continue
+          seen.add(source)
+
+          const info = await stat(source)
+          if (!info.isFile()) return { ok: false, error: `${basename(source)} is not a file.` }
+
+          if (isInside(root, source)) {
+            files.push({
+              name: basename(source),
+              path: toWorkspacePath(relative(root, source)),
+              absolutePath: source
+            })
+            continue
+          }
+
+          const target = await nextAttachmentPath(root, basename(source))
+          await copyFile(source, target)
+          files.push({
+            name: basename(target),
+            path: toWorkspacePath(relative(root, target)),
+            absolutePath: target
+          })
+        }
+
+        return { ok: true, files }
+      } catch (err) {
+        return { ok: false, error: err instanceof Error ? err.message : String(err) }
+      }
+    }
+  )
 
   ipcMain.handle(
     IPC.fs.renameFile,

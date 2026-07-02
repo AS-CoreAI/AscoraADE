@@ -8,6 +8,7 @@ import {
   type ClaudePermissionMode,
   type CopilotPermissionMode,
   type CopilotReasoning,
+  type GeminiApprovalMode,
   type CodexReasoning,
   type CodexSandbox,
   type GlmMode,
@@ -58,6 +59,10 @@ function readConfig(): LlmConfig {
     claudeModel: store.getSetting<string>('claude.model') ?? DEFAULT_LLM_CONFIG.claudeModel,
     claudePermission:
       store.getSetting<ClaudePermissionMode>('claude.permission') ?? DEFAULT_LLM_CONFIG.claudePermission,
+    geminiPath: store.getSetting<string>('gemini.path') ?? DEFAULT_LLM_CONFIG.geminiPath,
+    geminiModel: store.getSetting<string>('gemini.model') ?? DEFAULT_LLM_CONFIG.geminiModel,
+    geminiPermission:
+      store.getSetting<GeminiApprovalMode>('gemini.permission') ?? DEFAULT_LLM_CONFIG.geminiPermission,
     glmPath: store.getSetting<string>('glm.path') ?? DEFAULT_LLM_CONFIG.glmPath,
     glmMode: store.getSetting<GlmMode>('glm.mode') ?? DEFAULT_LLM_CONFIG.glmMode
   }
@@ -103,6 +108,9 @@ export function registerLlmHandlers(): void {
     if (typeof patch.claudePath === 'string') store.setSetting('claude.path', patch.claudePath.trim())
     if (typeof patch.claudeModel === 'string') store.setSetting('claude.model', patch.claudeModel.trim())
     if (typeof patch.claudePermission === 'string') store.setSetting('claude.permission', patch.claudePermission)
+    if (typeof patch.geminiPath === 'string') store.setSetting('gemini.path', patch.geminiPath.trim())
+    if (typeof patch.geminiModel === 'string') store.setSetting('gemini.model', patch.geminiModel.trim())
+    if (typeof patch.geminiPermission === 'string') store.setSetting('gemini.permission', patch.geminiPermission)
     if (typeof patch.glmPath === 'string') store.setSetting('glm.path', patch.glmPath.trim())
     if (typeof patch.glmMode === 'string') store.setSetting('glm.mode', patch.glmMode)
     getClient() // refresh the cached client with the new config

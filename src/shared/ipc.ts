@@ -14,12 +14,14 @@ export const IPC = {
     isMaximized: 'window:isMaximized'
   },
   dialog: {
-    openFolder: 'dialog:openFolder'
+    openFolder: 'dialog:openFolder',
+    openFiles: 'dialog:openFiles'
   },
   fs: {
     readTree: 'fs:readTree',
     readFile: 'fs:readFile',
     openPath: 'fs:openPath',
+    importFiles: 'fs:importFiles',
     renameFile: 'fs:renameFile',
     deleteFile: 'fs:deleteFile',
     createFile: 'fs:createFile',
@@ -89,6 +91,12 @@ export const IPC = {
     abort: 'claude:abort',
     event: 'claude:event',
     usage: 'claude:usage'
+  },
+  gemini: {
+    check: 'gemini:check',
+    run: 'gemini:run',
+    abort: 'gemini:abort',
+    event: 'gemini:event'
   },
   glm: {
     check: 'glm:check',
@@ -222,7 +230,7 @@ export interface TaskRecord extends TaskSummary {
 // ---------- LLM (provider-agnostic; LM Studio, OpenRouter or CLI agents) ----------
 
 /** Which backend drives the agent chat. */
-export type LlmProvider = 'lmstudio' | 'openrouter' | 'codex' | 'copilot' | 'claude' | 'glm'
+export type LlmProvider = 'lmstudio' | 'openrouter' | 'codex' | 'copilot' | 'claude' | 'gemini' | 'glm'
 
 export type LlmRole = 'system' | 'user' | 'assistant' | 'tool'
 
@@ -310,6 +318,12 @@ export type CopilotReasoning = 'low' | 'medium' | 'high' | 'xhigh' | 'max'
 /** Selectable Copilot reasoning levels, in ascending order of effort. */
 export const COPILOT_REASONING_LEVELS: CopilotReasoning[] = ['low', 'medium', 'high', 'xhigh', 'max']
 
+/** Gemini CLI approval mode (`gemini --approval-mode`). */
+export type GeminiApprovalMode = 'plan' | 'default' | 'auto_edit' | 'yolo'
+
+/** Selectable Gemini CLI approval modes, from most to least restrictive. */
+export const GEMINI_APPROVAL_MODES: GeminiApprovalMode[] = ['plan', 'default', 'auto_edit', 'yolo']
+
 /**
  * Permission mode for the GLM / ZCode CLI (`zcode --prompt … --mode <mode>`).
  * `plan` is read-only; `yolo` auto-approves everything (the CLI's own default
@@ -356,6 +370,12 @@ export interface LlmConfig {
   claudeModel: string
   /** Permission mode Claude Code runs under. */
   claudePermission: ClaudePermissionMode
+  /** Path to the `gemini` binary; empty -> auto-detect from PATH. */
+  geminiPath: string
+  /** Model passed to `gemini --model`; empty -> Gemini CLI's own default. */
+  geminiModel: string
+  /** Approval mode Gemini CLI runs under. */
+  geminiPermission: GeminiApprovalMode
   /**
    * Path to the ZCode install (folder, `ZCode.exe`, or `zcode.cjs`); empty →
    * auto-detect the per-user install. The bundled `zcode.cjs` is driven via
@@ -384,6 +404,9 @@ export const DEFAULT_LLM_CONFIG: LlmConfig = {
   claudePath: '',
   claudeModel: '',
   claudePermission: 'acceptEdits',
+  geminiPath: '',
+  geminiModel: '',
+  geminiPermission: 'yolo',
   glmPath: '',
   glmMode: 'yolo'
 }
@@ -547,6 +570,23 @@ export interface CopilotRunParams {
 export interface CopilotLoginResult {
   ok: boolean
   error?: string
+}
+
+// ---------- Gemini CLI (`gemini -p --output-format stream-json`) ----------
+// The Gemini backend reuses Codex's normalized CodexEvent / CodexItem /
+// CodexRunResult / CodexCheckResult shapes so the renderer drives every CLI
+// backend with one code path.
+
+export interface GeminiRunParams {
+  prompt: string
+  /** Working root the spawned `gemini` runs in. */
+  cwd: string
+  /** Resume this Gemini CLI session instead of starting fresh (`--resume`). */
+  sessionId?: string
+  /** Overrides the configured model (`--model`); empty -> config/default. */
+  model?: string
+  /** Overrides the configured approval mode (`--approval-mode`). */
+  permission?: GeminiApprovalMode
 }
 
 /** One normalized account rate-limit window for the status-bar usage indicator. */
@@ -719,6 +759,21 @@ export interface GitActionResult {
 export interface FileActionResult {
   ok: boolean
   path?: string
+  error?: string
+}
+
+export interface AttachmentFile {
+  /** Basename after import; may include a numeric suffix if a duplicate existed. */
+  name: string
+  /** Workspace-relative path using forward slashes, ready to reference in prompts. */
+  path: string
+  /** Absolute local path where the file is available to the agent. */
+  absolutePath: string
+}
+
+export interface AttachmentImportResult {
+  ok: boolean
+  files?: AttachmentFile[]
   error?: string
 }
 

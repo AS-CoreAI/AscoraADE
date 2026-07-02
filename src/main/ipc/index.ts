@@ -6,6 +6,7 @@ import { registerLlmHandlers } from './llm'
 import { registerCodexHandlers } from './codex'
 import { registerCopilotHandlers } from './copilot'
 import { registerClaudeHandlers } from './claude'
+import { registerGeminiHandlers } from './gemini'
 import { registerGlmHandlers } from './glm'
 import { registerAnalyticsHandlers } from './analytics'
 import { registerGitHandlers } from './git'
@@ -25,6 +26,7 @@ export function registerIpc(): void {
   registerCodexHandlers()
   registerCopilotHandlers()
   registerClaudeHandlers()
+  registerGeminiHandlers()
   registerGlmHandlers()
   registerAnalyticsHandlers()
   registerGitHandlers()

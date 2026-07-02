@@ -5,6 +5,7 @@ import {
   REASONING_LABEL,
   COPILOT_REASONING_LABEL,
   COPILOT_PERMISSION_SHORT,
+  GEMINI_PERMISSION_SHORT,
   PERMISSION_SHORT,
   GLM_MODE_SHORT
 } from './Composer'
@@ -64,6 +65,10 @@ export function StatusBar(): JSX.Element {
   const claudePermission = useApp((s) => s.claudePermission)
   const claudeUsage = useApp((s) => s.claudeUsage)
   const refreshClaudeUsage = useApp((s) => s.refreshClaudeUsage)
+  const geminiModel = useApp((s) => s.geminiModel)
+  const geminiCheck = useApp((s) => s.geminiCheck)
+  const geminiChecking = useApp((s) => s.geminiChecking)
+  const geminiPermission = useApp((s) => s.geminiPermission)
   const glmCheck = useApp((s) => s.glmCheck)
   const glmChecking = useApp((s) => s.glmChecking)
   const glmMode = useApp((s) => s.glmMode)
@@ -85,6 +90,7 @@ export function StatusBar(): JSX.Element {
   const isCodex = provider === 'codex'
   const isCopilot = provider === 'copilot'
   const isClaude = provider === 'claude'
+  const isGemini = provider === 'gemini'
   const isGlm = provider === 'glm'
   const isOpenRouter = provider === 'openrouter'
 
@@ -103,10 +109,26 @@ export function StatusBar(): JSX.Element {
   // Status dot color + label for the active backend.
   let dotColor: string
   let label: string
-  if (isCodex || isCopilot || isClaude || isGlm) {
-    const name = isCopilot ? 'Copilot' : isClaude ? 'Claude' : isGlm ? 'GLM' : 'Codex'
-    const check = isCopilot ? copilotCheck : isClaude ? claudeCheck : isGlm ? glmCheck : codexCheck
-    const checking = isCopilot ? copilotChecking : isClaude ? claudeChecking : isGlm ? glmChecking : codexChecking
+  if (isCodex || isCopilot || isClaude || isGemini || isGlm) {
+    const name = isCopilot ? 'Copilot' : isClaude ? 'Claude' : isGemini ? 'Gemini' : isGlm ? 'GLM' : 'Codex'
+    const check = isCopilot
+      ? copilotCheck
+      : isClaude
+        ? claudeCheck
+        : isGemini
+          ? geminiCheck
+          : isGlm
+            ? glmCheck
+            : codexCheck
+    const checking = isCopilot
+      ? copilotChecking
+      : isClaude
+        ? claudeChecking
+        : isGemini
+          ? geminiChecking
+          : isGlm
+            ? glmChecking
+            : codexChecking
     if (checking) {
       dotColor = CONN_COLOR.connecting
       label = `${name}: checking…`
@@ -116,9 +138,9 @@ export function StatusBar(): JSX.Element {
     } else if (!check.installed) {
       dotColor = CONN_COLOR.error
       label = `${name}: not found`
-    } else if (isCodex && !check.loggedIn) {
+    } else if ((isCodex || isGemini) && !check.loggedIn) {
       dotColor = CONN_COLOR.error
-      label = 'Codex: sign in needed'
+      label = `${name}: sign in needed`
     } else {
       dotColor = CONN_COLOR.connected
       label = `${name}: ready`
@@ -145,6 +167,8 @@ export function StatusBar(): JSX.Element {
 
   const modelLabel = isGlm
     ? 'GLM (ZCode)'
+    : isGemini
+      ? geminiModel || 'gemini (default)'
     : isClaude
       ? claudeModel || 'claude (default)'
       : isCopilot
@@ -161,6 +185,8 @@ export function StatusBar(): JSX.Element {
       ? `access: ${COPILOT_PERMISSION_SHORT[copilotPermission]}${copilotReasoning ? ` · ${COPILOT_REASONING_LABEL[copilotReasoning]}` : ''}`
     : isClaude
       ? `access: ${PERMISSION_SHORT[claudePermission]}`
+      : isGemini
+        ? `access: ${GEMINI_PERMISSION_SHORT[geminiPermission]}`
       : isGlm
         ? `mode: ${GLM_MODE_SHORT[glmMode]}`
         : mode === 'ask'

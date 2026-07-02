@@ -1,7 +1,8 @@
-import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
+import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron'
 import {
   IPC,
   type TreeNode,
+  type AttachmentImportResult,
   type FileContent,
   type FileActionResult,
   type LiveServerResult,
@@ -29,6 +30,7 @@ import {
   type CopilotRunParams,
   type ClaudeRunParams,
   type ClaudeUsageResult,
+  type GeminiRunParams,
   type GlmRunParams,
   type GlmCaptchaConfigResult,
   type UsageEvent,
@@ -55,6 +57,36 @@ import {
   type UpdateInfo
 } from '@shared/ipc'
 
+let lastDroppedFilePaths: string[] = []
+
+function safeFilePath(file: File): string {
+  try {
+    return webUtils.getPathForFile(file)
+  } catch {
+    return ''
+  }
+}
+
+const preloadWindow = globalThis as typeof globalThis & {
+  addEventListener?: (
+    type: string,
+    listener: (event: { dataTransfer?: { files?: ArrayLike<File> } }) => void,
+    options?: boolean
+  ) => void
+}
+
+preloadWindow.addEventListener?.('dragenter', () => {
+  lastDroppedFilePaths = []
+}, true)
+
+preloadWindow.addEventListener?.(
+  'drop',
+  (event) => {
+    lastDroppedFilePaths = Array.from(event.dataTransfer?.files ?? []).map(safeFilePath).filter(Boolean)
+  },
+  true
+)
+
 /**
  * The single, typed surface the renderer is allowed to touch. Exposed on
  * `window.ascora` via contextBridge (context isolation is on).
@@ -67,12 +99,15 @@ const api = {
     isMaximized: (): Promise<boolean> => ipcRenderer.invoke(IPC.window.isMaximized)
   },
   dialog: {
-    openFolder: (): Promise<Workspace | null> => ipcRenderer.invoke(IPC.dialog.openFolder)
+    openFolder: (): Promise<Workspace | null> => ipcRenderer.invoke(IPC.dialog.openFolder),
+    openFiles: (): Promise<string[] | null> => ipcRenderer.invoke(IPC.dialog.openFiles)
   },
   fs: {
     readTree: (dir: string): Promise<TreeNode[]> => ipcRenderer.invoke(IPC.fs.readTree, dir),
     readFile: (file: string): Promise<FileContent> => ipcRenderer.invoke(IPC.fs.readFile, file),
     openPath: (dir: string): Promise<string> => ipcRenderer.invoke(IPC.fs.openPath, dir),
+    importFiles: (root: string, filePaths: string[]): Promise<AttachmentImportResult> =>
+      ipcRenderer.invoke(IPC.fs.importFiles, root, filePaths),
     renameFile: (file: string, newName: string): Promise<FileActionResult> =>
       ipcRenderer.invoke(IPC.fs.renameFile, file, newName),
     deleteFile: (file: string): Promise<FileActionResult> =>
@@ -229,6 +264,24 @@ const api = {
     /** Read the user's Claude subscription usage limits (`/api/oauth/usage`). */
     usage: (): Promise<ClaudeUsageResult> => ipcRenderer.invoke(IPC.claude.usage)
   },
+  gemini: {
+    check: (): Promise<CodexCheckResult> => ipcRenderer.invoke(IPC.gemini.check),
+    /** Runs a Gemini CLI turn; `onEvent` fires per normalized stream event. */
+    run: (
+      id: string,
+      params: GeminiRunParams,
+      onEvent: (event: CodexEvent) => void
+    ): Promise<CodexRunResult> => {
+      const listener = (_e: IpcRendererEvent, payload: CodexEventPayload): void => {
+        if (payload.id === id) onEvent(payload.event)
+      }
+      ipcRenderer.on(IPC.gemini.event, listener)
+      return ipcRenderer
+        .invoke(IPC.gemini.run, id, params)
+        .finally(() => ipcRenderer.removeListener(IPC.gemini.event, listener))
+    },
+    abort: (id: string): Promise<void> => ipcRenderer.invoke(IPC.gemini.abort, id)
+  },
   glm: {
     check: (): Promise<CodexCheckResult> => ipcRenderer.invoke(IPC.glm.check),
     captchaConfig: (): Promise<GlmCaptchaConfigResult> => ipcRenderer.invoke(IPC.glm.captchaConfig),
@@ -328,7 +381,9 @@ const api = {
       ipcRenderer.invoke(IPC.update.openDownload, url)
   },
   system: {
-    platform: process.platform
+    platform: process.platform,
+    filePath: safeFilePath,
+    lastDroppedFilePaths: (): string[] => [...lastDroppedFilePaths]
   }
 }
 

@@ -15,4 +15,33 @@ export function registerDialogHandlers(): void {
     // Persist as a workspace so it shows up in the Workspaces rail.
     return getStore().addWorkspace(basename(dir), dir)
   })
+
+  ipcMain.handle(IPC.dialog.openFiles, async (e): Promise<string[] | null> => {
+    const win = BrowserWindow.fromWebContents(e.sender) ?? undefined
+    const result = await dialog.showOpenDialog(win!, {
+      title: 'Attach files',
+      properties: ['openFile', 'multiSelections', 'showHiddenFiles'],
+      filters: [
+        {
+          name: 'Files and images',
+          extensions: [
+            'png',
+            'jpg',
+            'jpeg',
+            'gif',
+            'webp',
+            'svg',
+            'bmp',
+            'txt',
+            'md',
+            'json',
+            'csv',
+            'pdf',
+            '*'
+          ]
+        }
+      ]
+    })
+    return result.canceled || result.filePaths.length === 0 ? null : result.filePaths
+  })
 }
