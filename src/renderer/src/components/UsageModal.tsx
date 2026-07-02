@@ -1,8 +1,9 @@
 import { type JSX } from 'react'
 import { Icon } from './Icon'
 import { resetLabel } from './StatusBar'
-import { useApp } from '@/state/store'
+import { useApp, type AppLanguage } from '@/state/store'
 import { api } from '@/lib/api'
+import { localeForLanguage, tr } from '@/language'
 import type { UsageLimitWindow } from '@shared/ipc'
 
 /** Where the "view detailed usage" link sends the user. */
@@ -15,12 +16,12 @@ function severityClass(severity: string): string {
 }
 
 /** "Resets in 5h · Jun 30, 9:00 PM" — relative window plus the local clock time. */
-function resetDetail(iso?: string): string {
+function resetDetail(iso: string | undefined, language: AppLanguage): string {
   if (!iso) return ''
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return ''
-  const rel = resetLabel(iso)
-  const abs = d.toLocaleString(undefined, {
+  const rel = resetLabel(iso, language)
+  const abs = d.toLocaleString(localeForLanguage(language), {
     month: 'short',
     day: 'numeric',
     hour: 'numeric',
@@ -30,7 +31,8 @@ function resetDetail(iso?: string): string {
 }
 
 function UsageItem({ win }: { win: UsageLimitWindow }): JSX.Element {
-  const reset = resetDetail(win.resetsAt)
+  const appLanguage = useApp((s) => s.appLanguage)
+  const reset = resetDetail(win.resetsAt, appLanguage)
   return (
     <div className="usage-item">
       <div className="usage-item-head">
@@ -60,13 +62,16 @@ export function UsageModal(): JSX.Element | null {
   const claudeUsage = useApp((s) => s.claudeUsage)
   const refreshCodex = useApp((s) => s.refreshCodexUsage)
   const refreshClaude = useApp((s) => s.refreshClaudeUsage)
+  const appLanguage = useApp((s) => s.appLanguage)
+  const t = (key: Parameters<typeof tr>[1], values?: Record<string, string | number>): string =>
+    tr(appLanguage, key, values)
 
   if (!open) return null
 
   const isCodex = provider === 'codex'
   const usage = isCodex ? codexUsage : claudeUsage
   const refresh = isCodex ? refreshCodex : refreshClaude
-  const title = isCodex ? 'Codex usage' : 'Claude usage'
+  const title = isCodex ? t('usage.codexTitle') : t('usage.claudeTitle')
   const windows = usage?.windows ?? []
 
   return (
@@ -74,7 +79,7 @@ export function UsageModal(): JSX.Element | null {
       <div className="modal modal-usage" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           {title}
-          <button className="modal-close" onClick={() => setOpen(false)} title="Close">
+          <button className="modal-close" onClick={() => setOpen(false)} title={t('common.close')}>
             <Icon name="x" size={15} />
           </button>
         </div>
@@ -89,21 +94,21 @@ export function UsageModal(): JSX.Element | null {
           ) : (
             <div className="usage-empty">
               {usage && !usage.loggedIn
-                ? `Sign in to ${isCodex ? 'Codex' : 'Claude Code'} to see your subscription usage.`
+                ? t('usage.signIn', { name: isCodex ? 'Codex' : 'Claude Code' })
                 : usage?.error
                   ? usage.error
-                  : 'No usage data reported yet.'}
+                  : t('usage.empty')}
             </div>
           )}
 
           <div className="usage-footer">
             {!isCodex && (
               <button className="usage-link" onClick={() => void api.live.openExternal(USAGE_PAGE)}>
-                <Icon name="external" size={12} /> Detailed usage
+                <Icon name="external" size={12} /> {t('usage.detailed')}
               </button>
             )}
             <button className="btn btn-icon" onClick={() => void refresh()}>
-              <Icon name="refresh" size={13} /> Refresh
+              <Icon name="refresh" size={13} /> {t('common.refresh')}
             </button>
           </div>
         </div>

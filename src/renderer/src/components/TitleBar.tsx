@@ -2,6 +2,7 @@ import { useEffect, useState, type JSX } from 'react'
 import { Icon } from './Icon'
 import { api } from '@/lib/api'
 import { useApp } from '@/state/store'
+import { tr } from '@/language'
 import type { UpdateInfo } from '@shared/ipc'
 
 /** Re-check the release feed every 4 hours while the app stays open. */
@@ -11,6 +12,9 @@ export function TitleBar(): JSX.Element {
   const view = useApp((s) => s.view)
   const goHome = useApp((s) => s.goHome)
   const toggleSidebar = useApp((s) => s.toggleSidebar)
+  const appLanguage = useApp((s) => s.appLanguage)
+  const t = (key: Parameters<typeof tr>[1], values?: Record<string, string | number>): string =>
+    tr(appLanguage, key, values)
   const [update, setUpdate] = useState<UpdateInfo | null>(null)
 
   // Check for a newer build on launch, then poll periodically so a long-running
@@ -36,32 +40,32 @@ export function TitleBar(): JSX.Element {
       <div className="titlebar-left">
         <button
           className="logo"
-          title="Toggle sidebar"
-          aria-label="Toggle sidebar"
+          title={t('title.toggleSidebar')}
+          aria-label={t('title.toggleSidebar')}
           onClick={toggleSidebar}
         >
           A
         </button>
         <button
           className="nav-btn"
-          title="Back"
+          title={t('title.back')}
           onClick={goHome}
           disabled={view === 'home'}
           style={{ opacity: view === 'home' ? 0.4 : 1 }}
         >
           <Icon name="arrowLeft" size={15} />
         </button>
-        <button className="nav-btn" title="Forward">
+        <button className="nav-btn" title={t('title.forward')}>
           <Icon name="arrowRight" size={15} />
         </button>
         {updateAvailable && (
           <button
             className="update-badge"
-            title={`Ascora ADE ${update?.latest} is available — click to download`}
+            title={t('title.updateAvailable', { version: update?.latest ?? '' })}
             onClick={() => api.update.openDownload(update?.url)}
           >
             <span className="dot" />
-            Update
+            {t('title.update')}
           </button>
         )}
       </div>
@@ -69,13 +73,13 @@ export function TitleBar(): JSX.Element {
       <div className="titlebar-drag" />
 
       <div className="win-controls">
-        <button className="win-btn" title="Minimize" onClick={() => api.window.minimize()}>
+        <button className="win-btn" title={t('title.minimize')} onClick={() => api.window.minimize()}>
           <Icon name="minimize" size={15} />
         </button>
-        <button className="win-btn" title="Maximize" onClick={() => api.window.maximizeToggle()}>
+        <button className="win-btn" title={t('title.maximize')} onClick={() => api.window.maximizeToggle()}>
           <Icon name="maximize" size={13} />
         </button>
-        <button className="win-btn close" title="Close" onClick={() => api.window.close()}>
+        <button className="win-btn close" title={t('title.close')} onClick={() => api.window.close()}>
           <Icon name="close" size={15} />
         </button>
       </div>

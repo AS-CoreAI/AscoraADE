@@ -35,6 +35,7 @@ import { DEFAULT_LLM_CONFIG, EXCLUDED_DIRS, normalizeOpenRouterApiKey } from '@s
 import { api } from '@/lib/api'
 import { diffStat } from '@/lib/diff'
 import { solveZCodeCaptcha } from '@/lib/zcode-captcha'
+import { isLanguageCode, type LanguageCode } from '@/language'
 
 export type View = 'home' | 'workspace' | 'analytics'
 /** Agent permission mode — mirrors ZCode's "Ask before changes" control. */
@@ -42,6 +43,7 @@ export type AgentMode = 'ask' | 'auto'
 export type Connection = 'unknown' | 'connecting' | 'connected' | 'error'
 export type ThemePreference = 'dark' | 'light' | 'system'
 export type ResolvedTheme = 'dark' | 'light'
+export type AppLanguage = LanguageCode
 
 export interface OpenFile {
   path: string
@@ -755,6 +757,10 @@ function applyTheme(preference: ThemePreference): ResolvedTheme {
   return resolved
 }
 
+function applyLanguage(language: AppLanguage): void {
+  document.documentElement.lang = language
+}
+
 /** Parse a fenced ```tool_call / ```json block from assistant text (fallback path). */
 function parseTextToolCall(content: string): { call: ParsedCall; block: string } | null {
   const fence = content.match(/```(?:tool_call|json)?\s*([\s\S]*?)```/i)
@@ -1105,6 +1111,7 @@ interface AppState {
   usageOpen: boolean
   themePreference: ThemePreference
   resolvedTheme: ResolvedTheme
+  appLanguage: AppLanguage
   /** Whether the left sidebar (rail) is collapsed out of view (persisted). */
   sidebarCollapsed: boolean
   /** Reusable instruction snippets that steer the agent (persisted). */
@@ -1232,6 +1239,7 @@ interface AppState {
   setSettingsOpen: (open: boolean) => void
   setUsageOpen: (open: boolean) => void
   setThemePreference: (theme: ThemePreference) => void
+  setAppLanguage: (language: AppLanguage) => void
   syncSystemTheme: () => void
   toggleSidebar: () => void
   setSkillsOpen: (open: boolean) => void
@@ -1510,6 +1518,7 @@ export const useApp = create<AppState>((set, get) => {
   usageOpen: false,
   themePreference: 'dark',
   resolvedTheme: 'dark',
+  appLanguage: 'en',
   sidebarCollapsed: false,
   skills: DEFAULT_SKILLS,
   skillsOpen: false,
@@ -1528,6 +1537,7 @@ export const useApp = create<AppState>((set, get) => {
       workspaces,
       cfg,
       savedTheme,
+      savedLanguage,
       savedOrder,
       savedCollapsed,
       savedLlm,
@@ -1539,6 +1549,7 @@ export const useApp = create<AppState>((set, get) => {
         api.workspace.list(),
         api.llm.config(),
         api.settings.get<ThemePreference>('appearance.theme'),
+        api.settings.get<AppLanguage>('appearance.language'),
         api.settings.get<string[]>('workspace.order'),
         api.settings.get<Record<string, boolean>>('workspace.collapsed'),
         api.settings.get<Record<string, WorkspaceLlm>>('workspace.llm'),
@@ -1555,6 +1566,8 @@ export const useApp = create<AppState>((set, get) => {
     const ordered = sortWorkspaces(workspaces, workspaceOrder)
     const themePreference = isThemePreference(savedTheme) ? savedTheme : 'dark'
     const resolvedTheme = applyTheme(themePreference)
+    const appLanguage = isLanguageCode(savedLanguage) ? savedLanguage : 'en'
+    applyLanguage(appLanguage)
     const taskLists = await Promise.all(
       ordered.map(async (workspace) => [workspace.id, await api.workspace.tasks(workspace.id)] as const)
     )
@@ -1595,7 +1608,8 @@ export const useApp = create<AppState>((set, get) => {
       glmPath: cfg.glmPath,
       glmMode: cfg.glmMode,
       themePreference,
-      resolvedTheme
+      resolvedTheme,
+      appLanguage
     })
     if (ordered.length > 0) {
       await get().loadWorkspaceData(ordered[0])
@@ -2599,6 +2613,12 @@ export const useApp = create<AppState>((set, get) => {
     const resolvedTheme = applyTheme(themePreference)
     set({ themePreference, resolvedTheme })
     void api.settings.set('appearance.theme', themePreference)
+  },
+
+  setAppLanguage(appLanguage) {
+    applyLanguage(appLanguage)
+    set({ appLanguage })
+    void api.settings.set('appearance.language', appLanguage)
   },
 
   syncSystemTheme() {

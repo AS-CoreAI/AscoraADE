@@ -4,6 +4,7 @@ import { FitAddon } from '@xterm/addon-fit'
 import { Icon } from './Icon'
 import { api } from '@/lib/api'
 import { useApp } from '@/state/store'
+import { tr } from '@/language'
 import type { TerminalShellKind } from '@shared/ipc'
 import '@xterm/xterm/css/xterm.css'
 
@@ -51,6 +52,9 @@ export function TerminalPanel(): JSX.Element {
   const workspacePath = useApp((s) => s.active?.path)
   const resolvedTheme = useApp((s) => s.resolvedTheme)
   const terminalRequest = useApp((s) => s.terminalRequest)
+  const appLanguage = useApp((s) => s.appLanguage)
+  const t = (key: Parameters<typeof tr>[1], values?: Record<string, string | number>): string =>
+    tr(appLanguage, key, values)
   // Lets the Explorer's "Run" inject a command into this shell (set in the effect).
   const runExternalRef = useRef<((command: string) => void) | null>(null)
   const handledNonceRef = useRef(0)
@@ -276,12 +280,12 @@ export function TerminalPanel(): JSX.Element {
     <div className="panel">
       <div className="panel-header">
         <Icon name="terminal" size={13} />
-        Terminal
+        {t('dock.terminal')}
         <span className="spacer" />
-        <button title="Clear" onClick={() => termRef.current?.clear()}>
+        <button title={t('terminal.clear')} onClick={() => termRef.current?.clear()}>
           <Icon name="trash" size={14} />
         </button>
-        <button title="Restart shell" onClick={() => setNonce((n) => n + 1)}>
+        <button title={t('terminal.restart')} onClick={() => setNonce((n) => n + 1)}>
           <Icon name="refresh" size={14} />
         </button>
       </div>

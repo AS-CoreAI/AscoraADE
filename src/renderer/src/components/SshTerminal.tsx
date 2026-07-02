@@ -4,6 +4,7 @@ import { FitAddon } from '@xterm/addon-fit'
 import { Icon } from './Icon'
 import { api } from '@/lib/api'
 import { useApp } from '@/state/store'
+import { tr, type TranslationKey } from '@/language'
 import '@xterm/xterm/css/xterm.css'
 
 function terminalTheme(theme: 'dark' | 'light'): ITheme {
@@ -27,8 +28,11 @@ export function SshTerminal({ connId }: { connId: string }): JSX.Element {
   const termRef = useRef<Terminal | null>(null)
   const conn = useApp((s) => s.sshConnections.find((c) => c.id === connId))
   const resolvedTheme = useApp((s) => s.resolvedTheme)
+  const appLanguage = useApp((s) => s.appLanguage)
   const closeSshTerminal = useApp((s) => s.closeSshTerminal)
   const loadSshData = useApp((s) => s.loadSshData)
+  const t = (key: TranslationKey, values?: Record<string, string | number>): string =>
+    tr(appLanguage, key, values)
   const [status, setStatus] = useState<'connecting' | 'connected' | 'closed'>('connecting')
   // Bumping this reconnects (the effect tears down and re-runs).
   const [nonce, setNonce] = useState(0)
@@ -157,10 +161,10 @@ export function SshTerminal({ connId }: { connId: string }): JSX.Element {
         <span className="ssh-title">{conn ? `${conn.username}@${conn.host}` : 'SSH'}</span>
         <span className={`ssh-dot ${status}`} title={status} />
         <span className="spacer" />
-        <button title="Reconnect" onClick={() => setNonce((n) => n + 1)}>
+        <button title={t('ssh.reconnect')} onClick={() => setNonce((n) => n + 1)}>
           <Icon name="refresh" size={14} />
         </button>
-        <button title="Close & disconnect" onClick={() => closeSshTerminal(connId)}>
+        <button title={t('ssh.closeDisconnect')} onClick={() => closeSshTerminal(connId)}>
           <Icon name="x" size={14} />
         </button>
       </div>

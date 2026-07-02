@@ -8,7 +8,8 @@ import type {
 } from '@shared/ipc'
 import { Icon } from './Icon'
 import { api } from '@/lib/api'
-import { useApp } from '@/state/store'
+import { useApp, type AppLanguage } from '@/state/store'
+import { tr, type TranslationKey } from '@/language'
 
 interface Selection {
   path: string
@@ -82,8 +83,8 @@ function stripCommitMessage(text: string): string {
     .trim()
 }
 
-function branchLabel(status: GitStatusResult | null): string {
-  if (!status?.ok) return 'No repository'
+function branchLabel(status: GitStatusResult | null, language: AppLanguage): string {
+  if (!status?.ok) return tr(language, 'git.noRepository')
   const branch = status.branch || 'HEAD'
   const upstream = status.upstream ? ` -> ${status.upstream}` : ''
   const ahead = status.ahead ? ` +${status.ahead}` : ''
@@ -91,11 +92,11 @@ function branchLabel(status: GitStatusResult | null): string {
   return `${branch}${upstream}${ahead}${behind}`
 }
 
-function formatCommitTime(timestamp: number): string {
+function formatCommitTime(timestamp: number, language: AppLanguage): string {
   if (!timestamp) return ''
   const diff = Date.now() - timestamp
   const minutes = Math.floor(diff / 60_000)
-  if (minutes < 1) return 'now'
+  if (minutes < 1) return tr(language, 'git.now')
   if (minutes < 60) return `${minutes}m`
   const hours = Math.floor(minutes / 60)
   if (hours < 24) return `${hours}h`
@@ -137,6 +138,9 @@ function GitFileRow({
   onUnstage: () => void
   onOpen: () => void
 }): JSX.Element {
+  const appLanguage = useApp((s) => s.appLanguage)
+  const t = (key: TranslationKey, values?: Record<string, string | number>): string =>
+    tr(appLanguage, key, values)
   const status = statusFor(file, staged)
   const dir = dirname(file.path)
   const canOpen = status !== 'D'
@@ -150,7 +154,7 @@ function GitFileRow({
       <span className="git-row-actions">
         <button
           disabled={busy || !canOpen}
-          title={canOpen ? 'Open file' : 'File was deleted'}
+          title={canOpen ? t('git.openFile') : t('git.fileDeleted')}
           onClick={(e) => {
             e.stopPropagation()
             onOpen()
@@ -161,7 +165,7 @@ function GitFileRow({
         {staged ? (
           <button
             disabled={busy}
-            title="Unstage file"
+            title={t('git.unstageFile')}
             onClick={(e) => {
               e.stopPropagation()
               onUnstage()
@@ -172,7 +176,7 @@ function GitFileRow({
         ) : (
           <button
             disabled={busy}
-            title="Stage file"
+            title={t('git.stageFile')}
             onClick={(e) => {
               e.stopPropagation()
               onStage()
@@ -195,7 +199,8 @@ function GitCommitRow({
   active: boolean
   onSelect: () => void
 }): JSX.Element {
-  const time = formatCommitTime(commit.timestamp)
+  const appLanguage = useApp((s) => s.appLanguage)
+  const time = formatCommitTime(commit.timestamp, appLanguage)
   return (
     <div className={`git-commit-row${active ? ' active' : ''}`} title={commit.hash} onClick={onSelect}>
       <span className="git-commit-hash">{commit.shortHash}</span>
@@ -223,6 +228,9 @@ function GitCommitFileRow({
   onSelect: () => void
   onOpen: () => void
 }): JSX.Element {
+  const appLanguage = useApp((s) => s.appLanguage)
+  const t = (key: TranslationKey, values?: Record<string, string | number>): string =>
+    tr(appLanguage, key, values)
   const dir = dirname(file.path)
   const canOpen = file.status !== 'D'
   return (
@@ -231,12 +239,14 @@ function GitCommitFileRow({
       <span className="git-file-main">
         <span className="git-file-name">{basename(file.path)}</span>
         {dir && <span className="git-file-dir">{dir}</span>}
-        {file.originalPath && <span className="git-file-dir">from {file.originalPath}</span>}
+        {file.originalPath && (
+          <span className="git-file-dir">{t('git.fromOriginal', { path: file.originalPath })}</span>
+        )}
       </span>
       <span className="git-row-actions">
         <button
           disabled={busy || !canOpen}
-          title={canOpen ? 'Open file' : 'File was deleted in this commit'}
+          title={canOpen ? t('git.openFile') : t('git.fileDeletedCommit')}
           onClick={(e) => {
             e.stopPropagation()
             onOpen()
@@ -254,10 +264,13 @@ export function GitPanel(): JSX.Element {
   const activeSsh = useApp((s) => s.activeSsh)
   const provider = useApp((s) => s.provider)
   const model = useApp((s) => s.model)
+  const appLanguage = useApp((s) => s.appLanguage)
   const ollamaModel = useApp((s) => s.ollamaModel)
   const openRouterModel = useApp((s) => s.openRouterModel)
   const openFileInEditor = useApp((s) => s.openFile)
   const activePath = activeSsh ? undefined : active?.path
+  const t = (key: TranslationKey, values?: Record<string, string | number>): string =>
+    tr(appLanguage, key, values)
 
   const [status, setStatus] = useState<GitStatusResult | null>(null)
   const [loading, setLoading] = useState(false)
@@ -705,10 +718,10 @@ export function GitPanel(): JSX.Element {
     <div className="panel panel-side">
       <div className="panel-header">
         <Icon name="gitBranch" size={13} />
-        Source Control
+        {t('dock.sourceControl')}
         <span className="spacer" />
         <button
-          title="Refresh"
+          title={t('common.refresh')}
           disabled={loading || !activePath || !gitReady}
           onClick={() => {
             void refreshStatus()
@@ -720,22 +733,22 @@ export function GitPanel(): JSX.Element {
       </div>
       <div className="panel-body">
         {!activePath && (
-          <div className="placeholder-note">Open a project folder to use source control.</div>
+          <div className="placeholder-note">{t('git.openFolderHint')}</div>
         )}
 
         {activePath && (
           <>
             <div className="git-summary" title={status?.root}>
               <Icon name="gitBranch" size={13} />
-              <span>{loading ? 'Loading status...' : branchLabel(status)}</span>
+              <span>{loading ? t('git.loadingStatus') : branchLabel(status, appLanguage)}</span>
               <button
                 className="git-inline-btn"
-                title="Fetch origin"
+                title={t('git.fetchOrigin')}
                 disabled={isBusy || !gitReady}
                 onClick={fetchOrigin}
               >
                 <Icon name="arrowDown" size={13} />
-                Fetch origin
+                {t('git.fetchOrigin')}
               </button>
             </div>
 
@@ -747,7 +760,7 @@ export function GitPanel(): JSX.Element {
                   <textarea
                     value={commitMessage}
                     onChange={(e) => setCommitMessage(e.target.value)}
-                    placeholder="Commit message"
+                    placeholder={t('git.commitMessage')}
                     spellCheck={false}
                   />
                   <div className="git-commit-actions">
@@ -756,22 +769,22 @@ export function GitPanel(): JSX.Element {
                       disabled={aiBusy || files.length === 0 || isBusy}
                       title={
                         stagedFiles.length > 0
-                          ? 'Generate a commit message for staged changes'
-                          : 'Stage all changes and generate a commit message'
+                          ? t('git.generateStaged')
+                          : t('git.generateAll')
                       }
                       onClick={() => void generateCommitMessage()}
                     >
                       <Icon name="sparkles" size={13} />
-                      {aiBusy ? 'Generating...' : 'AI'}
+                      {aiBusy ? t('git.generating') : 'AI'}
                     </button>
                     <button
                       className="git-text-btn primary"
                       disabled={busy === 'commit' || stagedFiles.length === 0 || !commitMessage.trim()}
-                      title="Commit staged changes"
+                      title={t('git.commitStaged')}
                       onClick={commit}
                     >
                       <Icon name="check" size={13} />
-                      Commit
+                      {t('git.commit')}
                     </button>
                   </div>
                 </div>
@@ -780,17 +793,17 @@ export function GitPanel(): JSX.Element {
                   <>
                     <div className="git-section-head">
                       <span>
-                        {status.upstream ? 'Outgoing Commits' : 'Local Commits'} (
+                        {status.upstream ? t('git.outgoingCommits') : t('git.localCommits')} (
                         {outgoingCommits.length})
                       </span>
                       <button
                         className="git-inline-btn primary"
-                        title="Push commits"
+                        title={t('git.pushCommits')}
                         disabled={isBusy || busy === 'push'}
                         onClick={push}
                       >
                         <Icon name="arrowUp" size={13} />
-                        Push
+                        {t('git.push')}
                       </button>
                     </div>
                     {outgoingCommits.map((commit) => (
@@ -810,16 +823,16 @@ export function GitPanel(): JSX.Element {
                 )}
 
                 <div className="git-section-head">
-                  <span>Staged Changes ({stagedFiles.length})</span>
+                  <span>{t('git.stagedChanges')} ({stagedFiles.length})</span>
                   {stagedFiles.length > 0 && (
                     <button
                       className="git-inline-btn"
-                      title="Remove all changes from the next commit"
+                      title={t('git.unstageAllTitle')}
                       disabled={isBusy}
                       onClick={unstageAll}
                     >
                       <Icon name="arrowLeft" size={13} />
-                      Unstage All
+                      {t('git.unstageAll')}
                     </button>
                   )}
                 </div>
@@ -843,16 +856,16 @@ export function GitPanel(): JSX.Element {
                 ))}
 
                 <div className="git-section-head">
-                  <span>Changes ({unstagedFiles.length})</span>
+                  <span>{t('git.changes')} ({unstagedFiles.length})</span>
                   {unstagedFiles.length > 0 && (
                     <button
                       className="git-inline-btn primary"
-                      title="Add all changes to the next commit"
+                      title={t('git.stageAllTitle')}
                       disabled={isBusy}
                       onClick={stageAll}
                     >
                       <Icon name="plus" size={13} />
-                      Stage All
+                      {t('git.stageAll')}
                     </button>
                   )}
                 </div>
@@ -876,12 +889,12 @@ export function GitPanel(): JSX.Element {
                 ))}
 
                 {files.length === 0 && (
-                  <div className="placeholder-note">Working tree clean. No changes to commit.</div>
+                  <div className="placeholder-note">{t('git.clean')}</div>
                 )}
 
                 <div className="git-section-head">
-                  <span>Commit History ({history.length})</span>
-                  {historyLoading && <span className="git-section-state">Loading...</span>}
+                  <span>{t('git.commitHistory')} ({history.length})</span>
+                  {historyLoading && <span className="git-section-state">{t('git.loading')}</span>}
                 </div>
                 {history.map((commit) => (
                   <GitCommitRow
@@ -897,17 +910,17 @@ export function GitPanel(): JSX.Element {
                   />
                 ))}
                 {!historyLoading && history.length === 0 && (
-                  <div className="placeholder-note">No commits in this repository yet.</div>
+                  <div className="placeholder-note">{t('git.noCommits')}</div>
                 )}
 
                 {selectedCommit && (
                   <>
                     <div className="git-section-head nested">
                       <span>
-                        {selectedCommitSummary?.shortHash ?? selectedCommit.slice(0, 7)} Files (
+                        {selectedCommitSummary?.shortHash ?? selectedCommit.slice(0, 7)} {t('git.files')} (
                         {commitFiles.length})
                       </span>
-                      {commitFilesLoading && <span className="git-section-state">Loading...</span>}
+                      {commitFilesLoading && <span className="git-section-state">{t('git.loading')}</span>}
                     </div>
                     {commitFiles.map((file) => (
                       <GitCommitFileRow
@@ -937,18 +950,20 @@ export function GitPanel(): JSX.Element {
                     <div className="git-diff-head">
                       <span>
                         {selectedCommitFile
-                          ? `Commit diff - ${selectedCommitSummary?.shortHash ?? selectedCommitFile.commit.slice(0, 7)}`
+                          ? t('git.commitDiff', {
+                              hash: selectedCommitSummary?.shortHash ?? selectedCommitFile.commit.slice(0, 7)
+                            })
                           : selected?.staged
-                            ? 'Staged diff'
-                            : 'Working diff'}
+                            ? t('git.stagedDiff')
+                            : t('git.workingDiff')}
                       </span>
                       {selected && !selected.staged && (
-                        <button title="Discard selected file" disabled={isBusy} onClick={discardSelected}>
+                        <button title={t('git.discardSelected')} disabled={isBusy} onClick={discardSelected}>
                           <Icon name="x" size={13} />
                         </button>
                       )}
                     </div>
-                    <pre className="git-diff">{diffLoading ? 'Loading diff...' : diff}</pre>
+                    <pre className="git-diff">{diffLoading ? t('git.loadingDiff') : diff}</pre>
                   </div>
                 )}
               </>

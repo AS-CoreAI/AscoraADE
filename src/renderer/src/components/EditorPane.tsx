@@ -4,6 +4,7 @@ import Editor from '@monaco-editor/react'
 import { Icon } from './Icon'
 import { FileIcon } from './FileIcon'
 import { useApp } from '@/state/store'
+import { tr } from '@/language'
 import '@/monaco-setup'
 
 /** Estimated menu box, used to keep it inside the window when opened near an edge. */
@@ -21,6 +22,9 @@ export function EditorPane(): JSX.Element {
   const closeAllFiles = useApp((s) => s.closeAllFiles)
   const updateOpenFileContent = useApp((s) => s.updateOpenFileContent)
   const saveActiveFile = useApp((s) => s.saveActiveFile)
+  const appLanguage = useApp((s) => s.appLanguage)
+  const t = (key: Parameters<typeof tr>[1], values?: Record<string, string | number>): string =>
+    tr(appLanguage, key, values)
   const [menu, setMenu] = useState<{ x: number; y: number; path: string } | null>(null)
 
   const current = openFiles.find((f) => f.path === activeFile)
@@ -87,7 +91,7 @@ export function EditorPane(): JSX.Element {
           >
             <FileIcon name={f.name} size={13} />
             {f.name}
-            {f.dirty && <span className="dirty-dot" title="Unsaved changes" />}
+            {f.dirty && <span className="dirty-dot" title={t('editor.unsaved')} />}
             <span
               className="close"
               onClick={(e) => {
@@ -116,7 +120,7 @@ export function EditorPane(): JSX.Element {
             disabled={!hasRight}
             onClick={() => run(() => closeFilesToRight(menu.path))}
           >
-            Close to the Right
+            {t('editor.closeRight')}
           </button>
           <button
             type="button"
@@ -125,7 +129,7 @@ export function EditorPane(): JSX.Element {
             disabled={!hasOthers}
             onClick={() => run(() => closeOtherFiles(menu.path))}
           >
-            Close Others
+            {t('editor.closeOthers')}
           </button>
           <button
             type="button"
@@ -133,7 +137,7 @@ export function EditorPane(): JSX.Element {
             className="context-item"
             onClick={() => run(closeAllFiles)}
           >
-            Close All
+            {t('editor.closeAll')}
           </button>
           </div>,
           document.body
@@ -141,7 +145,7 @@ export function EditorPane(): JSX.Element {
 
       <div className="editor-actions">
         <button
-          title="Save"
+          title={t('common.save')}
           disabled={!current || !current.dirty || current.saving || current.truncated}
           onClick={() => void saveActiveFile()}
         >
@@ -171,7 +175,7 @@ export function EditorPane(): JSX.Element {
         </div>
       ) : (
         <div className="editor-empty">
-          Select a file in the Explorer to view it here.
+          {t('editor.empty')}
         </div>
       )}
     </div>

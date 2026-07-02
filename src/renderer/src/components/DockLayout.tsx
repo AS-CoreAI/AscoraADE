@@ -17,6 +17,7 @@ import { LivePreview } from './LivePreview'
 import { SshTerminal } from './SshTerminal'
 import { Icon } from './Icon'
 import { useApp } from '@/state/store'
+import { tr, type TranslationKey } from '@/language'
 
 /**
  * VS Code-style dockable IDE. There is a single dock: the Chat is the home panel
@@ -27,13 +28,17 @@ import { useApp } from '@/state/store'
  * survives leaving and returning to the workspace view.
  */
 
-const TITLES: Record<string, string> = {
-  explorer: 'Explorer',
-  git: 'Source Control',
-  editor: 'Editor',
-  terminal: 'Terminal',
-  chat: 'Chat',
-  preview: 'Live Preview'
+const TITLE_KEYS: Record<string, TranslationKey> = {
+  explorer: 'dock.explorer',
+  git: 'dock.sourceControl',
+  editor: 'dock.editor',
+  terminal: 'dock.terminal',
+  chat: 'dock.chat',
+  preview: 'dock.livePreview'
+}
+
+function titleOf(id: keyof typeof TITLE_KEYS): string {
+  return tr(useApp.getState().appLanguage, TITLE_KEYS[id])
 }
 
 // Module-scope so the component identities stay stable across renders.
@@ -63,31 +68,31 @@ function focusOrOpen(api: DockviewApi, id: 'explorer' | 'git' | 'chat'): void {
   }
   if (id === 'chat') {
     const ref = firstExisting(api, ['editor', 'explorer', 'git'])
-    if (ref) api.addPanel({ id, component: id, title: TITLES.chat, position: { referencePanel: ref, direction: 'right' } })
-    else api.addPanel({ id, component: id, title: TITLES.chat })
+    if (ref) api.addPanel({ id, component: id, title: titleOf('chat'), position: { referencePanel: ref, direction: 'right' } })
+    else api.addPanel({ id, component: id, title: titleOf('chat') })
     return
   }
   // explorer | git — share one left-hand sidebar group (tabbed together).
   const other = id === 'explorer' ? 'git' : 'explorer'
   if (api.getPanel(other)) {
-    api.addPanel({ id, component: id, title: TITLES[id], position: { referencePanel: other, direction: 'within' } })
+    api.addPanel({ id, component: id, title: titleOf(id), position: { referencePanel: other, direction: 'within' } })
     return
   }
   const ref = firstExisting(api, ['editor', 'chat'])
-  if (ref) api.addPanel({ id, component: id, title: TITLES[id], initialWidth: 260, position: { referencePanel: ref, direction: 'left' } })
-  else api.addPanel({ id, component: id, title: TITLES[id], initialWidth: 260 })
+  if (ref) api.addPanel({ id, component: id, title: titleOf(id), initialWidth: 260, position: { referencePanel: ref, direction: 'left' } })
+  else api.addPanel({ id, component: id, title: titleOf(id), initialWidth: 260 })
 }
 
 /** Open the editor (and a terminal beneath it) once files are open. */
 function ensureEditor(api: DockviewApi): void {
   if (!api.getPanel('editor')) {
     const ref = firstExisting(api, ['chat', 'explorer', 'git'])
-    if (ref === 'chat') api.addPanel({ id: 'editor', component: 'editor', title: TITLES.editor, position: { referencePanel: 'chat', direction: 'left' } })
-    else if (ref) api.addPanel({ id: 'editor', component: 'editor', title: TITLES.editor, position: { referencePanel: ref, direction: 'right' } })
-    else api.addPanel({ id: 'editor', component: 'editor', title: TITLES.editor })
+    if (ref === 'chat') api.addPanel({ id: 'editor', component: 'editor', title: titleOf('editor'), position: { referencePanel: 'chat', direction: 'left' } })
+    else if (ref) api.addPanel({ id: 'editor', component: 'editor', title: titleOf('editor'), position: { referencePanel: ref, direction: 'right' } })
+    else api.addPanel({ id: 'editor', component: 'editor', title: titleOf('editor') })
   }
   if (!useApp.getState().activeSsh && !api.getPanel('terminal')) {
-    api.addPanel({ id: 'terminal', component: 'terminal', title: TITLES.terminal, initialHeight: 200, position: { referencePanel: 'editor', direction: 'below' } })
+    api.addPanel({ id: 'terminal', component: 'terminal', title: titleOf('terminal'), initialHeight: 200, position: { referencePanel: 'editor', direction: 'below' } })
   }
 }
 
@@ -101,9 +106,9 @@ function ensureTerminal(api: DockviewApi): void {
   }
   const ref = firstExisting(api, ['editor', 'chat', 'explorer', 'git'])
   if (ref) {
-    api.addPanel({ id: 'terminal', component: 'terminal', title: TITLES.terminal, initialHeight: 200, position: { referencePanel: ref, direction: 'below' } })
+    api.addPanel({ id: 'terminal', component: 'terminal', title: titleOf('terminal'), initialHeight: 200, position: { referencePanel: ref, direction: 'below' } })
   } else {
-    api.addPanel({ id: 'terminal', component: 'terminal', title: TITLES.terminal, initialHeight: 200 })
+    api.addPanel({ id: 'terminal', component: 'terminal', title: titleOf('terminal'), initialHeight: 200 })
   }
 }
 
@@ -141,8 +146,8 @@ function reconcilePreview(api: DockviewApi): void {
   const panel = api.getPanel('preview')
   if (want && !panel) {
     const ref = firstExisting(api, ['editor', 'chat'])
-    if (ref) api.addPanel({ id: 'preview', component: 'preview', title: TITLES.preview, initialWidth: 480, position: { referencePanel: ref, direction: 'right' } })
-    else api.addPanel({ id: 'preview', component: 'preview', title: TITLES.preview, initialWidth: 480 })
+    if (ref) api.addPanel({ id: 'preview', component: 'preview', title: titleOf('preview'), initialWidth: 480, position: { referencePanel: ref, direction: 'right' } })
+    else api.addPanel({ id: 'preview', component: 'preview', title: titleOf('preview'), initialWidth: 480 })
   } else if (!want && panel) {
     api.removePanel(panel)
   }
@@ -154,6 +159,7 @@ export function DockLayout(): JSX.Element {
   const [activeId, setActiveId] = useState<string | undefined>('chat')
 
   const resolvedTheme = useApp((s) => s.resolvedTheme)
+  const appLanguage = useApp((s) => s.appLanguage)
   const previewUrl = useApp((s) => s.previewUrl)
   const previewMode = useApp((s) => s.previewMode)
   const openFilesLen = useApp((s) => s.openFiles.length)
@@ -176,7 +182,7 @@ export function DockLayout(): JSX.Element {
         restored = false
       }
     }
-    if (!restored) api.addPanel({ id: 'chat', component: 'chat', title: TITLES.chat })
+    if (!restored) api.addPanel({ id: 'chat', component: 'chat', title: titleOf('chat') })
 
     if (useApp.getState().openFiles.length > 0) ensureEditor(api)
     reconcilePreview(api)
@@ -245,21 +251,21 @@ export function DockLayout(): JSX.Element {
       <div className="activity-bar">
         <button
           className={`activity-btn${activeId === 'chat' ? ' active' : ''}`}
-          title="Chat"
+          title={tr(appLanguage, 'dock.chat')}
           onClick={() => open('chat')}
         >
           <Icon name="message" size={19} />
         </button>
         <button
           className={`activity-btn${activeId === 'explorer' ? ' active' : ''}`}
-          title="Explorer"
+          title={tr(appLanguage, 'dock.explorer')}
           onClick={() => open('explorer')}
         >
           <Icon name="folder" size={19} />
         </button>
         <button
           className={`activity-btn${activeId === 'git' ? ' active' : ''}`}
-          title="Source Control"
+          title={tr(appLanguage, 'dock.sourceControl')}
           onClick={() => open('git')}
         >
           <Icon name="gitBranch" size={19} />

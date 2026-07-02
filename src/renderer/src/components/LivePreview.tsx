@@ -1,6 +1,7 @@
 import { useState, type JSX } from 'react'
 import { Icon } from './Icon'
 import { useApp } from '@/state/store'
+import { tr } from '@/language'
 
 /**
  * Live Server preview content, hosted inside a dockview panel (the panel's tab
@@ -12,6 +13,9 @@ export function LivePreview(): JSX.Element | null {
   const previewUrl = useApp((s) => s.previewUrl)
   const detachPreview = useApp((s) => s.detachPreview)
   const openPreviewInBrowser = useApp((s) => s.openPreviewInBrowser)
+  const appLanguage = useApp((s) => s.appLanguage)
+  const t = (key: Parameters<typeof tr>[1], values?: Record<string, string | number>): string =>
+    tr(appLanguage, key, values)
   // Bumping the key remounts the iframe → a hard reload of the page.
   const [reloadKey, setReloadKey] = useState(0)
 
@@ -20,13 +24,13 @@ export function LivePreview(): JSX.Element | null {
   return (
     <div className="preview-panel">
       <div className="preview-toolbar">
-        <button title="Reload" onClick={() => setReloadKey((k) => k + 1)}>
+        <button title={t('preview.reload')} onClick={() => setReloadKey((k) => k + 1)}>
           <Icon name="refresh" size={14} />
         </button>
-        <button title="Open in a separate window" onClick={detachPreview}>
+        <button title={t('preview.openSeparate')} onClick={detachPreview}>
           <Icon name="maximize" size={13} />
         </button>
-        <button title="Open in the system browser" onClick={openPreviewInBrowser}>
+        <button title={t('preview.openBrowser')} onClick={openPreviewInBrowser}>
           <Icon name="external" size={14} />
         </button>
         <span className="preview-url" title={previewUrl}>

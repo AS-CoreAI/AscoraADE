@@ -1,24 +1,19 @@
 import { useEffect, type JSX } from 'react'
-import { useApp } from '@/state/store'
+import { useApp, type AppLanguage } from '@/state/store'
+import { tr, type TranslationKey } from '@/language'
 import { Icon } from './Icon'
 import {
-  REASONING_LABEL,
-  COPILOT_REASONING_LABEL,
-  COPILOT_PERMISSION_SHORT,
-  GEMINI_PERMISSION_SHORT,
-  PERMISSION_SHORT,
-  GLM_MODE_SHORT
+  REASONING_LABEL_KEY,
+  COPILOT_REASONING_LABEL_KEY,
+  COPILOT_PERMISSION_SHORT_KEY,
+  GEMINI_PERMISSION_SHORT_KEY,
+  PERMISSION_SHORT_KEY,
+  GLM_MODE_SHORT_KEY,
+  MODE_LABEL_KEY
 } from './Composer'
 
 /** Re-poll Claude usage every few minutes while it's the active backend. */
 const USAGE_POLL_MS = 3 * 60 * 1000
-
-const CONN_LABEL: Record<string, string> = {
-  unknown: 'LM Studio: —',
-  connecting: 'LM Studio: connecting…',
-  connected: 'LM Studio: connected',
-  error: 'LM Studio: not connected'
-}
 
 const CONN_COLOR: Record<string, string> = {
   unknown: 'var(--text-faint)',
@@ -28,15 +23,15 @@ const CONN_COLOR: Record<string, string> = {
 }
 
 /** Compact "resets in 4h" label from an ISO reset timestamp. */
-export function resetLabel(iso?: string): string {
+export function resetLabel(iso?: string, language: AppLanguage = 'en'): string {
   if (!iso) return ''
   const ms = new Date(iso).getTime() - Date.now()
-  if (!Number.isFinite(ms) || ms <= 0) return 'resets soon'
+  if (!Number.isFinite(ms) || ms <= 0) return tr(language, 'status.resetsSoon')
   const mins = Math.round(ms / 60000)
-  if (mins < 60) return `resets in ${mins}m`
+  if (mins < 60) return tr(language, 'status.resetsInMinutes', { count: mins })
   const hrs = Math.round(mins / 60)
-  if (hrs < 48) return `resets in ${hrs}h`
-  return `resets in ${Math.round(hrs / 24)}d`
+  if (hrs < 48) return tr(language, 'status.resetsInHours', { count: hrs })
+  return tr(language, 'status.resetsInDays', { count: Math.round(hrs / 24) })
 }
 
 export function StatusBar(): JSX.Element {
@@ -84,6 +79,9 @@ export function StatusBar(): JSX.Element {
   const activeSsh = useApp((s) => s.activeSsh)
   const sshConnections = useApp((s) => s.sshConnections)
   const openSshTerminal = useApp((s) => s.openSshTerminal)
+  const appLanguage = useApp((s) => s.appLanguage)
+  const t = (key: TranslationKey, values?: Record<string, string | number>): string =>
+    tr(appLanguage, key, values)
   const sshConn = sshConnections.find((c) => c.id === activeSsh)
   const current = openFiles.find((f) => f.path === activeFile)
   const isHtml = !!current && /\.html?$/i.test(current.name)
@@ -95,6 +93,14 @@ export function StatusBar(): JSX.Element {
   const isGlm = provider === 'glm'
   const isOpenRouter = provider === 'openrouter'
   const isOllama = provider === 'ollama'
+  const connectionStatusLabel = (state: string): string => {
+    if (state === 'connecting') return t('status.connecting')
+    if (state === 'connected') return t('status.connected')
+    if (state === 'error') return t('status.notConnected')
+    return '—'
+  }
+  const modelCount = (count: number): string =>
+    `${count} ${count === 1 ? t('status.model') : t('status.models')}`
 
   // Keep the usage indicator fresh while a metered CLI backend is active.
   useEffect(() => {
@@ -133,87 +139,75 @@ export function StatusBar(): JSX.Element {
             : codexChecking
     if (checking) {
       dotColor = CONN_COLOR.connecting
-      label = `${name}: checking…`
+      label = `${name}: ${t('status.checking')}`
     } else if (!check) {
       dotColor = CONN_COLOR.unknown
       label = `${name}: —`
     } else if (!check.installed) {
       dotColor = CONN_COLOR.error
-      label = `${name}: not found`
+      label = `${name}: ${t('status.notFound')}`
     } else if ((isCodex || isGemini) && !check.loggedIn) {
       dotColor = CONN_COLOR.error
-      label = `${name}: sign in needed`
+      label = `${name}: ${t('status.signInNeeded')}`
     } else {
       dotColor = CONN_COLOR.connected
-      label = `${name}: ready`
+      label = `${name}: ${t('status.ready')}`
     }
   } else {
     dotColor = CONN_COLOR[connection]
     label =
       connection === 'connected' && models.length > 0
-        ? `LM Studio: connected · ${models.length} model${models.length === 1 ? '' : 's'}`
-        : CONN_LABEL[connection]
+        ? `LM Studio: ${t('status.connected')} · ${modelCount(models.length)}`
+        : `LM Studio: ${connectionStatusLabel(connection)}`
     if (isOpenRouter) {
       label =
         connection === 'connected' && models.length > 0
-          ? `OpenRouter: connected - ${models.length} model${models.length === 1 ? '' : 's'}`
-          : `OpenRouter: ${
-              connection === 'connecting'
-                ? 'connecting...'
-                : connection === 'error'
-                  ? 'not connected'
-                  : '-'
-            }`
+          ? `OpenRouter: ${t('status.connected')} - ${modelCount(models.length)}`
+          : `OpenRouter: ${connectionStatusLabel(connection)}`
     } else if (isOllama) {
       label =
         connection === 'connected' && models.length > 0
-          ? `Ollama: connected - ${models.length} model${models.length === 1 ? '' : 's'}`
-          : `Ollama: ${
-              connection === 'connecting'
-                ? 'connecting...'
-                : connection === 'error'
-                  ? 'not connected'
-                  : '-'
-            }`
+          ? `Ollama: ${t('status.connected')} - ${modelCount(models.length)}`
+          : `Ollama: ${connectionStatusLabel(connection)}`
     }
   }
 
   const modelLabel = isGlm
     ? 'GLM (ZCode)'
     : isGemini
-      ? geminiModel || 'gemini (default)'
+      ? geminiModel || t('status.defaultGemini')
     : isClaude
-      ? claudeModel || 'claude (default)'
+      ? claudeModel || t('status.defaultClaude')
       : isCopilot
-        ? copilotModel || 'copilot (default)'
+        ? copilotModel || t('status.defaultCopilot')
       : isCodex
-        ? codexModel || 'codex (default)'
+        ? codexModel || t('status.defaultCodex')
         : isOpenRouter
           ? openRouterModel || 'openrouter/free'
         : isOllama
           ? ollamaModel || 'ollama'
-        : model || '(no model)'
+        : model || t('status.noModel')
 
   const accessLabel = isCodex
-    ? `sandbox: ${codexSandbox}${codexReasoning ? ` · ${REASONING_LABEL[codexReasoning]}` : ''}`
+    ? `${t('status.sandbox')}: ${codexSandbox}${codexReasoning ? ` · ${t(REASONING_LABEL_KEY[codexReasoning])}` : ''}`
     : isCopilot
-      ? `access: ${COPILOT_PERMISSION_SHORT[copilotPermission]}${copilotReasoning ? ` · ${COPILOT_REASONING_LABEL[copilotReasoning]}` : ''}`
+      ? `${t('status.access')}: ${t(COPILOT_PERMISSION_SHORT_KEY[copilotPermission])}${copilotReasoning ? ` · ${t(COPILOT_REASONING_LABEL_KEY[copilotReasoning])}` : ''}`
     : isClaude
-      ? `access: ${PERMISSION_SHORT[claudePermission]}`
+      ? `${t('status.access')}: ${t(PERMISSION_SHORT_KEY[claudePermission])}`
       : isGemini
-        ? `access: ${GEMINI_PERMISSION_SHORT[geminiPermission]}`
+        ? `${t('status.access')}: ${t(GEMINI_PERMISSION_SHORT_KEY[geminiPermission])}`
       : isGlm
-        ? `mode: ${GLM_MODE_SHORT[glmMode]}`
+        ? `${t('status.mode')}: ${t(GLM_MODE_SHORT_KEY[glmMode])}`
         : mode === 'ask'
-          ? 'Ask before changes'
-          : 'Auto-apply'
+          ? t(MODE_LABEL_KEY[mode])
+          : t('status.autoApply')
 
   return (
     <div className="statusbar">
       <button
         className="seg seg-btn"
         onClick={() => setSettingsOpen(true)}
-        title="Agent backend settings"
+        title={t('rail.agentBackendSettings')}
       >
         <span style={{ color: dotColor }}>●</span> {label}
       </button>
@@ -224,9 +218,11 @@ export function StatusBar(): JSX.Element {
         <button
           className={`seg seg-btn usage-seg${usageWin.severity !== 'normal' ? ' usage-warn' : ''}`}
           onClick={() => setUsageOpen(true)}
-          title={`You've used ${usageWin.percent}% of your ${usageWin.label}${
-            usageWin.resetsAt ? ` · ${resetLabel(usageWin.resetsAt)}` : ''
-          } — click for the breakdown`}
+          title={t('status.usageTitle', {
+            percent: usageWin.percent,
+            label: usageWin.label,
+            reset: usageWin.resetsAt ? ` · ${resetLabel(usageWin.resetsAt, appLanguage)}` : ''
+          })}
         >
           <Icon name="barChart" size={12} /> {usageWin.percent}% {usageWin.label}
         </button>
@@ -235,7 +231,7 @@ export function StatusBar(): JSX.Element {
         <button
           className="seg seg-btn ssh-on"
           onClick={() => openSshTerminal(sshConn.id)}
-          title={`Active SSH context: ${sshConn.username}@${sshConn.host}`}
+          title={t('status.activeSshContext', { host: `${sshConn.username}@${sshConn.host}` })}
         >
           <Icon name="terminal" size={12} /> {sshConn.username}@{sshConn.host}
         </button>
@@ -246,14 +242,14 @@ export function StatusBar(): JSX.Element {
             <button
               className="seg seg-btn live-on"
               onClick={() => void goLive()}
-              title="Open the Live preview window"
+              title={t('status.openLivePreview')}
             >
               <Icon name="globe" size={12} /> Live{livePort ? ` :${livePort}` : ''}
             </button>
             <button
               className="seg seg-btn"
               onClick={() => void stopLive()}
-              title="Stop Live Server"
+              title={t('status.stopLiveServer')}
             >
               <Icon name="x" size={12} />
             </button>
@@ -262,13 +258,13 @@ export function StatusBar(): JSX.Element {
           <button
             className="seg seg-btn"
             onClick={() => void goLive()}
-            title="Start Live Server and preview this HTML file"
+            title={t('status.startLiveServer')}
           >
-            <Icon name="globe" size={12} /> Go Live
+            <Icon name="globe" size={12} /> {t('status.goLive')}
           </button>
         ))}
       {current && <span className="seg">{current.language}</span>}
-      <span className="seg">{active ? active.path : 'No folder open'}</span>
+      <span className="seg">{active ? active.path : t('status.noFolderOpen')}</span>
     </div>
   )
 }

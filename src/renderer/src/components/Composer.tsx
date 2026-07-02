@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type DragEvent, type JSX, type KeyboardEvent } from 'react'
 import { Icon } from './Icon'
-import { useApp, type AgentMode } from '@/state/store'
+import { useApp, type AgentMode, type AppLanguage } from '@/state/store'
 import { api } from '@/lib/api'
+import { tr, type TranslationKey } from '@/language'
 import {
   DEFAULT_LLM_CONFIG,
   CODEX_REASONING_LEVELS,
@@ -22,9 +23,9 @@ import {
   type AttachmentFile
 } from '@shared/ipc'
 
-const MODE_LABEL: Record<AgentMode, string> = {
-  ask: 'Ask before changes',
-  auto: 'Auto-apply changes'
+export const MODE_LABEL_KEY: Record<AgentMode, TranslationKey> = {
+  ask: 'composer.mode.ask',
+  auto: 'composer.mode.auto'
 }
 
 /** Short access labels for the Codex sandbox selector in the composer. */
@@ -32,6 +33,11 @@ export const SANDBOX_SHORT: Record<CodexSandbox, string> = {
   'read-only': 'Restricted',
   'workspace-write': 'Auto (sandboxed)',
   'danger-full-access': 'Full access'
+}
+export const SANDBOX_SHORT_KEY: Record<CodexSandbox, TranslationKey> = {
+  'read-only': 'composer.sandbox.restricted',
+  'workspace-write': 'composer.sandbox.auto',
+  'danger-full-access': 'composer.permission.fullAccess'
 }
 
 /** Short access labels for the Claude permission-mode selector. */
@@ -41,6 +47,12 @@ export const PERMISSION_SHORT: Record<ClaudePermissionMode, string> = {
   acceptEdits: 'Auto-edit',
   bypassPermissions: 'Full access'
 }
+export const PERMISSION_SHORT_KEY: Record<ClaudePermissionMode, TranslationKey> = {
+  plan: 'composer.permission.planOnly',
+  default: 'composer.permission.ask',
+  acceptEdits: 'composer.permission.autoEdit',
+  bypassPermissions: 'composer.permission.fullAccess'
+}
 
 /** Short access labels for the GLM / ZCode permission-mode selector. */
 export const GLM_MODE_SHORT: Record<GlmMode, string> = {
@@ -49,12 +61,23 @@ export const GLM_MODE_SHORT: Record<GlmMode, string> = {
   edit: 'Auto-edit',
   yolo: 'Full access'
 }
+export const GLM_MODE_SHORT_KEY: Record<GlmMode, TranslationKey> = {
+  plan: 'composer.permission.planOnly',
+  build: 'composer.permission.build',
+  edit: 'composer.permission.autoEdit',
+  yolo: 'composer.permission.fullAccess'
+}
 
 /** Short access labels for the GitHub Copilot CLI permission selector. */
 export const COPILOT_PERMISSION_SHORT: Record<CopilotPermissionMode, string> = {
   plan: 'Plan only',
   workspace: 'Workspace',
   full: 'Full access'
+}
+export const COPILOT_PERMISSION_SHORT_KEY: Record<CopilotPermissionMode, TranslationKey> = {
+  plan: 'composer.permission.planOnly',
+  workspace: 'composer.permission.workspace',
+  full: 'composer.permission.fullAccess'
 }
 
 /** Short access labels for the Gemini CLI approval selector. */
@@ -63,6 +86,12 @@ export const GEMINI_PERMISSION_SHORT: Record<GeminiApprovalMode, string> = {
   default: 'Ask',
   auto_edit: 'Auto-edit',
   yolo: 'Full access'
+}
+export const GEMINI_PERMISSION_SHORT_KEY: Record<GeminiApprovalMode, TranslationKey> = {
+  plan: 'composer.permission.planOnly',
+  default: 'composer.permission.ask',
+  auto_edit: 'composer.permission.autoEdit',
+  yolo: 'composer.permission.fullAccess'
 }
 
 /**
@@ -96,6 +125,13 @@ export const REASONING_LABEL: Record<CodexReasoning, string> = {
   high: 'High',
   xhigh: 'Very high'
 }
+export const REASONING_LABEL_KEY: Record<CodexReasoning, TranslationKey> = {
+  minimal: 'composer.reasoning.minimal',
+  low: 'composer.reasoning.low',
+  medium: 'composer.reasoning.medium',
+  high: 'composer.reasoning.high',
+  xhigh: 'composer.reasoning.veryHigh'
+}
 
 export const COPILOT_REASONING_LABEL: Record<CopilotReasoning, string> = {
   low: 'Low',
@@ -103,6 +139,13 @@ export const COPILOT_REASONING_LABEL: Record<CopilotReasoning, string> = {
   high: 'High',
   xhigh: 'Very high',
   max: 'Max'
+}
+export const COPILOT_REASONING_LABEL_KEY: Record<CopilotReasoning, TranslationKey> = {
+  low: 'composer.reasoning.low',
+  medium: 'composer.reasoning.medium',
+  high: 'composer.reasoning.high',
+  xhigh: 'composer.reasoning.veryHigh',
+  max: 'composer.reasoning.max'
 }
 
 export function openRouterModelOptions(models: string[], selectedModel: string): string[] {
@@ -139,8 +182,10 @@ function droppedFilePaths(files: FileList): string[] {
   return [...new Set([...direct, ...fallback])]
 }
 
-function attachmentBlock(files: AttachmentFile[]): string {
-  const title = files.length === 1 ? 'Attached file:' : 'Attached files:'
+function attachmentBlock(files: AttachmentFile[], language: AppLanguage): string {
+  const title = files.length === 1
+    ? tr(language, 'composer.attachedFile')
+    : tr(language, 'composer.attachedFiles')
   return [title, ...files.map((file) => `- @${file.path}`)].join('\n')
 }
 
@@ -188,6 +233,9 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
   const streaming = useApp((s) => s.streaming)
   const openFolder = useApp((s) => s.openFolder)
   const refreshDirectory = useApp((s) => s.refreshDirectory)
+  const appLanguage = useApp((s) => s.appLanguage)
+  const t = (key: TranslationKey, values?: Record<string, string | number>): string =>
+    tr(appLanguage, key, values)
 
   const [text, setText] = useState('')
   const [draggingFiles, setDraggingFiles] = useState(false)
@@ -236,7 +284,7 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
   )
 
   const insertAttachments = (files: AttachmentFile[]): void => {
-    const block = attachmentBlock(files)
+    const block = attachmentBlock(files, appLanguage)
     setText((current) => {
       const base = current.trimEnd()
       return base ? `${base}\n\n${block}` : block
@@ -249,15 +297,15 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
     const root = active?.path
     const paths = [...new Set(filePaths.map((path) => path.trim()).filter(Boolean))]
     if (paths.length === 0) {
-      showAttachStatus('error', 'Could not read file paths.')
+      showAttachStatus('error', t('composer.readFilePathsError'))
       return
     }
     if (!root) {
-      showAttachStatus('error', 'Open a folder before attaching files.')
+      showAttachStatus('error', t('composer.openFolderBeforeAttach'))
       return
     }
     if (activeSsh) {
-      showAttachStatus('error', 'Attachments are available for local workspaces.')
+      showAttachStatus('error', t('composer.attachLocalOnly'))
       return
     }
 
@@ -265,16 +313,16 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
     try {
       const result = await api.fs.importFiles(root, paths)
       if (!result.ok) {
-        showAttachStatus('error', result.error ?? 'Failed to attach files.')
+        showAttachStatus('error', result.error ?? t('composer.attachFailed'))
         return
       }
       const files = result.files ?? []
       if (files.length === 0) return
       insertAttachments(files)
-      showAttachStatus('ok', `Attached ${files.length} file${files.length === 1 ? '' : 's'}.`)
+      showAttachStatus('ok', t('composer.attachedCount', { count: files.length }))
       void refreshDirectory(root)
     } catch (err) {
-      showAttachStatus('error', err instanceof Error ? err.message : 'Failed to attach files.')
+      showAttachStatus('error', err instanceof Error ? err.message : t('composer.attachFailed'))
     } finally {
       setAttaching(false)
     }
@@ -329,9 +377,9 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
   return (
     <div className={`composer${draggingFiles ? ' dragging-files' : ''}`}>
       {showFolder && (
-        <button className="composer-folder" onClick={openFolder} title="Change folder">
+        <button className="composer-folder" onClick={openFolder} title={t('composer.changeFolder')}>
           <Icon name="folder" size={15} />
-          {active ? active.name : 'Open a folder'}
+          {active ? active.name : t('composer.openFolder')}
           <Icon name="chevronDown" size={13} />
           <span className="chev" />
         </button>
@@ -340,7 +388,7 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
       <textarea
         ref={ref}
         className="composer-input"
-        placeholder="Ask Ascora anything, @ to add files, / for commands, $ for skills, # related conversation"
+        placeholder={t('composer.placeholder')}
         value={text}
         onChange={(e) => {
           setText(e.target.value)
@@ -358,7 +406,7 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
         <button
           type="button"
           className="composer-tool icon-only"
-          title={activeSsh ? 'Attach is available for local workspaces' : 'Attach files'}
+          title={activeSsh ? t('composer.attachLocalWorkspaces') : t('composer.attachFiles')}
           disabled={!canAttach}
           onClick={() => void openAttachmentPicker()}
         >
@@ -368,7 +416,7 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
           <span className={`composer-attach-status ${attachStatus.kind}`}>{attachStatus.text}</span>
         )}
         {provider === 'codex' ? (
-          <div className="composer-tool" title="Codex access level (sandbox)">
+          <div className="composer-tool" title={t('composer.codexAccess')}>
             <Icon name="hand" size={15} />
             <select
               className="composer-tool-select"
@@ -377,13 +425,13 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
             >
               {(Object.keys(SANDBOX_SHORT) as CodexSandbox[]).map((s) => (
                 <option key={s} value={s}>
-                  {SANDBOX_SHORT[s]}
+                  {t(SANDBOX_SHORT_KEY[s])}
                 </option>
               ))}
             </select>
           </div>
         ) : provider === 'copilot' ? (
-          <div className="composer-tool" title="Copilot permission profile">
+          <div className="composer-tool" title={t('composer.copilotPermission')}>
             <Icon name="hand" size={15} />
             <select
               className="composer-tool-select"
@@ -392,13 +440,13 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
             >
               {COPILOT_PERMISSION_MODES.map((p) => (
                 <option key={p} value={p}>
-                  {COPILOT_PERMISSION_SHORT[p]}
+                  {t(COPILOT_PERMISSION_SHORT_KEY[p])}
                 </option>
               ))}
             </select>
           </div>
         ) : provider === 'claude' ? (
-          <div className="composer-tool" title="Claude permission mode">
+          <div className="composer-tool" title={t('composer.claudePermission')}>
             <Icon name="hand" size={15} />
             <select
               className="composer-tool-select"
@@ -407,13 +455,13 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
             >
               {CLAUDE_PERMISSION_MODES.map((p) => (
                 <option key={p} value={p}>
-                  {PERMISSION_SHORT[p]}
+                  {t(PERMISSION_SHORT_KEY[p])}
                 </option>
               ))}
             </select>
           </div>
         ) : provider === 'gemini' ? (
-          <div className="composer-tool" title="Gemini approval mode">
+          <div className="composer-tool" title={t('composer.geminiApproval')}>
             <Icon name="hand" size={15} />
             <select
               className="composer-tool-select"
@@ -422,13 +470,13 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
             >
               {GEMINI_APPROVAL_MODES.map((p) => (
                 <option key={p} value={p}>
-                  {GEMINI_PERMISSION_SHORT[p]}
+                  {t(GEMINI_PERMISSION_SHORT_KEY[p])}
                 </option>
               ))}
             </select>
           </div>
         ) : provider === 'glm' ? (
-          <div className="composer-tool" title="GLM (ZCode) permission mode">
+          <div className="composer-tool" title={t('composer.glmPermission')}>
             <Icon name="hand" size={15} />
             <select
               className="composer-tool-select"
@@ -437,7 +485,7 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
             >
               {GLM_MODES.map((m) => (
                 <option key={m} value={m}>
-                  {GLM_MODE_SHORT[m]}
+                  {t(GLM_MODE_SHORT_KEY[m])}
                 </option>
               ))}
             </select>
@@ -445,11 +493,11 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
         ) : (
           <button
             className="composer-tool"
-            title="Toggle agent permission mode"
+            title={t('composer.togglePermissionMode')}
             onClick={() => setMode(mode === 'ask' ? 'auto' : 'ask')}
           >
             <Icon name="hand" size={15} />
-            {MODE_LABEL[mode]}
+            {t(MODE_LABEL_KEY[mode])}
             <Icon name="chevronDown" size={13} />
           </button>
         )}
@@ -458,7 +506,7 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
 
         <span
           className="provider-select-wrap"
-          data-tooltip={lmStudioUnavailable ? 'The application is not running.' : undefined}
+          data-tooltip={lmStudioUnavailable ? t('composer.lmStudioNotRunning') : undefined}
         >
           <select
             className="composer-select"
@@ -468,7 +516,7 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
               if (next === 'lmstudio' && lmStudioUnavailable) return
               void setProvider(next)
             }}
-            aria-label="Agent backend"
+            aria-label={t('composer.agentBackend')}
           >
             <option value="lmstudio" disabled={lmStudioUnavailable}>
               LM Studio
@@ -489,12 +537,12 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
               className="composer-select"
               value={codexReasoning}
               onChange={(e) => setCodexReasoning(e.target.value as CodexReasoning | '')}
-              title="Reasoning effort"
+              title={t('composer.reasoningEffort')}
             >
-              <option value="">Reasoning: auto</option>
+              <option value="">{t('composer.reasoningAuto')}</option>
               {CODEX_REASONING_LEVELS.map((r) => (
                 <option key={r} value={r}>
-                  {REASONING_LABEL[r]}
+                  {t(REASONING_LABEL_KEY[r])}
                 </option>
               ))}
             </select>
@@ -502,9 +550,9 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
               className="composer-select"
               value={codexModel}
               onChange={(e) => setCodexModel(e.target.value)}
-              title="Codex model"
+              title={t('composer.codexModel')}
             >
-              <option value="">Codex default</option>
+              <option value="">{t('composer.codexDefault')}</option>
               {CODEX_MODEL_PRESETS.map((m) => (
                 <option key={m} value={m}>
                   {m}
@@ -521,12 +569,12 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
               className="composer-select"
               value={copilotReasoning}
               onChange={(e) => setCopilotReasoning(e.target.value as CopilotReasoning | '')}
-              title="Copilot reasoning effort"
+              title={t('composer.copilotReasoning')}
             >
-              <option value="">Reasoning: auto</option>
+              <option value="">{t('composer.reasoningAuto')}</option>
               {COPILOT_REASONING_LEVELS.map((r) => (
                 <option key={r} value={r}>
-                  {COPILOT_REASONING_LABEL[r]}
+                  {t(COPILOT_REASONING_LABEL_KEY[r])}
                 </option>
               ))}
             </select>
@@ -534,9 +582,9 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
               className="composer-select"
               value={copilotModel}
               onChange={(e) => setCopilotModel(e.target.value)}
-              title="GitHub Copilot model"
+              title={t('composer.copilotModel')}
             >
-              <option value="">Copilot default</option>
+              <option value="">{t('composer.copilotDefault')}</option>
               {COPILOT_MODEL_PRESETS.map((m) => (
                 <option key={m} value={m}>
                   {m}
@@ -552,11 +600,11 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
             className="composer-select"
             value={claudeModel || 'default'}
             onChange={(e) => setClaudeModel(e.target.value === 'default' ? '' : e.target.value)}
-            title="Claude model"
+            title={t('composer.claudeModel')}
           >
             {CLAUDE_MODEL_PRESETS.map((m) => (
               <option key={m} value={m}>
-                {m === 'default' ? 'Claude default' : m}
+                {m === 'default' ? t('composer.claudeDefault') : m}
               </option>
             ))}
             {claudeModel && !CLAUDE_MODEL_PRESETS.includes(claudeModel) && (
@@ -568,9 +616,9 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
             className="composer-select"
             value={geminiModel}
             onChange={(e) => setGeminiModel(e.target.value)}
-            title="Gemini model"
+            title={t('composer.geminiModel')}
           >
-            <option value="">Gemini default</option>
+            <option value="">{t('composer.geminiDefault')}</option>
             {GEMINI_MODEL_PRESETS.map((m) => (
               <option key={m} value={m}>
                 {m}
@@ -585,7 +633,7 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
             className="composer-select"
             value="glm"
             disabled
-            title="GLM model comes from standalone ZCode CLI config or a compatible desktop Coding Plan"
+            title={t('composer.glmModelHint')}
           >
             <option value="glm">GLM · ZCode</option>
           </select>
@@ -594,7 +642,7 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
             className="composer-select"
             value={openRouterModel || modelOptions[0]}
             onChange={(e) => setOpenRouterModel(e.target.value)}
-            title="Model (OpenRouter)"
+            title={t('composer.modelOpenRouter')}
           >
             {modelOptions.map((m) => (
               <option key={m} value={m}>
@@ -607,7 +655,7 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
             className="composer-select"
             value={ollamaModel || modelOptions[0]}
             onChange={(e) => setOllamaModel(e.target.value)}
-            title="Model (Ollama)"
+            title={t('composer.modelOllama')}
           >
             {modelOptions.map((m) => (
               <option key={m} value={m}>
@@ -620,7 +668,7 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
             className="composer-select"
             value={model || modelOptions[0]}
             onChange={(e) => setModel(e.target.value)}
-            title="Model (LM Studio)"
+            title={t('composer.modelLmStudio')}
           >
             {modelOptions.map((m) => (
               <option key={m} value={m}>
@@ -631,11 +679,11 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
         )}
 
         {streaming ? (
-          <button className="send-btn" onClick={() => stopStreaming()} title="Stop">
+          <button className="send-btn" onClick={() => stopStreaming()} title={t('common.stop')}>
             <Icon name="maximize" size={12} />
           </button>
         ) : (
-          <button className="send-btn" disabled={!canSend} onClick={send} title="Send (Enter)">
+          <button className="send-btn" disabled={!canSend} onClick={send} title={t('composer.send')}>
             <Icon name="send" size={16} />
           </button>
         )}

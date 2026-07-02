@@ -1,14 +1,20 @@
 import { useState, type JSX } from 'react'
 import { Icon } from './Icon'
 import {
-  REASONING_LABEL,
-  COPILOT_REASONING_LABEL,
   CODEX_MODEL_PRESETS,
   COPILOT_MODEL_PRESETS,
   GEMINI_MODEL_PRESETS,
-  openRouterModelOptions
+  openRouterModelOptions,
+  REASONING_LABEL_KEY,
+  COPILOT_REASONING_LABEL_KEY,
+  SANDBOX_SHORT_KEY,
+  COPILOT_PERMISSION_SHORT_KEY,
+  PERMISSION_SHORT_KEY,
+  GEMINI_PERMISSION_SHORT_KEY,
+  GLM_MODE_SHORT_KEY
 } from './Composer'
 import { useApp } from '@/state/store'
+import { tr, type TranslationKey } from '@/language'
 import {
   DEFAULT_LLM_CONFIG,
   CODEX_REASONING_LEVELS,
@@ -29,40 +35,13 @@ import {
   type LlmProvider
 } from '@shared/ipc'
 
-const PERMISSION_LABEL: Record<ClaudePermissionMode, string> = {
-  plan: 'Plan only (read-only; proposes a plan)',
-  default: 'Ask (default; some tools auto-denied in print mode)',
-  acceptEdits: 'Auto-accept edits (sandboxed to workspace)',
-  bypassPermissions: 'Full access (skip all permission checks)'
-}
-
-const SANDBOX_LABEL: Record<CodexSandbox, string> = {
-  'read-only': 'Read-only (no edits or commands)',
-  'workspace-write': 'Workspace write (edit this folder, sandboxed)',
-  'danger-full-access': 'Full access (no sandbox — dangerous)'
-}
-
-const COPILOT_PERMISSION_LABEL: Record<CopilotPermissionMode, string> = {
-  plan: 'Plan only (no autonomous edits)',
-  workspace: 'Workspace write (read/write/shell in this folder)',
-  full: 'Full access (--allow-all / yolo)'
-}
-
-const GEMINI_PERMISSION_LABEL: Record<GeminiApprovalMode, string> = {
-  plan: 'Plan only (read-only; proposes a plan)',
-  default: 'Ask (prompts for tool approval; can stall headless)',
-  auto_edit: 'Auto-edit (auto-approve edit tools)',
-  yolo: 'Full access (auto-approve everything; recommended headless)'
-}
-
-const GLM_MODE_LABEL: Record<GlmMode, string> = {
-  plan: 'Plan only (read-only; proposes a plan)',
-  build: 'Build (may pause for approvals — can stall headless)',
-  edit: 'Auto-edit (may pause for command approvals)',
-  yolo: 'Full access (auto-approve everything — recommended headless)'
+function useT(): (key: TranslationKey, values?: Record<string, string | number>) => string {
+  const appLanguage = useApp((s) => s.appLanguage)
+  return (key, values) => tr(appLanguage, key, values)
 }
 
 function LmStudioPanel(): JSX.Element {
+  const t = useT()
   const baseUrl = useApp((s) => s.baseUrl)
   const setBaseUrl = useApp((s) => s.setBaseUrl)
   const model = useApp((s) => s.model)
@@ -83,7 +62,7 @@ function LmStudioPanel(): JSX.Element {
   return (
     <>
       <label className="field">
-        <span className="field-label">Base URL</span>
+        <span className="field-label">{t('settings.baseUrl')}</span>
         <div className="field-row">
           <input
             className="text-input"
@@ -94,14 +73,16 @@ function LmStudioPanel(): JSX.Element {
             onKeyDown={(e) => e.key === 'Enter' && void test()}
           />
           <button className="btn" onClick={() => void test()} disabled={testing}>
-            {testing ? 'Testing…' : 'Test'}
+            {testing ? t('common.testing') : t('common.test')}
           </button>
         </div>
-        <span className="field-hint">OpenAI-compatible endpoint, e.g. {DEFAULT_LLM_CONFIG.baseUrl}</span>
+        <span className="field-hint">
+          {t('settings.endpointOpenAi', { url: DEFAULT_LLM_CONFIG.baseUrl })}
+        </span>
       </label>
 
       <label className="field">
-        <span className="field-label">Model</span>
+        <span className="field-label">{t('common.model')}</span>
         <select
           className="text-input"
           value={model || (models[0] ?? '')}
@@ -109,7 +90,7 @@ function LmStudioPanel(): JSX.Element {
           disabled={models.length === 0}
         >
           {models.length === 0 ? (
-            <option value="">{model || '— no models —'}</option>
+            <option value="">{model || t('settings.noModels')}</option>
           ) : (
             models.map((m) => (
               <option key={m} value={m}>
@@ -121,16 +102,17 @@ function LmStudioPanel(): JSX.Element {
       </label>
 
       <div className={`conn-line ${connection}`}>
-        {connection === 'connected' && `✓ Connected — ${models.length} model(s) available.`}
-        {connection === 'connecting' && 'Connecting…'}
-        {connection === 'error' && `✗ ${connectionError ?? 'Connection failed.'}`}
-        {connection === 'unknown' && 'Not tested yet.'}
+        {connection === 'connected' && `✓ ${t('settings.connectedModels', { count: models.length })}`}
+        {connection === 'connecting' && t('settings.connecting')}
+        {connection === 'error' && `✗ ${connectionError ?? t('settings.connectionFailed')}`}
+        {connection === 'unknown' && t('settings.notTestedYet')}
       </div>
     </>
   )
 }
 
 function OllamaPanel(): JSX.Element {
+  const t = useT()
   const ollamaBaseUrl = useApp((s) => s.ollamaBaseUrl)
   const setOllamaBaseUrl = useApp((s) => s.setOllamaBaseUrl)
   const ollamaModel = useApp((s) => s.ollamaModel)
@@ -151,7 +133,7 @@ function OllamaPanel(): JSX.Element {
   return (
     <>
       <label className="field">
-        <span className="field-label">Base URL</span>
+        <span className="field-label">{t('settings.baseUrl')}</span>
         <div className="field-row">
           <input
             className="text-input"
@@ -162,16 +144,16 @@ function OllamaPanel(): JSX.Element {
             onKeyDown={(e) => e.key === 'Enter' && void test()}
           />
           <button className="btn" onClick={() => void test()} disabled={testing}>
-            {testing ? 'Testing…' : 'Test'}
+            {testing ? t('common.testing') : t('common.test')}
           </button>
         </div>
         <span className="field-hint">
-          Ollama OpenAI-compatible endpoint, e.g. {DEFAULT_LLM_CONFIG.ollamaBaseUrl}
+          {t('settings.ollamaEndpoint', { url: DEFAULT_LLM_CONFIG.ollamaBaseUrl })}
         </span>
       </label>
 
       <label className="field">
-        <span className="field-label">Model</span>
+        <span className="field-label">{t('common.model')}</span>
         <select
           className="text-input"
           value={ollamaModel || (models[0] ?? '')}
@@ -179,7 +161,7 @@ function OllamaPanel(): JSX.Element {
           disabled={models.length === 0}
         >
           {models.length === 0 ? (
-            <option value="">{ollamaModel || '— no models —'}</option>
+            <option value="">{ollamaModel || t('settings.noModels')}</option>
           ) : (
             models.map((m) => (
               <option key={m} value={m}>
@@ -191,16 +173,17 @@ function OllamaPanel(): JSX.Element {
       </label>
 
       <div className={`conn-line ${connection}`}>
-        {connection === 'connected' && `Ollama connected - ${models.length} model(s) available.`}
-        {connection === 'connecting' && 'Connecting to Ollama...'}
-        {connection === 'error' && `Ollama error: ${connectionError ?? 'Connection failed.'}`}
-        {connection === 'unknown' && 'Not tested yet.'}
+        {connection === 'connected' && `Ollama ${t('settings.connectedModels', { count: models.length })}`}
+        {connection === 'connecting' && `${t('settings.connecting')} Ollama`}
+        {connection === 'error' && `Ollama: ${connectionError ?? t('settings.connectionFailed')}`}
+        {connection === 'unknown' && t('settings.notTestedYet')}
       </div>
     </>
   )
 }
 
 function CodexPanel(): JSX.Element {
+  const t = useT()
   const codexPath = useApp((s) => s.codexPath)
   const setCodexPath = useApp((s) => s.setCodexPath)
   const codexModel = useApp((s) => s.codexModel)
@@ -222,33 +205,33 @@ function CodexPanel(): JSX.Element {
   return (
     <>
       <label className="field">
-        <span className="field-label">Codex binary</span>
+        <span className="field-label">{t('settings.codexBinary')}</span>
         <div className="field-row">
           <input
             className="text-input"
             value={path}
             spellCheck={false}
-            placeholder="(auto-detect: PATH or VS Code extension)"
+            placeholder={t('settings.autoDetectCodex')}
             onChange={(e) => setPath(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && void apply()}
           />
           <button className="btn" onClick={() => void apply()} disabled={checking}>
-            {checking ? 'Checking…' : 'Check'}
+            {checking ? t('common.checking') : t('common.check')}
           </button>
         </div>
         <span className="field-hint">
-          Leave blank to use `codex` from PATH or the bundled "OpenAI Codex" VS Code extension.
+          {t('settings.codexHint')}
         </span>
       </label>
 
       <label className="field">
-        <span className="field-label">Model</span>
+        <span className="field-label">{t('common.model')}</span>
         <input
           className="text-input"
           list="codex-model-presets"
           value={codexModel}
           spellCheck={false}
-          placeholder="Codex default"
+          placeholder={t('composer.codexDefault')}
           onChange={(e) => setCodexModel(e.target.value)}
         />
         <datalist id="codex-model-presets">
@@ -259,20 +242,20 @@ function CodexPanel(): JSX.Element {
       </label>
 
       <label className="field">
-        <span className="field-label">Sandbox</span>
+        <span className="field-label">{t('settings.sandbox')}</span>
         <select
           className="text-input"
           value={codexSandbox}
           onChange={(e) => setCodexSandbox(e.target.value as CodexSandbox)}
         >
-          {(Object.keys(SANDBOX_LABEL) as CodexSandbox[]).map((s) => (
+          {(Object.keys(SANDBOX_SHORT_KEY) as CodexSandbox[]).map((s) => (
             <option key={s} value={s}>
-              {SANDBOX_LABEL[s]}
+              {t(SANDBOX_SHORT_KEY[s])}
             </option>
           ))}
         </select>
         <span className="field-hint">
-          Codex runs its own agent loop and applies edits autonomously within this policy.
+          {t('settings.codexPolicyHint')}
         </span>
       </label>
 
@@ -283,16 +266,15 @@ function CodexPanel(): JSX.Element {
           value={codexReasoning}
           onChange={(e) => setCodexReasoning(e.target.value as CodexReasoning | '')}
         >
-          <option value="">Auto (Codex default)</option>
+          <option value="">{t('settings.autoCodexDefault')}</option>
           {CODEX_REASONING_LEVELS.map((r) => (
             <option key={r} value={r}>
-              {REASONING_LABEL[r]}
+              {t(REASONING_LABEL_KEY[r])}
             </option>
           ))}
         </select>
         <span className="field-hint">
-          Higher effort = deeper reasoning, slower and more tokens. Applies to Codex reasoning
-          models (gpt-5.5, gpt-5.4, …).
+          {t('settings.reasoningHint')}
         </span>
       </label>
 
@@ -301,13 +283,13 @@ function CodexPanel(): JSX.Element {
           checking ? 'connecting' : !check ? 'unknown' : check.installed ? 'connected' : 'error'
         }`}
       >
-        {checking && 'Checking Codex…'}
-        {!checking && !check && 'Not checked yet.'}
+        {checking && t('settings.checkingName', { name: 'Codex' })}
+        {!checking && !check && t('settings.notCheckedYet')}
         {!checking && check && !check.installed && `✗ ${check.error ?? 'Codex CLI not found.'}`}
         {!checking && check && check.installed && (
           <>
             ✓ {check.version ?? 'codex'} ·{' '}
-            {check.loggedIn ? check.authNote ?? 'signed in' : 'not signed in — run: codex login'}
+            {check.loggedIn ? check.authNote ?? t('settings.signedIn') : t('settings.notSignedInCodex')}
             {check.path ? <div className="field-hint">{check.path}</div> : null}
           </>
         )}
@@ -315,18 +297,19 @@ function CodexPanel(): JSX.Element {
 
       {!checking && check?.installed && !check.loggedIn && (
         <div className="field-hint">
-          Sign in once from a terminal: <code>codex login</code>, then press Check again.
+          {t('settings.codexSigninHint')}
         </div>
       )}
 
       <button className="btn" style={{ alignSelf: 'flex-start' }} onClick={() => void checkCodex()} disabled={checking}>
-        Re-check
+        {t('settings.recheck')}
       </button>
     </>
   )
 }
 
 function CopilotPanel(): JSX.Element {
+  const t = useT()
   const copilotPath = useApp((s) => s.copilotPath)
   const setCopilotPath = useApp((s) => s.setCopilotPath)
   const copilotModel = useApp((s) => s.copilotModel)
@@ -349,33 +332,33 @@ function CopilotPanel(): JSX.Element {
   return (
     <>
       <label className="field">
-        <span className="field-label">Copilot binary</span>
+        <span className="field-label">{t('settings.copilotBinary')}</span>
         <div className="field-row">
           <input
             className="text-input"
             value={path}
             spellCheck={false}
-            placeholder="(auto-detect: PATH)"
+            placeholder={t('settings.autoDetectPath')}
             onChange={(e) => setPath(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && void apply()}
           />
           <button className="btn" onClick={() => void apply()} disabled={checking}>
-            {checking ? 'Checking...' : 'Check'}
+            {checking ? t('common.checking') : t('common.check')}
           </button>
         </div>
         <span className="field-hint">
-          Leave blank to use `copilot` from PATH. Uses your existing GitHub Copilot login.
+          {t('settings.copilotHint')}
         </span>
       </label>
 
       <label className="field">
-        <span className="field-label">Model</span>
+        <span className="field-label">{t('common.model')}</span>
         <input
           className="text-input"
           list="copilot-model-presets"
           value={copilotModel}
           spellCheck={false}
-          placeholder="Copilot default or auto"
+          placeholder={t('composer.copilotDefault')}
           onChange={(e) => setCopilotModel(e.target.value)}
         />
         <datalist id="copilot-model-presets">
@@ -386,7 +369,7 @@ function CopilotPanel(): JSX.Element {
       </label>
 
       <label className="field">
-        <span className="field-label">Permission profile</span>
+        <span className="field-label">{t('settings.permissionProfile')}</span>
         <select
           className="text-input"
           value={copilotPermission}
@@ -394,31 +377,31 @@ function CopilotPanel(): JSX.Element {
         >
           {COPILOT_PERMISSION_MODES.map((p) => (
             <option key={p} value={p}>
-              {COPILOT_PERMISSION_LABEL[p]}
+              {t(COPILOT_PERMISSION_SHORT_KEY[p])}
             </option>
           ))}
         </select>
         <span className="field-hint">
-          Workspace mode runs `copilot -p` with read/write/shell tools allowed for this folder.
+          {t('settings.copilotPolicyHint')}
         </span>
       </label>
 
       <label className="field">
-        <span className="field-label">Reasoning effort</span>
+        <span className="field-label">{t('composer.reasoningEffort')}</span>
         <select
           className="text-input"
           value={copilotReasoning}
           onChange={(e) => setCopilotReasoning(e.target.value as CopilotReasoning | '')}
         >
-          <option value="">Auto (Copilot default)</option>
+          <option value="">{t('settings.autoCopilotDefault')}</option>
           {COPILOT_REASONING_LEVELS.map((r) => (
             <option key={r} value={r}>
-              {COPILOT_REASONING_LABEL[r]}
+              {t(COPILOT_REASONING_LABEL_KEY[r])}
             </option>
           ))}
         </select>
         <span className="field-hint">
-          Applies to Copilot CLI models that support `--reasoning-effort`.
+          {t('settings.copilotReasoningHint')}
         </span>
       </label>
 
@@ -427,12 +410,12 @@ function CopilotPanel(): JSX.Element {
           checking ? 'connecting' : !check ? 'unknown' : check.installed ? 'connected' : 'error'
         }`}
       >
-        {checking && 'Checking Copilot...'}
-        {!checking && !check && 'Not checked yet.'}
+        {checking && t('settings.checkingName', { name: 'Copilot' })}
+        {!checking && !check && t('settings.notCheckedYet')}
         {!checking && check && !check.installed && `x ${check.error ?? 'GitHub Copilot CLI not found.'}`}
         {!checking && check && check.installed && (
           <>
-            ✓ {check.version ?? 'copilot'} · {check.authNote ?? 'ready'}
+            ✓ {check.version ?? 'copilot'} · {check.authNote ?? t('settings.ready')}
             {check.path ? <div className="field-hint">{check.path}</div> : null}
           </>
         )}
@@ -440,17 +423,17 @@ function CopilotPanel(): JSX.Element {
 
       {!checking && check?.installed && !check.loggedIn && (
         <div className="field-hint">
-          If Copilot asks for authentication, sign in once from a terminal: <code>copilot login</code>.
+          {t('settings.copilotLoginHint')}
         </div>
       )}
 
       <div className="field-row" style={{ alignSelf: 'flex-start' }}>
         <button className="btn btn-icon" onClick={() => setCopilotAuthOpen(true)}>
           <Icon name="terminal" size={14} />
-          Authorize
+          {t('settings.authorize')}
         </button>
         <button className="btn" onClick={() => void checkCopilot()} disabled={checking}>
-          Re-check
+          {t('settings.recheck')}
         </button>
       </div>
     </>
@@ -458,6 +441,7 @@ function CopilotPanel(): JSX.Element {
 }
 
 function ClaudePanel(): JSX.Element {
+  const t = useT()
   const claudePath = useApp((s) => s.claudePath)
   const setClaudePath = useApp((s) => s.setClaudePath)
   const claudeModel = useApp((s) => s.claudeModel)
@@ -476,34 +460,33 @@ function ClaudePanel(): JSX.Element {
   return (
     <>
       <label className="field">
-        <span className="field-label">Claude binary</span>
+        <span className="field-label">{t('settings.claudeBinary')}</span>
         <div className="field-row">
           <input
             className="text-input"
             value={path}
             spellCheck={false}
-            placeholder="(auto-detect: PATH or Claude Code VS Code extension)"
+            placeholder={t('settings.autoDetectClaude')}
             onChange={(e) => setPath(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && void apply()}
           />
           <button className="btn" onClick={() => void apply()} disabled={checking}>
-            {checking ? 'Checking…' : 'Check'}
+            {checking ? t('common.checking') : t('common.check')}
           </button>
         </div>
         <span className="field-hint">
-          Leave blank to use `claude` from PATH or the bundled "Claude Code" VS Code extension. Uses
-          your existing Claude subscription / login.
+          {t('settings.claudeHint')}
         </span>
       </label>
 
       <label className="field">
-        <span className="field-label">Model</span>
+        <span className="field-label">{t('common.model')}</span>
         <input
           className="text-input"
           list="claude-model-presets"
           value={claudeModel}
           spellCheck={false}
-          placeholder="Claude default (opus / sonnet / haiku or a full id)"
+          placeholder={t('settings.claudeModelPlaceholder')}
           onChange={(e) => setClaudeModel(e.target.value)}
         />
         <datalist id="claude-model-presets">
@@ -514,7 +497,7 @@ function ClaudePanel(): JSX.Element {
       </label>
 
       <label className="field">
-        <span className="field-label">Permission mode</span>
+        <span className="field-label">{t('settings.permissionMode')}</span>
         <select
           className="text-input"
           value={claudePermission}
@@ -522,12 +505,12 @@ function ClaudePanel(): JSX.Element {
         >
           {CLAUDE_PERMISSION_MODES.map((p) => (
             <option key={p} value={p}>
-              {PERMISSION_LABEL[p]}
+              {t(PERMISSION_SHORT_KEY[p])}
             </option>
           ))}
         </select>
         <span className="field-hint">
-          Claude Code runs its own agent loop and applies edits autonomously within this policy.
+          {t('settings.claudePolicyHint')}
         </span>
       </label>
 
@@ -536,12 +519,12 @@ function ClaudePanel(): JSX.Element {
           checking ? 'connecting' : !check ? 'unknown' : check.installed ? 'connected' : 'error'
         }`}
       >
-        {checking && 'Checking Claude…'}
-        {!checking && !check && 'Not checked yet.'}
+        {checking && t('settings.checkingName', { name: 'Claude' })}
+        {!checking && !check && t('settings.notCheckedYet')}
         {!checking && check && !check.installed && `✗ ${check.error ?? 'Claude Code CLI not found.'}`}
         {!checking && check && check.installed && (
           <>
-            ✓ {check.version ?? 'claude'} · {check.authNote ?? 'ready'}
+            ✓ {check.version ?? 'claude'} · {check.authNote ?? t('settings.ready')}
             {check.path ? <div className="field-hint">{check.path}</div> : null}
           </>
         )}
@@ -553,13 +536,14 @@ function ClaudePanel(): JSX.Element {
         onClick={() => void checkClaude()}
         disabled={checking}
       >
-        Re-check
+        {t('settings.recheck')}
       </button>
     </>
   )
 }
 
 function GeminiPanel(): JSX.Element {
+  const t = useT()
   const geminiPath = useApp((s) => s.geminiPath)
   const setGeminiPath = useApp((s) => s.setGeminiPath)
   const geminiModel = useApp((s) => s.geminiModel)
@@ -578,34 +562,33 @@ function GeminiPanel(): JSX.Element {
   return (
     <>
       <label className="field">
-        <span className="field-label">Gemini binary</span>
+        <span className="field-label">{t('settings.geminiBinary')}</span>
         <div className="field-row">
           <input
             className="text-input"
             value={path}
             spellCheck={false}
-            placeholder="(auto-detect: PATH)"
+            placeholder={t('settings.autoDetectPath')}
             onChange={(e) => setPath(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && void apply()}
           />
           <button className="btn" onClick={() => void apply()} disabled={checking}>
-            {checking ? 'Checking...' : 'Check'}
+            {checking ? t('common.checking') : t('common.check')}
           </button>
         </div>
         <span className="field-hint">
-          Leave blank to use `gemini` from PATH. Install with `npm i -g @google/gemini-cli`,
-          then run `gemini` once to sign in or set GEMINI_API_KEY.
+          {t('settings.geminiHint')}
         </span>
       </label>
 
       <label className="field">
-        <span className="field-label">Model</span>
+        <span className="field-label">{t('common.model')}</span>
         <input
           className="text-input"
           list="gemini-model-presets"
           value={geminiModel}
           spellCheck={false}
-          placeholder="Gemini CLI default"
+          placeholder={t('settings.geminiModelPlaceholder')}
           onChange={(e) => setGeminiModel(e.target.value)}
         />
         <datalist id="gemini-model-presets">
@@ -616,7 +599,7 @@ function GeminiPanel(): JSX.Element {
       </label>
 
       <label className="field">
-        <span className="field-label">Approval mode</span>
+        <span className="field-label">{t('settings.approvalMode')}</span>
         <select
           className="text-input"
           value={geminiPermission}
@@ -624,13 +607,12 @@ function GeminiPanel(): JSX.Element {
         >
           {GEMINI_APPROVAL_MODES.map((p) => (
             <option key={p} value={p}>
-              {GEMINI_PERMISSION_LABEL[p]}
+              {t(GEMINI_PERMISSION_SHORT_KEY[p])}
             </option>
           ))}
         </select>
         <span className="field-hint">
-          Gemini CLI runs in headless stream-json mode. Full access uses Gemini&apos;s own
-          auto-approval path so tasks do not wait for terminal prompts.
+          {t('settings.geminiPolicyHint')}
         </span>
       </label>
 
@@ -639,12 +621,12 @@ function GeminiPanel(): JSX.Element {
           checking ? 'connecting' : !check ? 'unknown' : check.installed ? 'connected' : 'error'
         }`}
       >
-        {checking && 'Checking Gemini...'}
-        {!checking && !check && 'Not checked yet.'}
+        {checking && t('settings.checkingName', { name: 'Gemini' })}
+        {!checking && !check && t('settings.notCheckedYet')}
         {!checking && check && !check.installed && `✗ ${check.error ?? 'Gemini CLI not found.'}`}
         {!checking && check && check.installed && (
           <>
-            ✓ {check.version ?? 'gemini'} · {check.authNote ?? 'ready'}
+            ✓ {check.version ?? 'gemini'} · {check.authNote ?? t('settings.ready')}
             {check.path ? <div className="field-hint">{check.path}</div> : null}
           </>
         )}
@@ -652,7 +634,7 @@ function GeminiPanel(): JSX.Element {
 
       {!checking && check?.installed && !check.loggedIn && (
         <div className="field-hint">
-          Sign in once from a terminal: <code>gemini</code>, or set <code>GEMINI_API_KEY</code>.
+          {t('settings.geminiLoginHint')}
         </div>
       )}
 
@@ -662,13 +644,14 @@ function GeminiPanel(): JSX.Element {
         onClick={() => void checkGemini()}
         disabled={checking}
       >
-        Re-check
+        {t('settings.recheck')}
       </button>
     </>
   )
 }
 
 function GlmPanel(): JSX.Element {
+  const t = useT()
   const glmPath = useApp((s) => s.glmPath)
   const setGlmPath = useApp((s) => s.setGlmPath)
   const glmMode = useApp((s) => s.glmMode)
@@ -685,28 +668,27 @@ function GlmPanel(): JSX.Element {
   return (
     <>
       <label className="field">
-        <span className="field-label">ZCode path</span>
+        <span className="field-label">{t('settings.zcodePath')}</span>
         <div className="field-row">
           <input
             className="text-input"
             value={path}
             spellCheck={false}
-            placeholder="(auto-detect installed ZCode)"
+            placeholder={t('settings.autoDetectZcode')}
             onChange={(e) => setPath(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && void apply()}
           />
           <button className="btn" onClick={() => void apply()} disabled={checking}>
-            {checking ? 'Checking…' : 'Check'}
+            {checking ? t('common.checking') : t('common.check')}
           </button>
         </div>
         <span className="field-hint">
-          Install folder, ZCode.exe, or resources/glm/zcode.cjs. Leave blank to auto-detect the
-          installed app. Ascora keeps its sessions separate and never rewrites ZCode&apos;s CLI config.
+          {t('settings.zcodeHint')}
         </span>
       </label>
 
       <label className="field">
-        <span className="field-label">Permission mode</span>
+        <span className="field-label">{t('settings.permissionMode')}</span>
         <select
           className="text-input"
           value={glmMode}
@@ -714,13 +696,12 @@ function GlmPanel(): JSX.Element {
         >
           {GLM_MODES.map((m) => (
             <option key={m} value={m}>
-              {GLM_MODE_LABEL[m]}
+              {t(GLM_MODE_SHORT_KEY[m])}
             </option>
           ))}
         </select>
         <span className="field-hint">
-          Standalone CLI config is preferred. Desktop Coding Plan and Start Plan are detected automatically;
-          Start Plan performs its official CAPTCHA check before each request.
+          {t('settings.zcodePolicyHint')}
         </span>
       </label>
 
@@ -735,13 +716,13 @@ function GlmPanel(): JSX.Element {
                 : 'error'
         }`}
       >
-        {checking && 'Checking ZCode…'}
-        {!checking && !check && 'Not checked yet.'}
+        {checking && t('settings.checkingName', { name: 'ZCode' })}
+        {!checking && !check && t('settings.notCheckedYet')}
         {!checking && check && !check.installed && `✗ ${check.error ?? 'ZCode not found.'}`}
         {!checking && check && check.installed && (
           <>
             {check.loggedIn ? '✓' : '⚠'} {check.version ? `zcode ${check.version}` : 'zcode'} ·{' '}
-            {check.authNote ?? 'ready'}
+            {check.authNote ?? t('settings.ready')}
             {check.path ? <div className="field-hint">{check.path}</div> : null}
           </>
         )}
@@ -749,7 +730,7 @@ function GlmPanel(): JSX.Element {
 
       {!checking && check?.installed && !check.loggedIn && (
         <div className="field-hint">
-          Sign in and select a model in ZCode, or configure a standalone Coding Plan with the bundled CLI login.
+          {t('settings.zcodeSigninHint')}
         </div>
       )}
 
@@ -759,13 +740,14 @@ function GlmPanel(): JSX.Element {
         onClick={() => void checkGlm()}
         disabled={checking}
       >
-        Re-check
+        {t('settings.recheck')}
       </button>
     </>
   )
 }
 
 function OpenRouterSetup(): JSX.Element {
+  const t = useT()
   const openRouterEnabled = useApp((s) => s.openRouterEnabled)
   const openRouterApiKey = useApp((s) => s.openRouterApiKey)
   const setOpenRouterEnabled = useApp((s) => s.setOpenRouterEnabled)
@@ -787,14 +769,17 @@ function OpenRouterSetup(): JSX.Element {
     <div className="field">
       <span className="field-label">OpenRouter</span>
       <div className="field-row" style={{ alignItems: 'center' }}>
-        <label className="skill-toggle" title={openRouterEnabled ? 'Disable OpenRouter' : 'Enable OpenRouter'}>
+        <label
+          className="skill-toggle"
+          title={openRouterEnabled ? t('settings.disableOpenRouter') : t('settings.enableOpenRouter')}
+        >
           <input
             type="checkbox"
             checked={openRouterEnabled}
             onChange={(e) => void setOpenRouterEnabled(e.target.checked)}
           />
         </label>
-        <span className="field-hint">Enable OpenRouter as a cloud OpenAI-compatible backend.</span>
+        <span className="field-hint">{t('settings.openRouterHint')}</span>
       </div>
       <div className="field-row">
         <input
@@ -807,19 +792,20 @@ function OpenRouterSetup(): JSX.Element {
           onKeyDown={(e) => e.key === 'Enter' && void save()}
         />
         <button className="btn" onClick={() => void save()} disabled={saving}>
-          {saving ? 'Saving...' : 'Save'}
+          {saving ? t('settings.saving') : t('common.save')}
         </button>
       </div>
       <span className="field-hint">
         {ready
-          ? 'OpenRouter is available in the provider list.'
-          : 'Enable it and save an API key to show OpenRouter in the provider list.'}
+          ? t('settings.openRouterReady')
+          : t('settings.openRouterSetup')}
       </span>
     </div>
   )
 }
 
 function OpenRouterPanel(): JSX.Element {
+  const t = useT()
   const openRouterModel = useApp((s) => s.openRouterModel)
   const setOpenRouterModel = useApp((s) => s.setOpenRouterModel)
   const models = useApp((s) => s.models)
@@ -832,7 +818,7 @@ function OpenRouterPanel(): JSX.Element {
   return (
     <>
       <label className="field">
-        <span className="field-label">Model</span>
+        <span className="field-label">{t('common.model')}</span>
         <select
           className="text-input"
           value={openRouterModel || modelOptions[0]}
@@ -844,24 +830,27 @@ function OpenRouterPanel(): JSX.Element {
             </option>
           ))}
         </select>
-        <span className="field-hint">Default model: {DEFAULT_LLM_CONFIG.openRouterModel}</span>
+        <span className="field-hint">
+          {t('settings.defaultModel', { model: DEFAULT_LLM_CONFIG.openRouterModel })}
+        </span>
       </label>
 
       <div className={`conn-line ${connection}`}>
-        {connection === 'connected' && `OpenRouter connected - ${models.length} model(s) available.`}
-        {connection === 'connecting' && 'Connecting to OpenRouter...'}
-        {connection === 'error' && `OpenRouter error: ${connectionError ?? 'Connection failed.'}`}
-        {connection === 'unknown' && 'Not tested yet.'}
+        {connection === 'connected' && `OpenRouter ${t('settings.connectedModels', { count: models.length })}`}
+        {connection === 'connecting' && `${t('settings.connecting')} OpenRouter`}
+        {connection === 'error' && `OpenRouter: ${connectionError ?? t('settings.connectionFailed')}`}
+        {connection === 'unknown' && t('settings.notTestedYet')}
       </div>
 
       <button className="btn" style={{ alignSelf: 'flex-start' }} onClick={() => void refreshModels()}>
-        Refresh models
+        {t('settings.refreshModels')}
       </button>
     </>
   )
 }
 
 export function ConnectionSettings(): JSX.Element | null {
+  const t = useT()
   const open = useApp((s) => s.settingsOpen)
   const setOpen = useApp((s) => s.setSettingsOpen)
   const provider = useApp((s) => s.provider)
@@ -878,18 +867,18 @@ export function ConnectionSettings(): JSX.Element | null {
     <div className="modal-backdrop" onClick={() => setOpen(false)}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          Agent backend
-          <button className="modal-close" onClick={() => setOpen(false)} title="Close">
+          {t('settings.agentBackend')}
+          <button className="modal-close" onClick={() => setOpen(false)} title={t('common.close')}>
             <Icon name="x" size={15} />
           </button>
         </div>
 
         <div className="modal-body">
           <label className="field">
-            <span className="field-label">Provider</span>
+            <span className="field-label">{t('common.provider')}</span>
             <span
               className="provider-select-wrap"
-              data-tooltip={lmStudioUnavailable ? 'The application is not running.' : undefined}
+              data-tooltip={lmStudioUnavailable ? t('composer.lmStudioNotRunning') : undefined}
             >
               <select
                 className="text-input"
@@ -901,15 +890,15 @@ export function ConnectionSettings(): JSX.Element | null {
                 }}
               >
                 <option value="lmstudio" disabled={lmStudioUnavailable}>
-                  LM Studio (local, OpenAI-compatible)
+                  {t('settings.providerLmStudio')}
                 </option>
-                <option value="ollama">Ollama (local, OpenAI-compatible)</option>
-                {openRouterReady && <option value="openrouter">OpenRouter (cloud, OpenAI-compatible)</option>}
-                <option value="codex">Codex CLI (OpenAI's coding agent)</option>
-                <option value="copilot">GitHub Copilot CLI (GitHub's coding agent)</option>
-                <option value="claude">Claude Code (Anthropic's coding agent)</option>
-                <option value="gemini">Gemini CLI (Google's coding agent)</option>
-                <option value="glm">GLM / ZCode (Zhipu coding agent)</option>
+                <option value="ollama">{t('settings.providerOllama')}</option>
+                {openRouterReady && <option value="openrouter">{t('settings.providerOpenRouter')}</option>}
+                <option value="codex">{t('settings.providerCodex')}</option>
+                <option value="copilot">{t('settings.providerCopilot')}</option>
+                <option value="claude">{t('settings.providerClaude')}</option>
+                <option value="gemini">{t('settings.providerGemini')}</option>
+                <option value="glm">{t('settings.providerGlm')}</option>
               </select>
             </span>
           </label>

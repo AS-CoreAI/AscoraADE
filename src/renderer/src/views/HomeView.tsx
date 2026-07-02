@@ -1,9 +1,11 @@
 import type { JSX } from 'react'
 import { Composer } from '@/components/Composer'
 import { useApp } from '@/state/store'
+import { tr } from '@/language'
 
 export function HomeView(): JSX.Element {
   const active = useApp((s) => s.active)
+  const appLanguage = useApp((s) => s.appLanguage)
 
   return (
     <div className="home">
@@ -16,7 +18,7 @@ export function HomeView(): JSX.Element {
 
       <div className="home-inner">
         <h1 className="home-title">
-          Start a new task in {active ? active.name : 'Ascora'}
+          {tr(appLanguage, 'home.startTask', { name: active ? active.name : 'Ascora' })}
         </h1>
         <Composer showFolder />
       </div>

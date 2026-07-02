@@ -5,6 +5,7 @@ import { Icon } from './Icon'
 import { FileIcon } from './FileIcon'
 import { useApp, isRunnableFile } from '@/state/store'
 import { api } from '@/lib/api'
+import { tr } from '@/language'
 
 /** An in-tree edit: renaming an existing node, or typing a new child's name. */
 type EditSession =
@@ -196,6 +197,9 @@ export function Explorer(): JSX.Element {
   const closeFilesUnder = useApp((s) => s.closeFilesUnder)
   const toggleDir = useApp((s) => s.toggleDir)
   const expanded = useApp((s) => s.expanded)
+  const appLanguage = useApp((s) => s.appLanguage)
+  const t = (key: Parameters<typeof tr>[1], values?: Record<string, string | number>): string =>
+    tr(appLanguage, key, values)
   const [menu, setMenu] = useState<{
     x: number
     y: number
@@ -369,8 +373,8 @@ export function Explorer(): JSX.Element {
             <button
               title={
                 elevated
-                  ? 'Running remote file operations as root (sudo). Click to disable.'
-                  : 'Run remote file operations as root (sudo). Requires passwordless sudo or your saved password.'
+                  ? t('explorer.runRootOn')
+                  : t('explorer.runRootOff')
               }
               aria-pressed={elevated}
               style={{
@@ -390,7 +394,7 @@ export function Explorer(): JSX.Element {
               const canGoUp = (active?.path ?? '').replace(/\/+$/, '').startsWith('/')
               return (
                 <button
-                  title="Up one level"
+                  title={t('explorer.upOneLevel')}
                   disabled={!canGoUp}
                   style={{ opacity: canGoUp ? 1 : 0.4 }}
                   onClick={() => void goUpDirectory()}
@@ -399,18 +403,18 @@ export function Explorer(): JSX.Element {
                 </button>
               )
             })()}
-            <button title="Refresh remote files" onClick={() => active?.path && void refreshDirectory(active.path)}>
+            <button title={t('explorer.refreshRemote')} onClick={() => active?.path && void refreshDirectory(active.path)}>
               <Icon name="refresh" size={14} />
             </button>
           </>
         ) : (
-          <button title="Open folder" onClick={openFolder}>
+          <button title={t('explorer.openFolder')} onClick={openFolder}>
             <Icon name="folder" size={14} />
           </button>
         )}
       </div>
       <div className="panel-body" onContextMenu={openPanelContextMenu}>
-        {loading && <div className="tree-empty">Loading…</div>}
+        {loading && <div className="tree-empty">{t('explorer.loading')}</div>}
         {!loading && activeSsh && treeError && (
           <div className="tree-error" title={treeError}>
             {treeError}
@@ -418,7 +422,7 @@ export function Explorer(): JSX.Element {
               <>
                 {' '}
                 <button type="button" className="tree-error-action" onClick={() => void toggleSshElevation()}>
-                  Try as root
+                  {t('explorer.tryAsRoot')}
                 </button>
               </>
             )}
@@ -426,7 +430,7 @@ export function Explorer(): JSX.Element {
         )}
         {!loading && roots.length === 0 && !edit && (
           <div className="tree-empty">
-            {activeSsh ? 'No remote files to show.' : 'No files to show. Open a project folder to get started.'}
+            {activeSsh ? t('explorer.noRemoteFiles') : t('explorer.noFiles')}
           </div>
         )}
         {!loading && rootDraft && (
@@ -467,18 +471,18 @@ export function Explorer(): JSX.Element {
                 className="context-item"
                 onClick={openInFileExplorer}
               >
-                Open in File Explorer
+                {t('explorer.openInFileExplorer')}
               </button>
             )}
             {menu.node.type === 'file' && (
               <>
                 {!activeSsh && isRunnableFile(menu.node.name) && (
                   <button type="button" role="menuitem" className="context-item" onClick={runMenuFile}>
-                    Run
+                    {t('explorer.run')}
                   </button>
                 )}
                 <button type="button" role="menuitem" className="context-item" onClick={beginRename}>
-                  Rename
+                  {t('explorer.rename')}
                 </button>
                 <button
                   type="button"
@@ -486,7 +490,7 @@ export function Explorer(): JSX.Element {
                   className="context-item context-item-danger"
                   onClick={() => void deleteFile()}
                 >
-                  Delete
+                  {t('common.delete')}
                 </button>
               </>
             )}
@@ -498,7 +502,7 @@ export function Explorer(): JSX.Element {
                   className="context-item"
                   onClick={() => void beginCreate('file')}
                 >
-                  New File
+                  {t('explorer.newFile')}
                 </button>
                 <button
                   type="button"
@@ -506,7 +510,7 @@ export function Explorer(): JSX.Element {
                   className="context-item"
                   onClick={() => void beginCreate('directory')}
                 >
-                  New Folder
+                  {t('explorer.newFolder')}
                 </button>
                 {!menu.workspaceRoot && (
                   <>
@@ -516,7 +520,7 @@ export function Explorer(): JSX.Element {
                       className="context-item"
                       onClick={beginRename}
                     >
-                      Rename
+                      {t('explorer.rename')}
                     </button>
                     <button
                       type="button"
@@ -524,7 +528,7 @@ export function Explorer(): JSX.Element {
                       className="context-item context-item-danger"
                       onClick={() => void deleteDirectory()}
                     >
-                      Delete
+                      {t('common.delete')}
                     </button>
                   </>
                 )}

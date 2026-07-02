@@ -5,15 +5,16 @@ import { Icon } from './Icon'
 import { useApp, type ChatMessage, type ToolStatus } from '@/state/store'
 import { lineDiff } from '@/lib/diff'
 import { api } from '@/lib/api'
+import { tr, type TranslationKey } from '@/language'
 
-const TOOL_LABEL: Record<string, string> = {
-  list_dir: 'List directory',
-  read_file: 'Read file',
-  search_files: 'Search',
-  write_file: 'Write file',
-  edit_file: 'Edit file',
-  run_command: 'Run command',
-  apply_patch: 'Edit files'
+const TOOL_LABEL_KEY: Record<string, TranslationKey> = {
+  list_dir: 'chat.tool.listDir',
+  read_file: 'chat.tool.readFile',
+  search_files: 'chat.tool.search',
+  write_file: 'chat.tool.writeFile',
+  edit_file: 'chat.tool.editFile',
+  run_command: 'chat.tool.runCommand',
+  apply_patch: 'chat.tool.editFiles'
 }
 
 function toolIcon(tool?: string): 'terminal' | 'folder' | 'file' | 'search' {
@@ -29,17 +30,18 @@ function toolSummary(m: ChatMessage): string {
   return String(m.args?.path ?? '')
 }
 
-const STATUS_TEXT: Record<ToolStatus, string> = {
-  awaiting: 'needs review',
-  running: 'running…',
-  done: 'done',
-  rejected: 'rejected',
-  error: 'error'
+const STATUS_TEXT_KEY: Record<ToolStatus, TranslationKey> = {
+  awaiting: 'chat.status.awaiting',
+  running: 'chat.status.running',
+  done: 'chat.status.done',
+  rejected: 'chat.status.rejected',
+  error: 'chat.status.error'
 }
 
 function Diff({ oldText, newText }: { oldText: string; newText: string }): JSX.Element {
+  const appLanguage = useApp((s) => s.appLanguage)
   const lines = lineDiff(oldText, newText)
-  if (lines.length === 0) return <div className="tool-note">No changes.</div>
+  if (lines.length === 0) return <div className="tool-note">{tr(appLanguage, 'chat.noChanges')}</div>
   return (
     <pre className="tool-diff">
       {lines.map((l, i) => (
@@ -55,13 +57,17 @@ function Diff({ oldText, newText }: { oldText: string; newText: string }): JSX.E
 function ToolCard({ m }: { m: ChatMessage }): JSX.Element {
   const approveTool = useApp((s) => s.approveTool)
   const rejectTool = useApp((s) => s.rejectTool)
+  const appLanguage = useApp((s) => s.appLanguage)
+  const t = (key: TranslationKey, values?: Record<string, string | number>): string =>
+    tr(appLanguage, key, values)
   const status = m.status ?? 'done'
+  const toolLabelKey = TOOL_LABEL_KEY[m.tool ?? '']
 
   return (
     <div className={`tool-card ${status}`}>
       <div className="tool-head">
         <Icon name={toolIcon(m.tool)} size={14} />
-        <span className="tool-name">{TOOL_LABEL[m.tool ?? ''] ?? m.tool}</span>
+        <span className="tool-name">{toolLabelKey ? t(toolLabelKey) : m.tool}</span>
         <code className="tool-arg">{toolSummary(m)}</code>
         <span className="spacer" />
         {m.addedLines || m.removedLines ? (
@@ -70,7 +76,7 @@ function ToolCard({ m }: { m: ChatMessage }): JSX.Element {
             {m.removedLines ? <span className="stat-del">-{m.removedLines}</span> : null}
           </span>
         ) : null}
-        <span className={`tool-status ${status}`}>{STATUS_TEXT[status]}</span>
+        <span className={`tool-status ${status}`}>{t(STATUS_TEXT_KEY[status])}</span>
       </div>
 
       {(m.tool === 'write_file' || m.tool === 'edit_file') &&
@@ -103,10 +109,10 @@ function ToolCard({ m }: { m: ChatMessage }): JSX.Element {
       {status === 'awaiting' && (
         <div className="tool-actions">
           <button className="tool-approve" onClick={() => approveTool(m.id)}>
-            <Icon name="check" size={14} /> Approve
+            <Icon name="check" size={14} /> {t('chat.approve')}
           </button>
           <button className="tool-reject" onClick={() => rejectTool(m.id)}>
-            <Icon name="x" size={14} /> Reject
+            <Icon name="x" size={14} /> {t('chat.reject')}
           </button>
         </div>
       )}
@@ -116,11 +122,12 @@ function ToolCard({ m }: { m: ChatMessage }): JSX.Element {
 
 function ReasoningBlock({ text }: { text: string }): JSX.Element {
   const [open, setOpen] = useState(false)
+  const appLanguage = useApp((s) => s.appLanguage)
   return (
     <div className={`reasoning-block${open ? ' open' : ''}`}>
       <button className="reasoning-head" onClick={() => setOpen((o) => !o)}>
         <Icon name="sparkles" size={13} />
-        <span>Thought process</span>
+        <span>{tr(appLanguage, 'chat.thoughtProcess')}</span>
         <span className="spacer" />
         <Icon name={open ? 'chevronDown' : 'chevronRight'} size={13} />
       </button>
@@ -164,6 +171,9 @@ function TextMessage({ m }: { m: ChatMessage }): JSX.Element {
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'error'>('idle')
   const resetTimer = useRef<number | null>(null)
   const setCopilotAuthOpen = useApp((s) => s.setCopilotAuthOpen)
+  const appLanguage = useApp((s) => s.appLanguage)
+  const t = (key: TranslationKey, values?: Record<string, string | number>): string =>
+    tr(appLanguage, key, values)
   const showCopilotAuth = isCopilotAuthError(m)
 
   useEffect(
@@ -189,7 +199,7 @@ function TextMessage({ m }: { m: ChatMessage }): JSX.Element {
     <div className={`msg ${m.role}`}>
       <div className="msg-head">
         <span className="role" title={m.role === 'assistant' ? m.model || undefined : undefined}>
-          {m.role === 'user' ? 'You' : m.model || 'Assistant'}
+          {m.role === 'user' ? t('chat.you') : m.model || t('chat.assistant')}
         </span>
         {m.role === 'assistant' && (
           <button
@@ -197,11 +207,11 @@ function TextMessage({ m }: { m: ChatMessage }): JSX.Element {
             className={`msg-copy ${copyState}`}
             onClick={() => void copy()}
             disabled={!m.text}
-            title={copyState === 'copied' ? 'Copied' : copyState === 'error' ? 'Copy failed' : 'Copy response'}
-            aria-label="Copy assistant response"
+            title={copyState === 'copied' ? t('common.copied') : copyState === 'error' ? t('common.copyFailed') : t('chat.copyResponse')}
+            aria-label={t('chat.copyAssistantResponse')}
           >
             <Icon name={copyState === 'copied' ? 'check' : 'copy'} size={12} />
-            <span>{copyState === 'copied' ? 'Copied' : copyState === 'error' ? 'Failed' : 'Copy'}</span>
+            <span>{copyState === 'copied' ? t('common.copied') : copyState === 'error' ? t('common.failed') : t('common.copy')}</span>
           </button>
         )}
       </div>
@@ -210,7 +220,7 @@ function TextMessage({ m }: { m: ChatMessage }): JSX.Element {
         <div className="msg-actions">
           <button type="button" className="msg-action" onClick={() => setCopilotAuthOpen(true)}>
             <Icon name="terminal" size={13} />
-            Authorize Copilot
+            {t('chat.authorizeCopilot')}
           </button>
         </div>
       )}
@@ -219,12 +229,11 @@ function TextMessage({ m }: { m: ChatMessage }): JSX.Element {
 }
 
 function Messages({ messages }: { messages: ChatMessage[] }): JSX.Element {
+  const appLanguage = useApp((s) => s.appLanguage)
   if (messages.length === 0) {
     return (
       <div className="chat-empty">
-        Describe a task and the agent will read and edit files and run commands in your project.
-        In “Ask before changes” mode it shows a diff and waits for your approval; switch to
-        “Auto-apply” to let it work uninterrupted.
+        {tr(appLanguage, 'chat.empty')}
       </div>
     )
   }
@@ -290,6 +299,7 @@ function ThinkingIndicator(): JSX.Element | null {
   const tokens = useApp((s) => s.thinkingTokens)
   const startedAt = useApp((s) => s.thinkingStartedAt)
   const provider = useApp((s) => s.provider)
+  const appLanguage = useApp((s) => s.appLanguage)
   const [elapsed, setElapsed] = useState(0)
   const [verb, setVerb] = useState(pickStatusVerb)
 
@@ -310,13 +320,13 @@ function ThinkingIndicator(): JSX.Element | null {
   }, [thinking, provider])
 
   if (!thinking) return null
-  const label = provider === 'claude' ? `${verb}…` : 'Thinking…'
+  const label = provider === 'claude' && appLanguage === 'en' ? `${verb}…` : tr(appLanguage, 'chat.thinking')
   return (
     <div className="thinking" aria-live="polite">
       <span className="thinking-dot" />
       <span className="thinking-label">{label}</span>
       <span className="thinking-meta">
-        {formatTokenCount(tokens)} tokens{elapsed > 0 ? ` · ${elapsed}s` : ''}
+        {formatTokenCount(tokens)} {tr(appLanguage, 'common.tokens')}{elapsed > 0 ? ` · ${elapsed}s` : ''}
       </span>
     </div>
   )
@@ -423,10 +433,10 @@ function summarizeChanges(messages: ChatMessage[]): ChangesSummary {
   }
 }
 
-function changeKindLabel(kind: ChangeKind): string {
-  if (kind === 'add') return 'Created'
-  if (kind === 'delete') return 'Removed'
-  return 'Edited'
+function changeKindLabel(kind: ChangeKind, language: Parameters<typeof tr>[0]): string {
+  if (kind === 'add') return tr(language, 'chat.created')
+  if (kind === 'delete') return tr(language, 'chat.removedLabel')
+  return tr(language, 'chat.edited')
 }
 
 /**
@@ -436,6 +446,9 @@ function changeKindLabel(kind: ChangeKind): string {
  */
 function ChangesBadge({ floating = false }: { floating?: boolean }): JSX.Element | null {
   const messages = useApp((s) => s.messages)
+  const appLanguage = useApp((s) => s.appLanguage)
+  const t = (key: TranslationKey, values?: Record<string, string | number>): string =>
+    tr(appLanguage, key, values)
   const rootRef = useRef<HTMLDivElement>(null)
   const [open, setOpen] = useState(false)
   const summary = summarizeChanges(messages)
@@ -468,12 +481,12 @@ function ChangesBadge({ floating = false }: { floating?: boolean }): JSX.Element
         type="button"
         className={`changes-badge${floating ? ' floating' : ''}`}
         aria-expanded={open}
-        title={`${summary.added} added, ${summary.modified} modified, ${summary.removed} removed`}
+        title={`${summary.added} ${t('chat.added')}, ${summary.modified} ${t('chat.modified')}, ${summary.removed} ${t('chat.removed')}`}
         onClick={() => setOpen((value) => !value)}
       >
         <Icon name="file" size={12} />
         <span className="changes-label">
-          {fileCount} file{fileCount === 1 ? '' : 's'}
+          {fileCount} {fileCount === 1 ? t('chat.file') : t('chat.files')}
         </span>
         <span className="changes-add">+{summary.lineAdded}</span>
         <span className="changes-del">-{summary.lineRemoved}</span>
@@ -481,20 +494,20 @@ function ChangesBadge({ floating = false }: { floating?: boolean }): JSX.Element
       </button>
 
       {open && (
-        <div className="changes-popover" role="dialog" aria-label="Changed files">
+        <div className="changes-popover" role="dialog" aria-label={t('chat.changedFiles')}>
           <div className="changes-popover-head">
             <strong>
-              {fileCount} changed file{fileCount === 1 ? '' : 's'}
+              {fileCount} {t('chat.changed')} {fileCount === 1 ? t('chat.file') : t('chat.files')}
             </strong>
             <span>
-              {summary.added} created, {summary.modified} edited, {summary.removed} removed
+              {summary.added} {t('chat.createdLower')}, {summary.modified} {t('chat.editedLower')}, {summary.removed} {t('chat.removed')}
             </span>
           </div>
 
           <div className="changes-file-list">
             {summary.files.map((file) => (
               <div className="changes-file-row" key={file.path} title={file.path}>
-                <span className={`changes-kind ${file.kind}`}>{changeKindLabel(file.kind)}</span>
+                <span className={`changes-kind ${file.kind}`}>{changeKindLabel(file.kind, appLanguage)}</span>
                 <span className="changes-file-path">{file.path}</span>
                 <span className="changes-file-stat">
                   <span className="changes-add">+{file.hasLineCounts ? file.added : '?'}</span>
@@ -533,6 +546,9 @@ function GitBranchBadge(): JSX.Element | null {
   const model = useApp((s) => s.model)
   const ollamaModel = useApp((s) => s.ollamaModel)
   const openRouterModel = useApp((s) => s.openRouterModel)
+  const appLanguage = useApp((s) => s.appLanguage)
+  const t = (key: TranslationKey, values?: Record<string, string | number>): string =>
+    tr(appLanguage, key, values)
   const rootRef = useRef<HTMLDivElement>(null)
   const [status, setStatus] = useState<GitStatusResult | null>(null)
   const [branches, setBranches] = useState<GitBranch[]>([])
@@ -726,7 +742,7 @@ function GitBranchBadge(): JSX.Element | null {
         type="button"
         className="changes-badge git-branch-badge"
         aria-expanded={open}
-        title="Git branch and repository actions"
+        title={t('git.branchActions')}
         onClick={() => setOpen((value) => !value)}
       >
         <Icon name="gitBranch" size={12} />
@@ -737,18 +753,18 @@ function GitBranchBadge(): JSX.Element | null {
       </button>
 
       {open && (
-        <div className="git-quick-popover" role="dialog" aria-label="Git actions">
+        <div className="git-quick-popover" role="dialog" aria-label={t('git.actions')}>
           <div className="git-quick-head">
             <div>
               <strong>{status.branch || 'HEAD'}</strong>
               <span>
-                {status.pushTarget ? `Push target: ${status.pushTarget}` : 'No push remote configured'}
+                {status.pushTarget ? t('git.pushTarget', { target: status.pushTarget }) : t('git.noPushRemote')}
               </span>
             </div>
             <button
               type="button"
               className="git-quick-icon"
-              title="Fetch and refresh"
+              title={t('git.fetchRefresh')}
               disabled={disabled}
               onClick={() => void refresh(true)}
             >
@@ -757,7 +773,7 @@ function GitBranchBadge(): JSX.Element | null {
           </div>
 
           <label className="git-quick-field">
-            <span>Branch</span>
+            <span>{t('git.branch')}</span>
             <select
               value={status.branch || ''}
               disabled={disabled || branches.length === 0}
@@ -765,24 +781,24 @@ function GitBranchBadge(): JSX.Element | null {
             >
               {branches.map((branch) => (
                 <option key={branch.name} value={branch.name}>
-                  {branch.name}{branch.current ? ' (current)' : ''}
+                  {branch.name}{branch.current ? ` (${t('git.current')})` : ''}
                 </option>
               ))}
             </select>
           </label>
 
           <div className="git-quick-state">
-            <span>{fileCount} changed</span>
-            <span>{behind} incoming</span>
-            <span>{ahead} outgoing</span>
+            <span>{fileCount} {t('chat.changed')}</span>
+            <span>{behind} {t('git.incoming')}</span>
+            <span>{ahead} {t('git.outgoing')}</span>
           </div>
 
           <div className="git-quick-actions">
             <button type="button" disabled={disabled || behind === 0} onClick={pull}>
-              {busy === 'pull' ? 'Pulling…' : `Pull${behind ? ` (${behind})` : ''}`}
+              {busy === 'pull' ? t('git.pulling') : `Pull${behind ? ` (${behind})` : ''}`}
             </button>
             <button type="button" disabled={disabled || !canPush} onClick={push}>
-              {busy === 'push' ? 'Pushing…' : `Push${ahead ? ` (${ahead})` : ''}`}
+              {busy === 'push' ? t('git.pushing') : `Push${ahead ? ` (${ahead})` : ''}`}
             </button>
           </div>
           <button
@@ -792,10 +808,10 @@ function GitBranchBadge(): JSX.Element | null {
             onClick={() => void aiCommitAndPush()}
           >
             <Icon name="sparkles" size={14} />
-            {busy === 'ai' ? 'Creating AI commit…' : 'AI commit & push'}
+            {busy === 'ai' ? t('git.creatingAiCommit') : t('git.aiCommitPush')}
           </button>
 
-          {loading && <div className="git-quick-message">Checking remote…</div>}
+          {loading && <div className="git-quick-message">{t('git.checkingRemote')}</div>}
           {notice && <div className="git-quick-message success">{notice}</div>}
           {error && <div className="git-quick-message error">{error}</div>}
         </div>
@@ -807,6 +823,7 @@ function GitBranchBadge(): JSX.Element | null {
 export function AgentChat({ full = false }: { full?: boolean }): JSX.Element {
   const messages = useApp((s) => s.messages)
   const thinking = useApp((s) => s.thinking)
+  const appLanguage = useApp((s) => s.appLanguage)
   const scrollRef = useRef<HTMLDivElement>(null)
 
   useLayoutEffect(() => {
@@ -838,7 +855,7 @@ export function AgentChat({ full = false }: { full?: boolean }): JSX.Element {
     <div className="panel panel-side">
       <div className="panel-header">
         <Icon name="message" size={13} />
-        Agent
+        {tr(appLanguage, 'chat.agent')}
         <span className="spacer" />
         <ChangesBadge />
       </div>

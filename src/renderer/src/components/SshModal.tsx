@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import type { SshAuthType, SshConnection } from '@shared/ipc'
 import { Icon } from './Icon'
 import { useApp } from '@/state/store'
+import { tr } from '@/language'
 
 /** Add or edit a saved SSH connection (PEM key file or password auth). */
 export function SshModal(): JSX.Element | null {
@@ -11,6 +12,9 @@ export function SshModal(): JSX.Element | null {
   const close = useApp((s) => s.closeSshModal)
   const save = useApp((s) => s.saveSshConnection)
   const pickKey = useApp((s) => s.pickSshKey)
+  const appLanguage = useApp((s) => s.appLanguage)
+  const t = (key: Parameters<typeof tr>[1], values?: Record<string, string | number>): string =>
+    tr(appLanguage, key, values)
 
   const [name, setName] = useState('')
   const [host, setHost] = useState('')
@@ -63,19 +67,19 @@ export function SshModal(): JSX.Element | null {
     <div className="modal-backdrop" onMouseDown={close}>
       <div className="modal modal-ssh" onMouseDown={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          {editing ? 'Edit SSH connection' : 'New SSH connection'}
-          <button className="modal-close" title="Close" onClick={close}>
+          {editing ? t('ssh.editTitle') : t('ssh.newTitle')}
+          <button className="modal-close" title={t('common.close')} onClick={close}>
             <Icon name="x" size={16} />
           </button>
         </div>
         <div className="modal-body ssh-form">
           <label className="ssh-field">
-            <span>Name</span>
+            <span>{t('ssh.name')}</span>
             <input value={name} placeholder="My server" onChange={(e) => setName(e.target.value)} />
           </label>
           <div className="ssh-row">
             <label className="ssh-field" style={{ flex: 3 }}>
-              <span>Host</span>
+              <span>{t('ssh.host')}</span>
               <input
                 value={host}
                 placeholder="example.com or 1.2.3.4"
@@ -83,12 +87,12 @@ export function SshModal(): JSX.Element | null {
               />
             </label>
             <label className="ssh-field" style={{ flex: 1 }}>
-              <span>Port</span>
+              <span>{t('ssh.port')}</span>
               <input value={port} onChange={(e) => setPort(e.target.value.replace(/[^0-9]/g, ''))} />
             </label>
           </div>
           <label className="ssh-field">
-            <span>Username</span>
+            <span>{t('ssh.username')}</span>
             <input
               value={username}
               placeholder="root / ubuntu / ec2-user"
@@ -101,20 +105,20 @@ export function SshModal(): JSX.Element | null {
               className={authType === 'key' ? 'active' : ''}
               onClick={() => setAuthType('key')}
             >
-              Private key (PEM)
+              {t('ssh.privateKey')}
             </button>
             <button
               className={authType === 'password' ? 'active' : ''}
               onClick={() => setAuthType('password')}
             >
-              Password
+              {t('ssh.password')}
             </button>
           </div>
 
           {authType === 'key' ? (
             <>
               <label className="ssh-field">
-                <span>Key file</span>
+                <span>{t('ssh.keyFile')}</span>
                 <div className="ssh-row">
                   <input
                     value={keyPath}
@@ -122,23 +126,23 @@ export function SshModal(): JSX.Element | null {
                     onChange={(e) => setKeyPath(e.target.value)}
                   />
                   <button className="ssh-browse" onClick={() => void browseKey()}>
-                    Browse…
+                    {t('ssh.browse')}
                   </button>
                 </div>
               </label>
               <label className="ssh-field">
-                <span>Passphrase (optional)</span>
+                <span>{t('ssh.passphrase')}</span>
                 <input
                   type="password"
                   value={passphrase}
-                  placeholder="only if the key is encrypted"
+                  placeholder={t('ssh.passphrasePlaceholder')}
                   onChange={(e) => setPassphrase(e.target.value)}
                 />
               </label>
             </>
           ) : (
             <label className="ssh-field">
-              <span>Password</span>
+              <span>{t('ssh.password')}</span>
               <input
                 type="password"
                 value={password}
@@ -148,16 +152,15 @@ export function SshModal(): JSX.Element | null {
           )}
 
           <p className="ssh-note">
-            Credentials are stored locally in this app&rsquo;s settings. When a session is open, the
-            agent&rsquo;s <code>run_command</code> runs on this host.
+            {t('ssh.note')}
           </p>
 
           <div className="ssh-actions">
             <button className="ssh-cancel" onClick={close}>
-              Cancel
+              {t('common.cancel')}
             </button>
             <button className="ssh-save" disabled={!canSave} onClick={submit}>
-              {editing ? 'Save' : 'Add'}
+              {editing ? t('common.save') : t('common.add')}
             </button>
           </div>
         </div>

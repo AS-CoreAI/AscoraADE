@@ -2,6 +2,7 @@
 What's new?
 
 ### Added
+- **UI localization (English + Russian)** — the interface is now fully translatable via a central catalog (`src/renderer/src/language`), with a language picker in the left-rail footer next to the theme selector. Hardcoded strings across every renderer component (rail, title bar, composer, chat, connection/usage/SSH/skills modals, editor, explorer, Git, status bar, terminals, home view) are routed through a `tr()` helper. The choice is persisted (`appearance.language`), restored on launch, applied to `<html lang>`, and used for locale-aware date/time formatting.
 - **Ollama backend** — Ollama is now a selectable local OpenAI-compatible provider with its own saved base URL (`http://localhost:11434/v1` by default), model refresh, model selection, streaming chat, tool-call loop, status-bar state, usage analytics, and Git AI commit-message support.
 - **Google Gemini CLI backend** — the `gemini` CLI is now a selectable agent provider (`gemini -p --output-format stream-json`), with an optional binary path and `--model` override, `--approval-mode` selection (`plan` / `default` / `auto_edit` / `yolo`), a reachability check, and `--resume` session continuation. It reuses the normalized Codex event/item pipeline so every CLI backend shares one renderer code path.
 - **File & image attachments in the composer** — attach files/images to a prompt via a multi-select picker (`dialog:openFiles`); the selection is imported into the workspace with duplicate-name de-duplication (`fs:importFiles`) and exposed to the agent as workspace-relative paths.

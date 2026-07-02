@@ -2,8 +2,9 @@ import { useEffect, useRef, useState, type JSX } from 'react'
 import type { TaskSummary, Workspace } from '@shared/ipc'
 import { Icon } from './Icon'
 import { SshRail } from './SshRail'
-import { useApp, type ThemePreference } from '@/state/store'
+import { useApp, type AppLanguage, type ThemePreference } from '@/state/store'
 import { api } from '@/lib/api'
+import { LANGUAGE_OPTIONS, localeForLanguage, tr, type TranslationKey } from '@/language'
 
 /** A workspace row plus the tasks to show under it (filtered while searching). */
 interface VisibleWorkspace {
@@ -12,13 +13,14 @@ interface VisibleWorkspace {
   collapsed: boolean
 }
 
-const THEMES: { value: ThemePreference; label: string }[] = [
-  { value: 'dark', label: 'Dark' },
-  { value: 'light', label: 'Light' },
-  { value: 'system', label: 'System' }
-]
+const THEMES: ThemePreference[] = ['dark', 'light', 'system']
+const THEME_LABELS: Record<ThemePreference, TranslationKey> = {
+  dark: 'app.theme.dark',
+  light: 'app.theme.light',
+  system: 'app.theme.system'
+}
 
-function formatTaskTime(timestamp: number): string {
+function formatTaskTime(timestamp: number, language: AppLanguage): string {
   const date = new Date(timestamp)
   const now = new Date()
   const sameDay =
@@ -28,7 +30,7 @@ function formatTaskTime(timestamp: number): string {
   const options: Intl.DateTimeFormatOptions = sameDay
     ? { hour: '2-digit', minute: '2-digit' }
     : { month: 'short', day: 'numeric' }
-  return new Intl.DateTimeFormat(undefined, options).format(date)
+  return new Intl.DateTimeFormat(localeForLanguage(language), options).format(date)
 }
 
 export function LeftRail(): JSX.Element {
@@ -59,17 +61,26 @@ export function LeftRail(): JSX.Element {
   const setSettingsOpen = useApp((s) => s.setSettingsOpen)
   const themePreference = useApp((s) => s.themePreference)
   const setThemePreference = useApp((s) => s.setThemePreference)
+  const appLanguage = useApp((s) => s.appLanguage)
+  const setAppLanguage = useApp((s) => s.setAppLanguage)
+  const t = (key: TranslationKey, values?: Record<string, string | number>): string =>
+    tr(appLanguage, key, values)
   const [themeMenuOpen, setThemeMenuOpen] = useState(false)
-  const themeMenuRef = useRef<HTMLDivElement>(null)
+  const [languageMenuOpen, setLanguageMenuOpen] = useState(false)
+  const footerMenuRef = useRef<HTMLDivElement>(null)
   const [aboutOpen, setAboutOpen] = useState(false)
 
   useEffect(() => {
-    if (!themeMenuOpen) return
+    if (!themeMenuOpen && !languageMenuOpen) return
     const close = (event: MouseEvent): void => {
-      if (!themeMenuRef.current?.contains(event.target as Node)) setThemeMenuOpen(false)
+      if (footerMenuRef.current?.contains(event.target as Node)) return
+      setThemeMenuOpen(false)
+      setLanguageMenuOpen(false)
     }
     const closeOnEscape = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') setThemeMenuOpen(false)
+      if (event.key !== 'Escape') return
+      setThemeMenuOpen(false)
+      setLanguageMenuOpen(false)
     }
     document.addEventListener('mousedown', close)
     document.addEventListener('keydown', closeOnEscape)
@@ -77,7 +88,7 @@ export function LeftRail(): JSX.Element {
       document.removeEventListener('mousedown', close)
       document.removeEventListener('keydown', closeOnEscape)
     }
-  }, [themeMenuOpen])
+  }, [languageMenuOpen, themeMenuOpen])
 
   useEffect(() => {
     if (!aboutOpen) return
@@ -136,37 +147,37 @@ export function LeftRail(): JSX.Element {
       <div className="rail-actions">
         <button className="rail-action" onClick={newTask}>
           <Icon name="plus" size={16} />
-          New task
+          {t('rail.newTask')}
           <span className="kbd">Ctrl+N</span>
         </button>
         <button className="rail-action search" onClick={openSearch}>
           <Icon name="search" size={16} />
-          Search
+          {t('rail.search')}
           <span className="kbd">Ctrl+K</span>
         </button>
         <button className="rail-action" onClick={() => setSkillsOpen(true)}>
           <Icon name="sparkles" size={16} />
-          Skills
+          {t('rail.skills')}
         </button>
       </div>
 
       <div className="rail-section">
-        Workspaces
+        {t('rail.workspaces')}
         <span className="actions">
-          <button title="Add folder" onClick={openFolder}>
+          <button title={t('rail.addFolder')} onClick={openFolder}>
             <Icon name="plus" size={14} />
           </button>
-          <button title="Filter">
+          <button title={t('rail.filter')}>
             <Icon name="filter" size={13} />
           </button>
           <button
             className={searchOpen ? 'active' : undefined}
-            title="Search workspaces"
+            title={t('rail.searchWorkspaces')}
             onClick={() => (searchOpen ? closeSearch() : openSearch())}
           >
             <Icon name="search" size={13} />
           </button>
-          <button title="Archived">
+          <button title={t('rail.archived')}>
             <Icon name="archive" size={13} />
           </button>
         </span>
@@ -178,7 +189,7 @@ export function LeftRail(): JSX.Element {
           <input
             ref={searchInputRef}
             type="text"
-            placeholder="Search workspaces & tasks"
+            placeholder={t('rail.searchPlaceholder')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             onKeyDown={(e) => {
@@ -187,8 +198,8 @@ export function LeftRail(): JSX.Element {
           />
           <button
             className="rail-search-clear"
-            title="Close search"
-            aria-label="Close search"
+            title={t('rail.closeSearch')}
+            aria-label={t('rail.closeSearch')}
             onClick={closeSearch}
           >
             <Icon name="close" size={13} />
@@ -202,15 +213,17 @@ export function LeftRail(): JSX.Element {
             className="task-item"
             style={{ paddingLeft: 14 }}
             onClick={openFolder}
-            title="Open a project folder"
+            title={t('rail.openProjectFolder')}
           >
             <Icon name="plus" size={14} />
-            <span className="name">Open a folder…</span>
+            <span className="name">{t('rail.openFolder')}</span>
           </button>
         )}
 
         {isSearching && visibleWorkspaces.length === 0 && (
-          <div className="task-empty">No matches for “{search.trim()}”</div>
+          <div className="task-empty">
+            {t('rail.noMatchesFor')} "{search.trim()}"
+          </div>
         )}
 
         {visibleWorkspaces.map(({ ws, tasks, collapsed }) => {
@@ -246,8 +259,8 @@ export function LeftRail(): JSX.Element {
                 <span
                   className="ws-twisty"
                   role="button"
-                  aria-label={collapsed ? 'Expand folder' : 'Collapse folder'}
-                  title={collapsed ? 'Expand' : 'Collapse'}
+                  aria-label={collapsed ? t('rail.expandFolder') : t('rail.collapseFolder')}
+                  title={collapsed ? t('rail.expand') : t('rail.collapse')}
                   onClick={(e) => {
                     e.stopPropagation()
                     toggleWorkspaceCollapsed(ws.id)
@@ -276,11 +289,11 @@ export function LeftRail(): JSX.Element {
                   >
                     <span className={`task-dot ${task.status}`} />
                     <span className="name">{task.title}</span>
-                    <span className="time">{formatTaskTime(task.updatedAt)}</span>
+                    <span className="time">{formatTaskTime(task.updatedAt, appLanguage)}</span>
                     <button
                       className="task-delete"
-                      title="Delete task"
-                      aria-label="Delete task"
+                      title={t('rail.deleteTask')}
+                      aria-label={t('rail.deleteTask')}
                       onClick={(e) => {
                         e.stopPropagation()
                         void deleteTask(ws, task.id)
@@ -291,7 +304,7 @@ export function LeftRail(): JSX.Element {
                   </div>
                 ))}
               {!collapsed && tasks.length === 0 && (
-                <div className="task-empty">No tasks yet</div>
+                <div className="task-empty">{t('rail.noTasksYet')}</div>
               )}
             </div>
           )
@@ -300,41 +313,62 @@ export function LeftRail(): JSX.Element {
 
       <SshRail />
 
-      <div className="rail-footer" ref={themeMenuRef}>
+      <div className="rail-footer" ref={footerMenuRef}>
         {themeMenuOpen && (
-          <div className="theme-menu" role="menu" aria-label="Theme">
-            <div className="theme-menu-label">Theme</div>
+          <div className="theme-menu" role="menu" aria-label={t('app.theme.label')}>
+            <div className="theme-menu-label">{t('app.theme.label')}</div>
             {THEMES.map((theme) => (
               <button
                 className="theme-option"
-                key={theme.value}
+                key={theme}
                 role="menuitemradio"
-                aria-checked={themePreference === theme.value}
+                aria-checked={themePreference === theme}
                 onClick={() => {
-                  setThemePreference(theme.value)
+                  setThemePreference(theme)
                   setThemeMenuOpen(false)
                 }}
               >
-                <span>{theme.label}</span>
-                {themePreference === theme.value && <Icon name="check" size={14} />}
+                <span>{t(THEME_LABELS[theme])}</span>
+                {themePreference === theme && <Icon name="check" size={14} />}
+              </button>
+            ))}
+          </div>
+        )}
+        {languageMenuOpen && (
+          <div className="theme-menu" role="menu" aria-label={t('app.language.label')}>
+            <div className="theme-menu-label">{t('app.language.label')}</div>
+            {LANGUAGE_OPTIONS.map((language) => (
+              <button
+                className="theme-option"
+                key={language.value}
+                role="menuitemradio"
+                aria-checked={appLanguage === language.value}
+                onClick={() => {
+                  setAppLanguage(language.value)
+                  setLanguageMenuOpen(false)
+                }}
+              >
+                <span>{language.value === 'ru' ? t('app.language.russian') : t('app.language.english')}</span>
+                {appLanguage === language.value && <Icon name="check" size={14} />}
               </button>
             ))}
           </div>
         )}
         <button
           className={`rail-settings${view === 'analytics' ? ' active' : ''}`}
-          title="Analytics"
-          aria-label="Analytics"
+          title={t('rail.analytics')}
+          aria-label={t('rail.analytics')}
           onClick={() => (view === 'analytics' ? closeAnalytics() : openAnalytics())}
         >
           <Icon name="barChart" size={17} />
         </button>
         <button
           className="rail-settings"
-          title="Agent backend settings"
-          aria-label="Agent backend settings"
+          title={t('rail.agentBackendSettings')}
+          aria-label={t('rail.agentBackendSettings')}
           onClick={() => {
             setThemeMenuOpen(false)
+            setLanguageMenuOpen(false)
             setAboutOpen(false)
             setSettingsOpen(true)
           }}
@@ -343,48 +377,67 @@ export function LeftRail(): JSX.Element {
         </button>
         <button
           className={`rail-settings${themeMenuOpen ? ' active' : ''}`}
-          title="Appearance settings"
-          aria-label="Appearance settings"
+          title={t('rail.appearanceSettings')}
+          aria-label={t('rail.appearanceSettings')}
           aria-expanded={themeMenuOpen}
           onClick={() => {
+            setLanguageMenuOpen(false)
             setAboutOpen(false)
             setThemeMenuOpen((open) => !open)
           }}
         >
           <Icon name="settings" size={17} />
         </button>
+        <button
+          className={`rail-settings${languageMenuOpen ? ' active' : ''}`}
+          title={t('app.language.settings')}
+          aria-label={t('app.language.settings')}
+          aria-expanded={languageMenuOpen}
+          onClick={() => {
+            setThemeMenuOpen(false)
+            setAboutOpen(false)
+            setLanguageMenuOpen((open) => !open)
+          }}
+        >
+          <Icon name="globe" size={17} />
+        </button>
         <span style={{ flex: 1 }} />
         <div
           className="about-wrap"
-          onMouseEnter={() => setAboutOpen(true)}
+          onMouseEnter={() => {
+            setThemeMenuOpen(false)
+            setLanguageMenuOpen(false)
+            setAboutOpen(true)
+          }}
           onMouseLeave={() => setAboutOpen(false)}
         >
           {aboutOpen && (
-            <div className="about-menu" role="dialog" aria-label="About Ascora ADE">
+            <div className="about-menu" role="dialog" aria-label={t('rail.about')}>
               <div className="about-title">Ascora ADE</div>
-              <div className="about-version">Version 1.1</div>
+              <div className="about-version">{t('rail.version')}</div>
               <p>
-                Created at AS CORE AI —{' '}
+                {t('rail.createdAt')} —{' '}
                 <a onClick={() => openLink('https://ascoreai.com')}>ascoreai.com</a>
               </p>
               <p>
-                Author &amp; developer: Artur Strazewicz —{' '}
+                {t('rail.author')} —{' '}
                 <a onClick={() => openLink('https://strazewicz.com/')}>strazewicz.com</a>
               </p>
               <p>
-                Website:{' '}
+                {t('rail.website')}{' '}
                 <a onClick={() => openLink('https://ade.ascoreai.com')}>ade.ascoreai.com</a>
               </p>
-              <div className="about-copyright">© 2026 AS CORE AI. All rights reserved.</div>
+              <div className="about-copyright">{t('rail.copyright')}</div>
             </div>
           )}
           <button
             className={`rail-settings${aboutOpen ? ' active' : ''}`}
-            title="About Ascora ADE"
-            aria-label="About Ascora ADE"
+            title={t('rail.about')}
+            aria-label={t('rail.about')}
             aria-expanded={aboutOpen}
             onClick={() => {
               setThemeMenuOpen(false)
+              setLanguageMenuOpen(false)
               setAboutOpen((open) => !open)
             }}
           >
