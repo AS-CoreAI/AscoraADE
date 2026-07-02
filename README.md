@@ -72,3 +72,11 @@ npm run typecheck   # tsc for main and renderer
 
 `node_modules`, `.git`, `vendor`, `dist`, `build`, `.next`, `venv`, `__pycache__`,
 `out`, `.cache` (see `EXCLUDED_DIRS` in `src/shared/ipc.ts`).
+
+## Release / distribution branch note
+
+Local path: E:\\Ascora-ADE
+
+Note: this README entry is intended for the release/distribution branch (not the active development branch). Several integrations are intentionally not included in this release build and should be added or enabled in the main development branch or future releases. Examples of missing integrations: GitHub Copilot integration and Gemini (Gemeni) support.
+
+
