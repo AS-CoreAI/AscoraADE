@@ -2,6 +2,8 @@
 What's new?
 
 ### Added
+- **Google Gemini CLI backend** — the `gemini` CLI is now a selectable agent provider (`gemini -p --output-format stream-json`), with an optional binary path and `--model` override, `--approval-mode` selection (`plan` / `default` / `auto_edit` / `yolo`), a reachability check, and `--resume` session continuation. It reuses the normalized Codex event/item pipeline so every CLI backend shares one renderer code path.
+- **File & image attachments in the composer** — attach files/images to a prompt via a multi-select picker (`dialog:openFiles`); the selection is imported into the workspace with duplicate-name de-duplication (`fs:importFiles`) and exposed to the agent as workspace-relative paths.
 - **Per-task (per-chat) model/provider pinning** — each chat/task now remembers its own model/provider selection independently of the workspace default. Opening a task restores its pinned model; new chats inherit the workspace default until the user picks a model, then that choice is pinned to that chat.
 - Task-specific model/provider is persisted per task (`task.llm` settings) and restored when opening a task, even after switching workspaces or restarting the app.
 - New task's model selection is pinned on first user message (first submit), so a brand-new chat gets its own pinned model from the first interaction.
