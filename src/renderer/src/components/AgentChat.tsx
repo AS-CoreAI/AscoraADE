@@ -531,6 +531,7 @@ function GitBranchBadge(): JSX.Element | null {
   const activePath = useApp((s) => s.active?.path)
   const provider = useApp((s) => s.provider)
   const model = useApp((s) => s.model)
+  const ollamaModel = useApp((s) => s.ollamaModel)
   const openRouterModel = useApp((s) => s.openRouterModel)
   const rootRef = useRef<HTMLDivElement>(null)
   const [status, setStatus] = useState<GitStatusResult | null>(null)
@@ -672,7 +673,7 @@ function GitBranchBadge(): JSX.Element | null {
       const result = await api.llm.chat(
         crypto.randomUUID(),
         {
-          model: provider === 'openrouter' ? openRouterModel : model,
+          model: provider === 'openrouter' ? openRouterModel : provider === 'ollama' ? ollamaModel : model,
           temperature: 0.2,
           messages: [
             {

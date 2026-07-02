@@ -254,6 +254,7 @@ export function GitPanel(): JSX.Element {
   const activeSsh = useApp((s) => s.activeSsh)
   const provider = useApp((s) => s.provider)
   const model = useApp((s) => s.model)
+  const ollamaModel = useApp((s) => s.ollamaModel)
   const openRouterModel = useApp((s) => s.openRouterModel)
   const openFileInEditor = useApp((s) => s.openFile)
   const activePath = activeSsh ? undefined : active?.path
@@ -646,7 +647,7 @@ export function GitPanel(): JSX.Element {
       const result = await api.llm.chat(
         id,
         {
-          model: provider === 'openrouter' ? openRouterModel : model,
+          model: provider === 'openrouter' ? openRouterModel : provider === 'ollama' ? ollamaModel : model,
           temperature: 0.2,
           messages: [
             {

@@ -130,6 +130,76 @@ function LmStudioPanel(): JSX.Element {
   )
 }
 
+function OllamaPanel(): JSX.Element {
+  const ollamaBaseUrl = useApp((s) => s.ollamaBaseUrl)
+  const setOllamaBaseUrl = useApp((s) => s.setOllamaBaseUrl)
+  const ollamaModel = useApp((s) => s.ollamaModel)
+  const models = useApp((s) => s.models)
+  const setOllamaModel = useApp((s) => s.setOllamaModel)
+  const connection = useApp((s) => s.connection)
+  const connectionError = useApp((s) => s.connectionError)
+
+  const [url, setUrl] = useState(ollamaBaseUrl)
+  const [testing, setTesting] = useState(false)
+
+  const test = async (): Promise<void> => {
+    setTesting(true)
+    await setOllamaBaseUrl(url.trim() || DEFAULT_LLM_CONFIG.ollamaBaseUrl)
+    setTesting(false)
+  }
+
+  return (
+    <>
+      <label className="field">
+        <span className="field-label">Base URL</span>
+        <div className="field-row">
+          <input
+            className="text-input"
+            value={url}
+            spellCheck={false}
+            placeholder={DEFAULT_LLM_CONFIG.ollamaBaseUrl}
+            onChange={(e) => setUrl(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && void test()}
+          />
+          <button className="btn" onClick={() => void test()} disabled={testing}>
+            {testing ? 'Testing…' : 'Test'}
+          </button>
+        </div>
+        <span className="field-hint">
+          Ollama OpenAI-compatible endpoint, e.g. {DEFAULT_LLM_CONFIG.ollamaBaseUrl}
+        </span>
+      </label>
+
+      <label className="field">
+        <span className="field-label">Model</span>
+        <select
+          className="text-input"
+          value={ollamaModel || (models[0] ?? '')}
+          onChange={(e) => setOllamaModel(e.target.value)}
+          disabled={models.length === 0}
+        >
+          {models.length === 0 ? (
+            <option value="">{ollamaModel || '— no models —'}</option>
+          ) : (
+            models.map((m) => (
+              <option key={m} value={m}>
+                {m}
+              </option>
+            ))
+          )}
+        </select>
+      </label>
+
+      <div className={`conn-line ${connection}`}>
+        {connection === 'connected' && `Ollama connected - ${models.length} model(s) available.`}
+        {connection === 'connecting' && 'Connecting to Ollama...'}
+        {connection === 'error' && `Ollama error: ${connectionError ?? 'Connection failed.'}`}
+        {connection === 'unknown' && 'Not tested yet.'}
+      </div>
+    </>
+  )
+}
+
 function CodexPanel(): JSX.Element {
   const codexPath = useApp((s) => s.codexPath)
   const setCodexPath = useApp((s) => s.setCodexPath)
@@ -800,6 +870,7 @@ export function ConnectionSettings(): JSX.Element | null {
   const openRouterReady = useApp(
     (s) => s.openRouterEnabled && s.openRouterApiKey.trim().length > 0
   )
+  const lmStudioUnavailable = !lmStudioReachable
 
   if (!open) return null
 
@@ -816,27 +887,39 @@ export function ConnectionSettings(): JSX.Element | null {
         <div className="modal-body">
           <label className="field">
             <span className="field-label">Provider</span>
-            <select
-              className="text-input"
-              value={provider}
-              onChange={(e) => void setProvider(e.target.value as LlmProvider)}
+            <span
+              className="provider-select-wrap"
+              data-tooltip={lmStudioUnavailable ? 'The application is not running.' : undefined}
             >
-              {(lmStudioReachable || provider === 'lmstudio') && (
-                <option value="lmstudio">LM Studio (local, OpenAI-compatible)</option>
-              )}
-              {openRouterReady && <option value="openrouter">OpenRouter (cloud, OpenAI-compatible)</option>}
-              <option value="codex">Codex CLI (OpenAI's coding agent)</option>
-              <option value="copilot">GitHub Copilot CLI (GitHub's coding agent)</option>
-              <option value="claude">Claude Code (Anthropic's coding agent)</option>
-              <option value="gemini">Gemini CLI (Google's coding agent)</option>
-              <option value="glm">GLM / ZCode (Zhipu coding agent)</option>
-            </select>
+              <select
+                className="text-input"
+                value={provider}
+                onChange={(e) => {
+                  const next = e.target.value as LlmProvider
+                  if (next === 'lmstudio' && lmStudioUnavailable) return
+                  void setProvider(next)
+                }}
+              >
+                <option value="lmstudio" disabled={lmStudioUnavailable}>
+                  LM Studio (local, OpenAI-compatible)
+                </option>
+                <option value="ollama">Ollama (local, OpenAI-compatible)</option>
+                {openRouterReady && <option value="openrouter">OpenRouter (cloud, OpenAI-compatible)</option>}
+                <option value="codex">Codex CLI (OpenAI's coding agent)</option>
+                <option value="copilot">GitHub Copilot CLI (GitHub's coding agent)</option>
+                <option value="claude">Claude Code (Anthropic's coding agent)</option>
+                <option value="gemini">Gemini CLI (Google's coding agent)</option>
+                <option value="glm">GLM / ZCode (Zhipu coding agent)</option>
+              </select>
+            </span>
           </label>
 
           {provider === 'openrouter' && <OpenRouterSetup />}
 
           {provider === 'codex' ? (
             <CodexPanel />
+          ) : provider === 'ollama' ? (
+            <OllamaPanel />
           ) : provider === 'copilot' ? (
             <CopilotPanel />
           ) : provider === 'claude' ? (

@@ -40,6 +40,9 @@ function readConfig(): LlmConfig {
     provider,
     baseUrl: store.getSetting<string>('llm.baseUrl') ?? DEFAULT_LLM_CONFIG.baseUrl,
     model: store.getSetting<string>('llm.model') ?? DEFAULT_LLM_CONFIG.model,
+    ollamaBaseUrl:
+      store.getSetting<string>('ollama.baseUrl') ?? DEFAULT_LLM_CONFIG.ollamaBaseUrl,
+    ollamaModel: store.getSetting<string>('ollama.model') ?? DEFAULT_LLM_CONFIG.ollamaModel,
     openRouterEnabled,
     openRouterApiKey,
     openRouterModel:
@@ -88,6 +91,10 @@ export function registerLlmHandlers(): void {
     if (typeof patch.provider === 'string') store.setSetting('llm.provider', patch.provider)
     if (typeof patch.baseUrl === 'string') store.setSetting('llm.baseUrl', patch.baseUrl.trim())
     if (typeof patch.model === 'string') store.setSetting('llm.model', patch.model)
+    if (typeof patch.ollamaBaseUrl === 'string') {
+      store.setSetting('ollama.baseUrl', patch.ollamaBaseUrl.trim())
+    }
+    if (typeof patch.ollamaModel === 'string') store.setSetting('ollama.model', patch.ollamaModel.trim())
     if (typeof patch.openRouterEnabled === 'boolean') {
       store.setSetting('openrouter.enabled', patch.openRouterEnabled)
     }

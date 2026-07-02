@@ -692,6 +692,7 @@ function taskTitle(text: string): string {
 function modelLabel(s: {
   provider: LlmProvider
   model: string
+  ollamaModel: string
   openRouterModel: string
   codexModel: string
   copilotModel: string
@@ -701,6 +702,8 @@ function modelLabel(s: {
   switch (s.provider) {
     case 'lmstudio':
       return s.model || 'local model'
+    case 'ollama':
+      return s.ollamaModel || 'Ollama'
     case 'openrouter':
       return s.openRouterModel || 'openrouter/free'
     case 'codex':
@@ -830,6 +833,7 @@ function codexItemToCard(it: CodexItem): Partial<ChatMessage> {
 interface WorkspaceLlm {
   provider: LlmProvider
   model: string
+  ollamaModel: string
   openRouterModel: string
   codexModel: string
   codexSandbox: CodexSandbox
@@ -848,6 +852,7 @@ interface WorkspaceLlm {
 function snapshotLlm(s: {
   provider: LlmProvider
   model: string
+  ollamaModel: string
   openRouterModel: string
   codexModel: string
   codexSandbox: CodexSandbox
@@ -864,6 +869,7 @@ function snapshotLlm(s: {
   return {
     provider: s.provider,
     model: s.model,
+    ollamaModel: s.ollamaModel,
     openRouterModel: s.openRouterModel,
     codexModel: s.codexModel,
     codexSandbox: s.codexSandbox,
@@ -1040,6 +1046,9 @@ interface AppState {
   // LM Studio
   baseUrl: string
   model: string
+  // Ollama
+  ollamaBaseUrl: string
+  ollamaModel: string
   models: string[]
   connection: Connection
   connectionError?: string
@@ -1186,6 +1195,8 @@ interface AppState {
   refreshModels: () => Promise<void>
   setModel: (m: string) => void
   setBaseUrl: (url: string) => Promise<void>
+  setOllamaModel: (m: string) => void
+  setOllamaBaseUrl: (url: string) => Promise<void>
   setProvider: (p: LlmProvider) => Promise<void>
   setOpenRouterEnabled: (enabled: boolean) => Promise<void>
   setOpenRouterApiKey: (apiKey: string) => Promise<void>
@@ -1368,6 +1379,7 @@ export const useApp = create<AppState>((set, get) => {
       set({
         provider: saved.provider,
         model: saved.model,
+        ollamaModel: saved.ollamaModel ?? DEFAULT_LLM_CONFIG.ollamaModel,
         openRouterModel: saved.openRouterModel ?? DEFAULT_LLM_CONFIG.openRouterModel,
         codexModel: saved.codexModel,
         codexSandbox: saved.codexSandbox,
@@ -1392,6 +1404,7 @@ export const useApp = create<AppState>((set, get) => {
     await api.llm.setConfig({
       provider,
       model: get().model,
+      ollamaModel: get().ollamaModel,
       openRouterModel: get().openRouterModel,
       codexModel: get().codexModel,
       codexSandbox: get().codexSandbox,
@@ -1451,6 +1464,8 @@ export const useApp = create<AppState>((set, get) => {
   taskLlm: {},
   baseUrl: DEFAULT_LLM_CONFIG.baseUrl,
   model: '',
+  ollamaBaseUrl: DEFAULT_LLM_CONFIG.ollamaBaseUrl,
+  ollamaModel: DEFAULT_LLM_CONFIG.ollamaModel,
   models: [],
   connection: 'unknown',
   lmStudioReachable: false,
@@ -1558,6 +1573,8 @@ export const useApp = create<AppState>((set, get) => {
       provider: cfg.provider,
       baseUrl: cfg.baseUrl,
       model: cfg.model,
+      ollamaBaseUrl: cfg.ollamaBaseUrl,
+      ollamaModel: cfg.ollamaModel,
       openRouterEnabled: cfg.openRouterEnabled,
       openRouterApiKey: cfg.openRouterApiKey,
       openRouterModel: cfg.openRouterModel,
@@ -2253,16 +2270,28 @@ export const useApp = create<AppState>((set, get) => {
     set({ connection: 'connecting', connectionError: undefined })
     const res = await api.llm.listModels()
     const isOpenRouter = get().provider === 'openrouter'
+    const isOllama = get().provider === 'ollama'
     if (res.ok) {
       const models = (res.models ?? []).map((m) => m.id)
-      const selected = (isOpenRouter ? get().openRouterModel : get().model) || models[0] || ''
+      const selected =
+        (isOpenRouter ? get().openRouterModel : isOllama ? get().ollamaModel : get().model) ||
+        models[0] ||
+        ''
       set(
         isOpenRouter
           ? { models, connection: 'connected', openRouterModel: selected }
-          : { models, connection: 'connected', model: selected, lmStudioReachable: true }
+          : isOllama
+            ? { models, connection: 'connected', ollamaModel: selected }
+            : { models, connection: 'connected', model: selected, lmStudioReachable: true }
       )
       if (selected) {
-        void api.llm.setConfig(isOpenRouter ? { openRouterModel: selected } : { model: selected })
+        void api.llm.setConfig(
+          isOpenRouter
+            ? { openRouterModel: selected }
+            : isOllama
+              ? { ollamaModel: selected }
+              : { model: selected }
+        )
       }
     } else {
       // Drop the previous backend's model list so a failed provider never shows
@@ -2271,7 +2300,7 @@ export const useApp = create<AppState>((set, get) => {
         connection: 'error',
         connectionError: res.error,
         models: [],
-        ...(isOpenRouter ? {} : { lmStudioReachable: false })
+        ...(!isOpenRouter && !isOllama ? { lmStudioReachable: false } : {})
       })
     }
   },
@@ -2285,6 +2314,18 @@ export const useApp = create<AppState>((set, get) => {
   async setBaseUrl(url) {
     set({ baseUrl: url })
     await api.llm.setConfig({ baseUrl: url })
+    await get().refreshModels()
+  },
+
+  setOllamaModel(ollamaModel) {
+    set({ ollamaModel })
+    void api.llm.setConfig({ ollamaModel })
+    get().persistWorkspaceLlm()
+  },
+
+  async setOllamaBaseUrl(url) {
+    set({ ollamaBaseUrl: url })
+    await api.llm.setConfig({ ollamaBaseUrl: url })
     await get().refreshModels()
   },
 
@@ -2638,6 +2679,7 @@ export const useApp = create<AppState>((set, get) => {
     const sshId = get().activeSsh
     const mode = get().mode
     const lmModel = get().model
+    const ollamaModel = get().ollamaModel
     const orModel = get().openRouterModel
     const codexModel = get().codexModel
     const codexSandbox = get().codexSandbox
@@ -2711,9 +2753,9 @@ export const useApp = create<AppState>((set, get) => {
           kind: 'text',
           model: assistantModel,
           text:
-            '⚠ This SSH session can only be driven by the local (LM Studio) agent. The ' +
+            '⚠ This SSH session can only be driven by a local OpenAI-compatible agent. The ' +
             "Codex / Copilot / Claude / Gemini / GLM CLIs run on your machine and can't target the remote host. " +
-            'Switch the model to LM Studio to work over SSH, or pick a workspace to work locally.'
+            'Switch the model to LM Studio or Ollama to work over SSH, or pick a workspace to work locally.'
         })
         return
       }
@@ -2948,10 +2990,11 @@ export const useApp = create<AppState>((set, get) => {
         } else if (sawError) {
           finalStatus = 'error'
         }
-        return // skip the LM Studio loop; finally still resets state + saves
+        return // skip the local OpenAI-compatible loop; finally still resets state + saves
       }
 
       const isOpenRouter = agentProvider === 'openrouter'
+      const isOllama = agentProvider === 'ollama'
       for (let step = 0; step < MAX_STEPS && !aborted(); step += 1) {
         // 1) Stream one model turn into a fresh assistant bubble.
         const replyId = crypto.randomUUID()
@@ -2965,7 +3008,7 @@ export const useApp = create<AppState>((set, get) => {
         ]
         const result = await api.llm.chat(
           crypto.randomUUID(),
-          { model: isOpenRouter ? orModel : lmModel, messages, tools: TOOLS },
+          { model: isOpenRouter ? orModel : isOllama ? ollamaModel : lmModel, messages, tools: TOOLS },
           (delta) => {
             streamedChars += delta.length
             writeRun(taskId, (r) => ({
@@ -2997,8 +3040,12 @@ export const useApp = create<AppState>((set, get) => {
             workspaceId,
             workspaceName,
             taskId,
-            provider: isOpenRouter ? 'openrouter' : 'lmstudio',
-            model: isOpenRouter ? orModel || 'openrouter/free' : lmModel || 'local-model',
+            provider: isOpenRouter ? 'openrouter' : isOllama ? 'ollama' : 'lmstudio',
+            model: isOpenRouter
+              ? orModel || 'openrouter/free'
+              : isOllama
+                ? ollamaModel || 'ollama'
+                : lmModel || 'local-model',
             inputTokens: usage.inputTokens,
             outputTokens: usage.outputTokens,
             userMessages: step === 0 ? 1 : 0,

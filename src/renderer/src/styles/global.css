@@ -804,6 +804,79 @@ button {
   background: var(--bg-elevated);
   color: var(--text);
 }
+.composer-select option:disabled,
+.text-input option:disabled {
+  color: var(--text-faint);
+}
+.provider-select-wrap {
+  position: relative;
+  display: inline-flex;
+  min-width: 0;
+}
+.field .provider-select-wrap {
+  display: flex;
+}
+.field .provider-select-wrap > .text-input {
+  width: 100%;
+}
+.provider-select-wrap[data-tooltip]::before,
+.provider-select-wrap[data-tooltip]::after {
+  position: absolute;
+  left: 50%;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity 0.12s ease,
+    transform 0.12s ease;
+  z-index: 120;
+}
+.provider-select-wrap[data-tooltip]::after {
+  content: attr(data-tooltip);
+  bottom: calc(100% + 8px);
+  max-width: min(260px, calc(100vw - 24px));
+  padding: 7px 9px;
+  transform: translate(-50%, 4px);
+  border: 1px solid #3b3b42;
+  border-radius: 7px;
+  background: #161618;
+  color: #e7e7ea;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  font-size: 11.5px;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+.provider-select-wrap[data-tooltip]::before {
+  content: '';
+  bottom: calc(100% + 3px);
+  transform: translate(-50%, 4px);
+  border: 5px solid transparent;
+  border-top-color: #161618;
+}
+.provider-select-wrap[data-tooltip]:hover::before,
+.provider-select-wrap[data-tooltip]:hover::after,
+.provider-select-wrap[data-tooltip]:focus-within::before,
+.provider-select-wrap[data-tooltip]:focus-within::after {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+.field .provider-select-wrap[data-tooltip]::after {
+  top: calc(100% + 8px);
+  bottom: auto;
+  transform: translate(-50%, -4px);
+}
+.field .provider-select-wrap[data-tooltip]::before {
+  top: calc(100% + 3px);
+  bottom: auto;
+  transform: translate(-50%, -4px);
+  border-top-color: transparent;
+  border-bottom-color: #161618;
+}
+.field .provider-select-wrap[data-tooltip]:hover::before,
+.field .provider-select-wrap[data-tooltip]:hover::after,
+.field .provider-select-wrap[data-tooltip]:focus-within::before,
+.field .provider-select-wrap[data-tooltip]:focus-within::after {
+  transform: translate(-50%, 0);
+}
 .composer-tool-select {
   background: transparent;
   border: none;

@@ -152,6 +152,8 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
   const model = useApp((s) => s.model)
   const models = useApp((s) => s.models)
   const setModel = useApp((s) => s.setModel)
+  const ollamaModel = useApp((s) => s.ollamaModel)
+  const setOllamaModel = useApp((s) => s.setOllamaModel)
   const lmStudioReachable = useApp((s) => s.lmStudioReachable)
   const openRouterEnabled = useApp((s) => s.openRouterEnabled)
   const openRouterApiKey = useApp((s) => s.openRouterApiKey)
@@ -198,12 +200,14 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
   const attachStatusTimer = useRef<number | null>(null)
 
   const openRouterReady = openRouterEnabled && openRouterApiKey.trim().length > 0
+  const lmStudioUnavailable = !lmStudioReachable
+  const selectedLocalModel = provider === 'ollama' ? ollamaModel : model
   const modelOptions =
     provider === 'openrouter'
       ? openRouterModelOptions(models, openRouterModel)
       : models.length > 0
         ? models
-        : [model || 'local-model']
+        : [selectedLocalModel || (provider === 'ollama' ? 'ollama' : 'local-model')]
   const canSend = text.trim().length > 0 && !!active && !streaming
   const canAttach = !!active && !activeSsh && !attaching
 
@@ -452,22 +456,32 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
 
         <span className="composer-spacer" />
 
-        <select
-          className="composer-select"
-          value={provider}
-          onChange={(e) => void setProvider(e.target.value as LlmProvider)}
-          title="Agent backend"
+        <span
+          className="provider-select-wrap"
+          data-tooltip={lmStudioUnavailable ? 'The application is not running.' : undefined}
         >
-          {(lmStudioReachable || provider === 'lmstudio') && (
-            <option value="lmstudio">LM Studio</option>
-          )}
-          {openRouterReady && <option value="openrouter">OpenRouter</option>}
-          <option value="codex">Codex</option>
-          <option value="copilot">GitHub Copilot</option>
-          <option value="claude">Claude</option>
-          <option value="gemini">Gemini CLI</option>
-          <option value="glm">GLM (ZCode)</option>
-        </select>
+          <select
+            className="composer-select"
+            value={provider}
+            onChange={(e) => {
+              const next = e.target.value as LlmProvider
+              if (next === 'lmstudio' && lmStudioUnavailable) return
+              void setProvider(next)
+            }}
+            aria-label="Agent backend"
+          >
+            <option value="lmstudio" disabled={lmStudioUnavailable}>
+              LM Studio
+            </option>
+            <option value="ollama">Ollama</option>
+            {openRouterReady && <option value="openrouter">OpenRouter</option>}
+            <option value="codex">Codex</option>
+            <option value="copilot">GitHub Copilot</option>
+            <option value="claude">Claude</option>
+            <option value="gemini">Gemini CLI</option>
+            <option value="glm">GLM (ZCode)</option>
+          </select>
+        </span>
 
         {provider === 'codex' ? (
           <>
@@ -581,6 +595,19 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
             value={openRouterModel || modelOptions[0]}
             onChange={(e) => setOpenRouterModel(e.target.value)}
             title="Model (OpenRouter)"
+          >
+            {modelOptions.map((m) => (
+              <option key={m} value={m}>
+                {m}
+              </option>
+            ))}
+          </select>
+        ) : provider === 'ollama' ? (
+          <select
+            className="composer-select"
+            value={ollamaModel || modelOptions[0]}
+            onChange={(e) => setOllamaModel(e.target.value)}
+            title="Model (Ollama)"
           >
             {modelOptions.map((m) => (
               <option key={m} value={m}>

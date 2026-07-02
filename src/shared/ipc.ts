@@ -227,10 +227,18 @@ export interface TaskRecord extends TaskSummary {
   convo: LlmMessage[]
 }
 
-// ---------- LLM (provider-agnostic; LM Studio, OpenRouter or CLI agents) ----------
+// ---------- LLM (provider-agnostic; local OpenAI-compatible, OpenRouter or CLI agents) ----------
 
 /** Which backend drives the agent chat. */
-export type LlmProvider = 'lmstudio' | 'openrouter' | 'codex' | 'copilot' | 'claude' | 'gemini' | 'glm'
+export type LlmProvider =
+  | 'lmstudio'
+  | 'ollama'
+  | 'openrouter'
+  | 'codex'
+  | 'copilot'
+  | 'claude'
+  | 'gemini'
+  | 'glm'
 
 export type LlmRole = 'system' | 'user' | 'assistant' | 'tool'
 
@@ -342,6 +350,10 @@ export interface LlmConfig {
   baseUrl: string
   /** Default LM Studio model id used when a request doesn't specify one. */
   model: string
+  /** OpenAI-compatible base for Ollama, usually http://localhost:11434/v1. */
+  ollamaBaseUrl: string
+  /** Default Ollama model id used when selected. */
+  ollamaModel: string
   /** Whether OpenRouter is exposed as a selectable agent backend. */
   openRouterEnabled: boolean
   /** OpenRouter API key. Stored locally in app settings. */
@@ -390,6 +402,8 @@ export const DEFAULT_LLM_CONFIG: LlmConfig = {
   provider: 'lmstudio',
   baseUrl: 'http://localhost:1234/v1',
   model: '',
+  ollamaBaseUrl: 'http://localhost:11434/v1',
+  ollamaModel: '',
   openRouterEnabled: false,
   openRouterApiKey: '',
   openRouterModel: 'openrouter/free',

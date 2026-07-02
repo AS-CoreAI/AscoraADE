@@ -43,6 +43,7 @@ export function StatusBar(): JSX.Element {
   const active = useApp((s) => s.active)
   const provider = useApp((s) => s.provider)
   const model = useApp((s) => s.model)
+  const ollamaModel = useApp((s) => s.ollamaModel)
   const openRouterModel = useApp((s) => s.openRouterModel)
   const mode = useApp((s) => s.mode)
   const connection = useApp((s) => s.connection)
@@ -93,6 +94,7 @@ export function StatusBar(): JSX.Element {
   const isGemini = provider === 'gemini'
   const isGlm = provider === 'glm'
   const isOpenRouter = provider === 'openrouter'
+  const isOllama = provider === 'ollama'
 
   // Keep the usage indicator fresh while a metered CLI backend is active.
   useEffect(() => {
@@ -162,6 +164,17 @@ export function StatusBar(): JSX.Element {
                   ? 'not connected'
                   : '-'
             }`
+    } else if (isOllama) {
+      label =
+        connection === 'connected' && models.length > 0
+          ? `Ollama: connected - ${models.length} model${models.length === 1 ? '' : 's'}`
+          : `Ollama: ${
+              connection === 'connecting'
+                ? 'connecting...'
+                : connection === 'error'
+                  ? 'not connected'
+                  : '-'
+            }`
     }
   }
 
@@ -177,6 +190,8 @@ export function StatusBar(): JSX.Element {
         ? codexModel || 'codex (default)'
         : isOpenRouter
           ? openRouterModel || 'openrouter/free'
+        : isOllama
+          ? ollamaModel || 'ollama'
         : model || '(no model)'
 
   const accessLabel = isCodex

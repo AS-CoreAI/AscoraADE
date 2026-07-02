@@ -25,7 +25,7 @@ interface ToolCallDelta {
 const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1'
 
 /**
- * Minimal client for an LM Studio (OpenAI-compatible) server.
+ * Minimal client for OpenAI-compatible backends (LM Studio, Ollama, OpenRouter).
  *
  *  - GET  {baseUrl}/models           → list available models
  *  - POST {baseUrl}/chat/completions → chat, with Server-Sent-Events streaming
@@ -56,7 +56,11 @@ function isAbort(err: unknown): boolean {
 }
 
 function providerName(config: LlmConfig): string {
-  return config.provider === 'openrouter' ? 'OpenRouter' : 'LM Studio'
+  return config.provider === 'openrouter'
+    ? 'OpenRouter'
+    : config.provider === 'ollama'
+      ? 'Ollama'
+      : 'LM Studio'
 }
 
 function connectionError(name: string, url: string, err: unknown): LmStudioError {
@@ -99,9 +103,9 @@ export class LmStudioClient {
   }
 
   get baseUrl(): string {
-    return this.config.provider === 'openrouter'
-      ? OPENROUTER_BASE_URL
-      : stripTrailingSlash(this.config.baseUrl)
+    if (this.config.provider === 'openrouter') return OPENROUTER_BASE_URL
+    if (this.config.provider === 'ollama') return stripTrailingSlash(this.config.ollamaBaseUrl)
+    return stripTrailingSlash(this.config.baseUrl)
   }
 
   private get providerName(): string {
@@ -128,9 +132,9 @@ export class LmStudioClient {
 
   private model(params: ChatParams): string {
     if (params.model) return params.model
-    return this.config.provider === 'openrouter'
-      ? this.config.openRouterModel || 'openrouter/free'
-      : this.config.model
+    if (this.config.provider === 'openrouter') return this.config.openRouterModel || 'openrouter/free'
+    if (this.config.provider === 'ollama') return this.config.ollamaModel
+    return this.config.model
   }
 
   /** GET /models — never throws for empty lists, only for real failures. */

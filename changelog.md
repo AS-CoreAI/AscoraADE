@@ -2,6 +2,7 @@
 What's new?
 
 ### Added
+- **Ollama backend** — Ollama is now a selectable local OpenAI-compatible provider with its own saved base URL (`http://localhost:11434/v1` by default), model refresh, model selection, streaming chat, tool-call loop, status-bar state, usage analytics, and Git AI commit-message support.
 - **Google Gemini CLI backend** — the `gemini` CLI is now a selectable agent provider (`gemini -p --output-format stream-json`), with an optional binary path and `--model` override, `--approval-mode` selection (`plan` / `default` / `auto_edit` / `yolo`), a reachability check, and `--resume` session continuation. It reuses the normalized Codex event/item pipeline so every CLI backend shares one renderer code path.
 - **File & image attachments in the composer** — attach files/images to a prompt via a multi-select picker (`dialog:openFiles`); the selection is imported into the workspace with duplicate-name de-duplication (`fs:importFiles`) and exposed to the agent as workspace-relative paths.
 - **Per-task (per-chat) model/provider pinning** — each chat/task now remembers its own model/provider selection independently of the workspace default. Opening a task restores its pinned model; new chats inherit the workspace default until the user picks a model, then that choice is pinned to that chat.
@@ -11,6 +12,8 @@ What's new?
 - Workspace LLM persistence (`persistWorkspaceLlm`) now also pins the current selection to the active task, so each chat keeps its own model.
 
 ### Changed
+- **Local OpenAI-compatible backend handling** now supports separate LM Studio and Ollama URLs/models so switching providers does not overwrite the other local backend's saved model.
+- Provider pickers now keep LM Studio visible but disabled while it is unreachable, with a short availability tooltip, while Ollama remains selectable as another local backend.
 - **Simplified workspace model sync** — `syncWorkspaceLlm` now delegates to a shared `applyLlm` helper, reducing duplication and ensuring consistent provider/model/permission handling across workspaces and tasks.
 - Opening a task in a different workspace now restores that task's own pinned model/provider (falling back to the workspace default only if the task has no saved selection).
 - Deleting a running task now also removes its pinned model/provider from settings.
