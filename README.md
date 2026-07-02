@@ -12,12 +12,20 @@ commands, and shows a diff before applying changes.
 
 ## LLM & AI Integrations
 
-The environment supports multiple AI providers to power the agentic loop:
+The environment supports multiple AI providers to power the agentic loop. The
+active backend is pinned per task (see the changelog for 1.2 per-task model
+pinning):
 
-- **LM Studio** (Default): Local LLM support via OpenAI-compatible API.
-- **GitHub Copilot**: Seamless integration for autocomplete and chat.
-- **Google Gemini**: High-context window support for large-scale codebase analysis.
-- **OpenAI / Anthropic**: Standard API support for GPT and Claude models.
+- **LM Studio** (default): local LLM over the OpenAI-compatible API.
+- **OpenRouter**: cloud OpenAI-compatible backend with a saved API key.
+- **Codex CLI**: OpenAI Codex agent driven over `stream-json`.
+- **GitHub Copilot CLI**: Copilot agent with device-code login and reasoning levels.
+- **Claude Code**: Anthropic's CLI agent with selectable permission modes.
+- **Google Gemini CLI**: the `gemini` CLI agent (`gemini -p --output-format
+  stream-json`) with `--approval-mode` (`plan` / `default` / `auto_edit` / `yolo`)
+  and an optional `--model`; reuses the normalized Codex event pipeline so every
+  CLI backend shares one renderer code path.
+- **GLM / ZCode CLI**: the ZCode agent with `plan` / `yolo` modes.
 
 The OpenAI-compatible client lives in the **main process** (`src/main/llm/client.ts`)
 and is exposed to the renderer over IPC:
@@ -29,6 +37,14 @@ and is exposed to the renderer over IPC:
 - Cancellation via `AbortController` (the composer's Stop button)
 - Connection / HTTP / parse failures are normalised to friendly messages and shown
   in the status bar; click it to open the connection settings (Base URL + model + Test)
+
+### File attachments
+
+The composer can attach files and images to a prompt: `dialog:openFiles` opens a
+multi-select picker and `fs:importFiles` copies the selection into the workspace
+(de-duplicating names), returning the workspace-relative paths the agent can
+reference. Backends that accept file context receive the imported paths alongside
+the message.
 
 ## Stack
 
@@ -80,10 +96,11 @@ npm run typecheck   # tsc for main and renderer
 `node_modules`, `.git`, `vendor`, `dist`, `build`, `.next`, `venv`, `__pycache__`,
 `out`, `.cache` (see `EXCLUDED_DIRS` in `src/shared/ipc.ts`).
 
-## Release / distribution branch note
+## Branches & versioning
 
-Local path: E:\\Ascora-ADE
-
-Note: this README entry is intended for the release/distribution branch (not the active development branch). Several integrations are enabled in this release build. Missing integrations should be added or enabled in the main development branch or future releases.
-
+Active development happens on **`version1.2`**. The short-lived `release` branch was
+a linear continuation of `version1.2` that carried the Gemini CLI backend and
+file-attachment work; it has been folded back into `version1.2` (and `main`) and
+removed, so there is a single 1.2 line again. Cut future releases as tags off the
+`version1.2` / `main` line rather than a standing `release` branch.
 
