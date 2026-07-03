@@ -856,10 +856,19 @@ export function ConnectionSettings(): JSX.Element | null {
   const provider = useApp((s) => s.provider)
   const setProvider = useApp((s) => s.setProvider)
   const lmStudioReachable = useApp((s) => s.lmStudioReachable)
+  const ollamaReachable = useApp((s) => s.ollamaReachable)
   const openRouterReady = useApp(
     (s) => s.openRouterEnabled && s.openRouterApiKey.trim().length > 0
   )
   const lmStudioUnavailable = !lmStudioReachable
+  const ollamaUnavailable = !ollamaReachable
+  const backendTooltip =
+    [
+      lmStudioUnavailable ? t('composer.lmStudioNotRunning') : null,
+      ollamaUnavailable ? t('composer.ollamaNotRunning') : null
+    ]
+      .filter(Boolean)
+      .join(' ') || undefined
 
   if (!open) return null
 
@@ -876,23 +885,31 @@ export function ConnectionSettings(): JSX.Element | null {
         <div className="modal-body">
           <label className="field">
             <span className="field-label">{t('common.provider')}</span>
-            <span
-              className="provider-select-wrap"
-              data-tooltip={lmStudioUnavailable ? t('composer.lmStudioNotRunning') : undefined}
-            >
+            <span className="provider-select-wrap" data-tooltip={backendTooltip}>
               <select
                 className="text-input"
                 value={provider}
                 onChange={(e) => {
                   const next = e.target.value as LlmProvider
                   if (next === 'lmstudio' && lmStudioUnavailable) return
+                  if (next === 'ollama' && ollamaUnavailable) return
                   void setProvider(next)
                 }}
               >
-                <option value="lmstudio" disabled={lmStudioUnavailable}>
+                <option
+                  value="lmstudio"
+                  disabled={lmStudioUnavailable}
+                  title={lmStudioUnavailable ? t('composer.lmStudioNotRunning') : undefined}
+                >
                   {t('settings.providerLmStudio')}
                 </option>
-                <option value="ollama">{t('settings.providerOllama')}</option>
+                <option
+                  value="ollama"
+                  disabled={ollamaUnavailable}
+                  title={ollamaUnavailable ? t('composer.ollamaNotRunning') : undefined}
+                >
+                  {t('settings.providerOllama')}
+                </option>
                 {openRouterReady && <option value="openrouter">{t('settings.providerOpenRouter')}</option>}
                 <option value="codex">{t('settings.providerCodex')}</option>
                 <option value="copilot">{t('settings.providerCopilot')}</option>

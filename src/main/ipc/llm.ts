@@ -145,6 +145,17 @@ export function registerLlmHandlers(): void {
     }
   })
 
+  // Same probe for the local Ollama server.
+  ipcMain.handle(IPC.llm.checkOllama, async (): Promise<boolean> => {
+    const probe = new LmStudioClient({ ...readConfig(), provider: 'ollama' })
+    try {
+      await probe.listModels(AbortSignal.timeout(2500))
+      return true
+    } catch {
+      return false
+    }
+  })
+
   ipcMain.handle(
     IPC.llm.chat,
     async (e, id: string, params: ChatParams): Promise<ChatResult> => {

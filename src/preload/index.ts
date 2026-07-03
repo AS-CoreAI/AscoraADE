@@ -193,6 +193,8 @@ const api = {
     /** Probe whether the local LM Studio server is reachable, regardless of the
      *  active provider — drives showing/hiding LM Studio in the backend list. */
     checkLmStudio: (): Promise<boolean> => ipcRenderer.invoke(IPC.llm.checkLmStudio),
+    /** Same probe for the local Ollama server. */
+    checkOllama: (): Promise<boolean> => ipcRenderer.invoke(IPC.llm.checkOllama),
     /** Streams a chat completion; `onChunk` fires per content delta. */
     chat: (id: string, params: ChatParams, onChunk: (delta: string) => void): Promise<ChatResult> => {
       const listener = (_e: IpcRendererEvent, payload: ChatChunkPayload): void => {

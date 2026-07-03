@@ -200,6 +200,7 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
   const ollamaModel = useApp((s) => s.ollamaModel)
   const setOllamaModel = useApp((s) => s.setOllamaModel)
   const lmStudioReachable = useApp((s) => s.lmStudioReachable)
+  const ollamaReachable = useApp((s) => s.ollamaReachable)
   const openRouterEnabled = useApp((s) => s.openRouterEnabled)
   const openRouterApiKey = useApp((s) => s.openRouterApiKey)
   const openRouterModel = useApp((s) => s.openRouterModel)
@@ -249,6 +250,14 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
 
   const openRouterReady = openRouterEnabled && openRouterApiKey.trim().length > 0
   const lmStudioUnavailable = !lmStudioReachable
+  const ollamaUnavailable = !ollamaReachable
+  const backendTooltip =
+    [
+      lmStudioUnavailable ? t('composer.lmStudioNotRunning') : null,
+      ollamaUnavailable ? t('composer.ollamaNotRunning') : null
+    ]
+      .filter(Boolean)
+      .join(' ') || undefined
   const selectedLocalModel = provider === 'ollama' ? ollamaModel : model
   const modelOptions =
     provider === 'openrouter'
@@ -504,24 +513,32 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
 
         <span className="composer-spacer" />
 
-        <span
-          className="provider-select-wrap"
-          data-tooltip={lmStudioUnavailable ? t('composer.lmStudioNotRunning') : undefined}
-        >
+        <span className="provider-select-wrap" data-tooltip={backendTooltip}>
           <select
             className="composer-select"
             value={provider}
             onChange={(e) => {
               const next = e.target.value as LlmProvider
               if (next === 'lmstudio' && lmStudioUnavailable) return
+              if (next === 'ollama' && ollamaUnavailable) return
               void setProvider(next)
             }}
             aria-label={t('composer.agentBackend')}
           >
-            <option value="lmstudio" disabled={lmStudioUnavailable}>
+            <option
+              value="lmstudio"
+              disabled={lmStudioUnavailable}
+              title={lmStudioUnavailable ? t('composer.lmStudioNotRunning') : undefined}
+            >
               LM Studio
             </option>
-            <option value="ollama">Ollama</option>
+            <option
+              value="ollama"
+              disabled={ollamaUnavailable}
+              title={ollamaUnavailable ? t('composer.ollamaNotRunning') : undefined}
+            >
+              Ollama
+            </option>
             {openRouterReady && <option value="openrouter">OpenRouter</option>}
             <option value="codex">Codex</option>
             <option value="copilot">GitHub Copilot</option>

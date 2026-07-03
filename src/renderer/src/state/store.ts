@@ -1061,6 +1061,8 @@ interface AppState {
   /** Whether the local LM Studio server is reachable (background-probed), used
    *  to show/hide LM Studio in the backend list independent of the active one. */
   lmStudioReachable: boolean
+  /** Same background-probed reachability for the local Ollama server. */
+  ollamaReachable: boolean
   // OpenRouter
   openRouterEnabled: boolean
   openRouterApiKey: string
@@ -1262,20 +1264,27 @@ interface AppState {
 }
 
 /**
- * Background probe of the local LM Studio server so its backend option appears
- * when the server comes up and disappears when it goes down — even while another
- * provider is active. Skipped while LM Studio itself is selected, since
- * refreshModels already tracks that connection and the option stays listed.
+ * Background probes of the local LM Studio / Ollama servers so their backend
+ * options enable when a server comes up and disable when it goes down — even
+ * while another provider is active. Each probe is skipped while its own
+ * provider is selected, since refreshModels already tracks that connection.
  */
-async function probeLmStudio(): Promise<void> {
-  if (useApp.getState().provider === 'lmstudio') return
-  const reachable = await api.llm.checkLmStudio().catch(() => false)
-  if (useApp.getState().lmStudioReachable !== reachable) {
-    useApp.setState({ lmStudioReachable: reachable })
+async function probeLocalServers(): Promise<void> {
+  if (useApp.getState().provider !== 'lmstudio') {
+    const reachable = await api.llm.checkLmStudio().catch(() => false)
+    if (useApp.getState().lmStudioReachable !== reachable) {
+      useApp.setState({ lmStudioReachable: reachable })
+    }
+  }
+  if (useApp.getState().provider !== 'ollama') {
+    const reachable = await api.llm.checkOllama().catch(() => false)
+    if (useApp.getState().ollamaReachable !== reachable) {
+      useApp.setState({ ollamaReachable: reachable })
+    }
   }
 }
 
-let lmStudioProbeTimer: ReturnType<typeof setInterval> | null = null
+let localServerProbeTimer: ReturnType<typeof setInterval> | null = null
 
 export const useApp = create<AppState>((set, get) => {
   /** Snapshot the foreground (active task) state as a RunState. */
@@ -1477,6 +1486,7 @@ export const useApp = create<AppState>((set, get) => {
   models: [],
   connection: 'unknown',
   lmStudioReachable: false,
+  ollamaReachable: false,
   openRouterEnabled: DEFAULT_LLM_CONFIG.openRouterEnabled,
   openRouterApiKey: DEFAULT_LLM_CONFIG.openRouterApiKey,
   openRouterModel: DEFAULT_LLM_CONFIG.openRouterModel,
@@ -1623,9 +1633,10 @@ export const useApp = create<AppState>((set, get) => {
       if (cfg.provider === 'gemini') await get().checkGemini()
       if (cfg.provider === 'glm') await get().checkGlm()
     }
-    // Keep the LM Studio backend option in sync with the local server's state.
-    void probeLmStudio()
-    if (!lmStudioProbeTimer) lmStudioProbeTimer = setInterval(() => void probeLmStudio(), 5000)
+    // Keep the LM Studio / Ollama backend options in sync with the local servers.
+    void probeLocalServers()
+    if (!localServerProbeTimer)
+      localServerProbeTimer = setInterval(() => void probeLocalServers(), 5000)
   },
 
   async openFolder() {
@@ -2295,7 +2306,7 @@ export const useApp = create<AppState>((set, get) => {
         isOpenRouter
           ? { models, connection: 'connected', openRouterModel: selected }
           : isOllama
-            ? { models, connection: 'connected', ollamaModel: selected }
+            ? { models, connection: 'connected', ollamaModel: selected, ollamaReachable: true }
             : { models, connection: 'connected', model: selected, lmStudioReachable: true }
       )
       if (selected) {
@@ -2314,6 +2325,7 @@ export const useApp = create<AppState>((set, get) => {
         connection: 'error',
         connectionError: res.error,
         models: [],
+        ...(isOllama ? { ollamaReachable: false } : {}),
         ...(!isOpenRouter && !isOllama ? { lmStudioReachable: false } : {})
       })
     }

@@ -14,13 +14,17 @@ What's new?
 
 ### Changed
 - **Local OpenAI-compatible backend handling** now supports separate LM Studio and Ollama URLs/models so switching providers does not overwrite the other local backend's saved model.
-- Provider pickers now keep LM Studio visible but disabled while it is unreachable, with a short availability tooltip, while Ollama remains selectable as another local backend.
+- Provider pickers now keep LM Studio **and Ollama** visible but disabled while the corresponding local server is unreachable; both are probed in the background every 5 seconds (new `llm:checkOllama` IPC alongside the existing LM Studio probe).
+- **Claude model presets** now include the `fable` alias alongside `default` / `opus` / `sonnet` / `haiku`. Aliases are resolved by the Claude Code CLI to the newest model of each family, so new model releases within a family are picked up automatically without an app update.
+- **Version bumped to 1.2** in `package.json` and the About menu (left rail).
 - **Simplified workspace model sync** — `syncWorkspaceLlm` now delegates to a shared `applyLlm` helper, reducing duplication and ensuring consistent provider/model/permission handling across workspaces and tasks.
 - Opening a task in a different workspace now restores that task's own pinned model/provider (falling back to the workspace default only if the task has no saved selection).
 - Deleting a running task now also removes its pinned model/provider from settings.
 - Workspace LLM persistence (`persistWorkspaceLlm`) now also pins the current selection to the active task, so each chat keeps its own model.
 
 ### Fixed
+- **Backend-picker availability tooltip** no longer shows a generic "The application is not running." over the whole provider list. The tooltip now names the specific unavailable server ("LM Studio is not running." / "Ollama is not running.", localized), appears only when at least one local server is actually down, and each disabled option in the open dropdown carries its own native hint.
+- Ollama can no longer be selected as the agent backend while its server is not running (previously the option was always selectable and failed only after switching).
 - Deleting a running task now correctly removes its pinned model/provider from settings, preventing stale selections from persisting.
 - Switching to a task in a different workspace now correctly restores that task's own model/provider instead of always switching to the workspace default.
 

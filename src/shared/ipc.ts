@@ -67,6 +67,7 @@ export const IPC = {
     setConfig: 'llm:setConfig',
     listModels: 'llm:listModels',
     checkLmStudio: 'llm:checkLmStudio',
+    checkOllama: 'llm:checkOllama',
     chat: 'llm:chat',
     chunk: 'llm:chunk',
     abort: 'llm:abort'
@@ -307,8 +308,12 @@ export const CLAUDE_PERMISSION_MODES: ClaudePermissionMode[] = [
   'bypassPermissions'
 ]
 
-/** Suggested Claude model aliases (empty → Claude Code's own default). */
-export const CLAUDE_MODEL_PRESETS = ['default', 'opus', 'sonnet', 'haiku']
+/**
+ * Suggested Claude model aliases ('default' → Claude Code's own default). The
+ * CLI resolves each alias to the newest model of that family, so the list only
+ * needs updating when a new family ships (e.g. Fable alongside Opus).
+ */
+export const CLAUDE_MODEL_PRESETS = ['default', 'fable', 'opus', 'sonnet', 'haiku']
 
 /**
  * GitHub Copilot CLI permission profile. `plan` keeps Copilot in planning mode,
