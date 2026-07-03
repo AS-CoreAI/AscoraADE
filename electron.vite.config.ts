@@ -20,7 +20,12 @@ export default defineConfig({
     plugins: [externalizeDepsPlugin()],
     build: {
       rollupOptions: {
-        input: { index: resolve(__dirname, 'src/preload/index.ts') }
+        input: {
+          index: resolve(__dirname, 'src/preload/index.ts'),
+          // Injected into the WProvider (hidden web-chat) windows to tap the
+          // site's streaming responses; see src/main/wprovider/qwen.ts.
+          wprovider: resolve(__dirname, 'src/preload/wprovider.ts')
+        }
       }
     },
     resolve: {

@@ -1,5 +1,6 @@
 import { useState, type JSX } from 'react'
 import { Icon } from './Icon'
+import { ProviderSelect, type ProviderSelectOption } from './ProviderSelect'
 import {
   CODEX_MODEL_PRESETS,
   COPILOT_MODEL_PRESETS,
@@ -17,6 +18,7 @@ import { useApp } from '@/state/store'
 import { tr, type TranslationKey } from '@/language'
 import {
   DEFAULT_LLM_CONFIG,
+  isSshCapableProvider,
   CODEX_REASONING_LEVELS,
   COPILOT_PERMISSION_MODES,
   COPILOT_REASONING_LEVELS,
@@ -746,6 +748,72 @@ function GlmPanel(): JSX.Element {
   )
 }
 
+function WProviderPanel(): JSX.Element {
+  const t = useT()
+  const check = useApp((s) => s.wproviderCheck)
+  const checking = useApp((s) => s.wproviderChecking)
+  const loggingIn = useApp((s) => s.wproviderLoggingIn)
+  const checkWProvider = useApp((s) => s.checkWProvider)
+  const wproviderLogin = useApp((s) => s.wproviderLogin)
+  const wproviderLogout = useApp((s) => s.wproviderLogout)
+
+  return (
+    <>
+      <label className="field">
+        <span className="field-label">{t('settings.wproviderService')}</span>
+        <select className="text-input" value="qwen" onChange={() => undefined}>
+          <option value="qwen">Qwen (chat.qwen.ai)</option>
+        </select>
+        <span className="field-hint">{t('settings.wproviderHint')}</span>
+      </label>
+
+      <div
+        className={`conn-line ${
+          checking || loggingIn
+            ? 'connecting'
+            : !check
+              ? 'unknown'
+              : check.loggedIn
+                ? 'connected'
+                : 'error'
+        }`}
+      >
+        {(checking || loggingIn) && t('settings.checkingName', { name: 'Qwen' })}
+        {!checking && !loggingIn && !check && t('settings.notCheckedYet')}
+        {!checking && !loggingIn && check && (
+          <>
+            {check.loggedIn ? `✓ ${t('settings.wproviderSignedIn')}` : `✗ ${t('settings.wproviderNotSignedIn')}`}
+            {check.error ? <div className="field-hint">{check.error}</div> : null}
+          </>
+        )}
+      </div>
+
+      {!checking && !loggingIn && check && !check.loggedIn && (
+        <div className="field-hint">{t('settings.wproviderSigninHint')}</div>
+      )}
+
+      <div className="field-row" style={{ alignSelf: 'flex-start' }}>
+        <button
+          className="btn btn-icon"
+          onClick={() => void wproviderLogin()}
+          disabled={loggingIn || checking}
+        >
+          <Icon name="globe" size={14} />
+          {loggingIn ? t('settings.wproviderSigningIn') : t('settings.wproviderSignIn')}
+        </button>
+        {check?.loggedIn && (
+          <button className="btn" onClick={() => void wproviderLogout()} disabled={checking}>
+            {t('settings.wproviderSignOut')}
+          </button>
+        )}
+        <button className="btn" onClick={() => void checkWProvider()} disabled={checking}>
+          {t('settings.recheck')}
+        </button>
+      </div>
+    </>
+  )
+}
+
 function OpenRouterSetup(): JSX.Element {
   const t = useT()
   const openRouterEnabled = useApp((s) => s.openRouterEnabled)
@@ -855,6 +923,7 @@ export function ConnectionSettings(): JSX.Element | null {
   const setOpen = useApp((s) => s.setSettingsOpen)
   const provider = useApp((s) => s.provider)
   const setProvider = useApp((s) => s.setProvider)
+  const activeSsh = useApp((s) => s.activeSsh)
   const lmStudioReachable = useApp((s) => s.lmStudioReachable)
   const ollamaReachable = useApp((s) => s.ollamaReachable)
   const openRouterReady = useApp(
@@ -862,13 +931,66 @@ export function ConnectionSettings(): JSX.Element | null {
   )
   const lmStudioUnavailable = !lmStudioReachable
   const ollamaUnavailable = !ollamaReachable
-  const backendTooltip =
-    [
-      lmStudioUnavailable ? t('composer.lmStudioNotRunning') : null,
-      ollamaUnavailable ? t('composer.ollamaNotRunning') : null
-    ]
-      .filter(Boolean)
-      .join(' ') || undefined
+  const cantWorkFromSsh = t('composer.cantWorkFromSsh')
+  const blockedBySsh = (next: LlmProvider): boolean =>
+    !!activeSsh && !isSshCapableProvider(next)
+  const sshBlockedTitle = (next: LlmProvider): string | undefined =>
+    blockedBySsh(next) ? cantWorkFromSsh : undefined
+  const providerOptions: ProviderSelectOption[] = [
+    {
+      value: 'lmstudio',
+      label: t('settings.providerLmStudio'),
+      disabled: lmStudioUnavailable,
+      tooltip: lmStudioUnavailable ? t('composer.lmStudioNotRunning') : undefined
+    },
+    {
+      value: 'ollama',
+      label: t('settings.providerOllama'),
+      disabled: ollamaUnavailable || blockedBySsh('ollama'),
+      tooltip: sshBlockedTitle('ollama') ?? (ollamaUnavailable ? t('composer.ollamaNotRunning') : undefined)
+    },
+    ...(openRouterReady
+      ? [
+          {
+            value: 'openrouter' as const,
+            label: t('settings.providerOpenRouter'),
+            disabled: blockedBySsh('openrouter'),
+            tooltip: sshBlockedTitle('openrouter')
+          }
+        ]
+      : []),
+    {
+      value: 'codex',
+      label: t('settings.providerCodex'),
+      disabled: blockedBySsh('codex'),
+      tooltip: sshBlockedTitle('codex')
+    },
+    {
+      value: 'copilot',
+      label: t('settings.providerCopilot'),
+      disabled: blockedBySsh('copilot'),
+      tooltip: sshBlockedTitle('copilot')
+    },
+    {
+      value: 'claude',
+      label: t('settings.providerClaude'),
+      disabled: blockedBySsh('claude'),
+      tooltip: sshBlockedTitle('claude')
+    },
+    {
+      value: 'gemini',
+      label: t('settings.providerGemini'),
+      disabled: blockedBySsh('gemini'),
+      tooltip: sshBlockedTitle('gemini')
+    },
+    {
+      value: 'glm',
+      label: t('settings.providerGlm'),
+      disabled: blockedBySsh('glm'),
+      tooltip: sshBlockedTitle('glm')
+    },
+    { value: 'wprovider', label: t('settings.providerWProvider') }
+  ]
 
   if (!open) return null
 
@@ -885,39 +1007,18 @@ export function ConnectionSettings(): JSX.Element | null {
         <div className="modal-body">
           <label className="field">
             <span className="field-label">{t('common.provider')}</span>
-            <span className="provider-select-wrap" data-tooltip={backendTooltip}>
-              <select
-                className="text-input"
-                value={provider}
-                onChange={(e) => {
-                  const next = e.target.value as LlmProvider
-                  if (next === 'lmstudio' && lmStudioUnavailable) return
-                  if (next === 'ollama' && ollamaUnavailable) return
-                  void setProvider(next)
-                }}
-              >
-                <option
-                  value="lmstudio"
-                  disabled={lmStudioUnavailable}
-                  title={lmStudioUnavailable ? t('composer.lmStudioNotRunning') : undefined}
-                >
-                  {t('settings.providerLmStudio')}
-                </option>
-                <option
-                  value="ollama"
-                  disabled={ollamaUnavailable}
-                  title={ollamaUnavailable ? t('composer.ollamaNotRunning') : undefined}
-                >
-                  {t('settings.providerOllama')}
-                </option>
-                {openRouterReady && <option value="openrouter">{t('settings.providerOpenRouter')}</option>}
-                <option value="codex">{t('settings.providerCodex')}</option>
-                <option value="copilot">{t('settings.providerCopilot')}</option>
-                <option value="claude">{t('settings.providerClaude')}</option>
-                <option value="gemini">{t('settings.providerGemini')}</option>
-                <option value="glm">{t('settings.providerGlm')}</option>
-              </select>
-            </span>
+            <ProviderSelect
+              value={provider}
+              options={providerOptions}
+              onChange={(next) => {
+                if (blockedBySsh(next)) return
+                if (next === 'lmstudio' && lmStudioUnavailable) return
+                if (next === 'ollama' && ollamaUnavailable) return
+                void setProvider(next)
+              }}
+              className="text-input"
+              ariaLabel={t('composer.agentBackend')}
+            />
           </label>
 
           {provider === 'openrouter' && <OpenRouterSetup />}
@@ -934,6 +1035,8 @@ export function ConnectionSettings(): JSX.Element | null {
             <GeminiPanel />
           ) : provider === 'glm' ? (
             <GlmPanel />
+          ) : provider === 'wprovider' ? (
+            <WProviderPanel />
           ) : provider === 'openrouter' ? (
             <OpenRouterPanel />
           ) : (

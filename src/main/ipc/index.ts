@@ -8,6 +8,7 @@ import { registerCopilotHandlers } from './copilot'
 import { registerClaudeHandlers } from './claude'
 import { registerGeminiHandlers } from './gemini'
 import { registerGlmHandlers } from './glm'
+import { registerWProviderHandlers } from './wprovider'
 import { registerAnalyticsHandlers } from './analytics'
 import { registerGitHandlers } from './git'
 import { registerTerminalHandlers } from './terminal'
@@ -28,6 +29,7 @@ export function registerIpc(): void {
   registerClaudeHandlers()
   registerGeminiHandlers()
   registerGlmHandlers()
+  registerWProviderHandlers()
   registerAnalyticsHandlers()
   registerGitHandlers()
   registerTerminalHandlers()

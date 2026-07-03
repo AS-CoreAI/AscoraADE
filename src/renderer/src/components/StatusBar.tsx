@@ -68,6 +68,8 @@ export function StatusBar(): JSX.Element {
   const glmCheck = useApp((s) => s.glmCheck)
   const glmChecking = useApp((s) => s.glmChecking)
   const glmMode = useApp((s) => s.glmMode)
+  const wproviderCheck = useApp((s) => s.wproviderCheck)
+  const wproviderChecking = useApp((s) => s.wproviderChecking)
   const openFiles = useApp((s) => s.openFiles)
   const activeFile = useApp((s) => s.activeFile)
   const setSettingsOpen = useApp((s) => s.setSettingsOpen)
@@ -91,6 +93,7 @@ export function StatusBar(): JSX.Element {
   const isClaude = provider === 'claude'
   const isGemini = provider === 'gemini'
   const isGlm = provider === 'glm'
+  const isWProvider = provider === 'wprovider'
   const isOpenRouter = provider === 'openrouter'
   const isOllama = provider === 'ollama'
   const connectionStatusLabel = (state: string): string => {
@@ -117,7 +120,21 @@ export function StatusBar(): JSX.Element {
   // Status dot color + label for the active backend.
   let dotColor: string
   let label: string
-  if (isCodex || isCopilot || isClaude || isGemini || isGlm) {
+  if (isWProvider) {
+    if (wproviderChecking) {
+      dotColor = CONN_COLOR.connecting
+      label = `Qwen Web: ${t('status.checking')}`
+    } else if (!wproviderCheck) {
+      dotColor = CONN_COLOR.unknown
+      label = 'Qwen Web: —'
+    } else if (!wproviderCheck.loggedIn) {
+      dotColor = CONN_COLOR.error
+      label = `Qwen Web: ${t('status.signInNeeded')}`
+    } else {
+      dotColor = CONN_COLOR.connected
+      label = `Qwen Web: ${t('status.ready')}`
+    }
+  } else if (isCodex || isCopilot || isClaude || isGemini || isGlm) {
     const name = isCopilot ? 'Copilot' : isClaude ? 'Claude' : isGemini ? 'Gemini' : isGlm ? 'GLM' : 'Codex'
     const check = isCopilot
       ? copilotCheck
@@ -172,7 +189,9 @@ export function StatusBar(): JSX.Element {
     }
   }
 
-  const modelLabel = isGlm
+  const modelLabel = isWProvider
+    ? 'Qwen · Web'
+    : isGlm
     ? 'GLM (ZCode)'
     : isGemini
       ? geminiModel || t('status.defaultGemini')

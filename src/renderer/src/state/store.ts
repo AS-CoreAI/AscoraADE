@@ -29,9 +29,15 @@ import type {
   AgentEditResult,
   AgentSearchResult,
   AgentDirEntry,
-  AgentSearchMatch
+  AgentSearchMatch,
+  WProviderCheckResult
 } from '@shared/ipc'
-import { DEFAULT_LLM_CONFIG, EXCLUDED_DIRS, normalizeOpenRouterApiKey } from '@shared/ipc'
+import {
+  DEFAULT_LLM_CONFIG,
+  EXCLUDED_DIRS,
+  isSshCapableProvider,
+  normalizeOpenRouterApiKey
+} from '@shared/ipc'
 import { api } from '@/lib/api'
 import { diffStat } from '@/lib/diff'
 import { solveZCodeCaptcha } from '@/lib/zcode-captcha'
@@ -138,7 +144,8 @@ function runCommandForFile(path: string): string | null {
   return runner ? `${runner} "${path}"` : null
 }
 
-function sshWorkspaceId(connId: string): string {
+/** Id of the pseudo-workspace that holds an SSH host's saved chats. */
+export function sshWorkspaceId(connId: string): string {
   return `${SSH_WORKSPACE_PREFIX}${connId}`
 }
 
@@ -718,6 +725,8 @@ function modelLabel(s: {
       return s.geminiModel || 'Gemini'
     case 'glm':
       return 'GLM'
+    case 'wprovider':
+      return 'Qwen Web'
     default:
       return 'Assistant'
   }
@@ -1108,6 +1117,11 @@ interface AppState {
   glmSessionId: string | null
   glmCheck: CodexCheckResult | null
   glmChecking: boolean
+  // Ascora WProvider (hidden-browser web chat backend; Qwen first)
+  wproviderCheck: WProviderCheckResult | null
+  wproviderChecking: boolean
+  /** True while the visible WProvider sign-in window is open. */
+  wproviderLoggingIn: boolean
   settingsOpen: boolean
   /** Whether the Claude usage breakdown modal is open. */
   usageOpen: boolean
@@ -1200,6 +1214,12 @@ interface AppState {
   openSshTerminal: (id: string) => void
   /** Close an SSH terminal panel and disconnect its session. */
   closeSshTerminal: (id: string) => void
+  /** Open a saved chat that belongs to an SSH host (connecting to it first). */
+  openSshTask: (connId: string, taskId: string) => Promise<void>
+  /** Start a blank chat on an SSH host, backgrounding any running task. */
+  newSshTask: (connId: string) => void
+  /** Delete one of an SSH host's saved chats. */
+  deleteSshTask: (connId: string, taskId: string) => Promise<void>
 
   refreshModels: () => Promise<void>
   setModel: (m: string) => void
@@ -1234,6 +1254,9 @@ interface AppState {
   setGlmPath: (path: string) => Promise<void>
   setGlmMode: (m: GlmMode) => void
   checkGlm: () => Promise<void>
+  checkWProvider: () => Promise<void>
+  wproviderLogin: () => Promise<void>
+  wproviderLogout: () => Promise<void>
   /** Save the current backend selection against the active workspace. */
   persistWorkspaceLlm: () => void
   /** Load a workspace's saved backend selection and re-check the connection. */
@@ -1385,6 +1408,14 @@ export const useApp = create<AppState>((set, get) => {
     return true
   }
 
+  const switchToSshProviderIfNeeded = async (): Promise<boolean> => {
+    if (!get().activeSsh || isSshCapableProvider(get().provider)) return false
+    set({ provider: 'lmstudio' })
+    await api.llm.setConfig({ provider: 'lmstudio' })
+    await get().refreshModels()
+    return true
+  }
+
   /**
    * Apply a saved backend selection (from a workspace or a chat) to the live
    * composer fields, push it to the LLM config, and re-check that provider's
@@ -1412,6 +1443,7 @@ export const useApp = create<AppState>((set, get) => {
       })
     }
     const provider = get().provider
+    if (await switchToSshProviderIfNeeded()) return
     if (provider === 'openrouter' && (!get().openRouterEnabled || !get().openRouterApiKey.trim())) {
       set({ provider: 'lmstudio' })
       await api.llm.setConfig({ provider: 'lmstudio' })
@@ -1440,6 +1472,7 @@ export const useApp = create<AppState>((set, get) => {
     else if (provider === 'claude') await get().checkClaude()
     else if (provider === 'gemini') await get().checkGemini()
     else if (provider === 'glm') await get().checkGlm()
+    else if (provider === 'wprovider') await get().checkWProvider()
     else await get().refreshModels()
   }
 
@@ -1524,6 +1557,9 @@ export const useApp = create<AppState>((set, get) => {
   glmSessionId: null,
   glmCheck: null,
   glmChecking: false,
+  wproviderCheck: null,
+  wproviderChecking: false,
+  wproviderLoggingIn: false,
   settingsOpen: false,
   usageOpen: false,
   themePreference: 'dark',
@@ -1578,8 +1614,14 @@ export const useApp = create<AppState>((set, get) => {
     const resolvedTheme = applyTheme(themePreference)
     const appLanguage = isLanguageCode(savedLanguage) ? savedLanguage : 'en'
     applyLanguage(appLanguage)
+    const sshConnections = Array.isArray(savedSsh) ? savedSsh : []
     const taskLists = await Promise.all(
-      ordered.map(async (workspace) => [workspace.id, await api.workspace.tasks(workspace.id)] as const)
+      [
+        ...ordered.map((workspace) => workspace.id),
+        // SSH hosts keep their chats under a pseudo-workspace, loaded up front
+        // so the rail shows each host's history before it ever connects.
+        ...sshConnections.map((conn) => sshWorkspaceId(conn.id))
+      ].map(async (id) => [id, await api.workspace.tasks(id)] as const)
     )
     set({
       workspaces: ordered,
@@ -1592,7 +1634,7 @@ export const useApp = create<AppState>((set, get) => {
       // First run (no saved value) seeds the defaults; an empty saved array is
       // respected (the user removed every skill).
       skills: Array.isArray(savedSkills) ? savedSkills : DEFAULT_SKILLS,
-      sshConnections: Array.isArray(savedSsh) ? savedSsh : [],
+      sshConnections,
       provider: cfg.provider,
       baseUrl: cfg.baseUrl,
       model: cfg.model,
@@ -1632,6 +1674,7 @@ export const useApp = create<AppState>((set, get) => {
       if (cfg.provider === 'claude') await get().checkClaude()
       if (cfg.provider === 'gemini') await get().checkGemini()
       if (cfg.provider === 'glm') await get().checkGlm()
+      if (cfg.provider === 'wprovider') await get().checkWProvider()
     }
     // Keep the LM Studio / Ollama backend options in sync with the local servers.
     void probeLocalServers()
@@ -1722,6 +1765,7 @@ export const useApp = create<AppState>((set, get) => {
       glmSessionId: null,
       view: 'workspace'
     })
+    void switchToSshProviderIfNeeded()
     const pwd = await api.ssh.exec(id, 'pwd')
     const root = !sshFailed(pwd) && pwd.stdout?.trim()
       ? (pwd.stdout.trim().split(/\r?\n/).at(-1) ?? '~')
@@ -1858,7 +1902,9 @@ export const useApp = create<AppState>((set, get) => {
             claudeSessionId: null,
             geminiSessionId: null,
             glmSessionId: null,
-            view: state.active ? 'home' : state.view
+            // Deleting the open chat of an SSH host keeps its context on
+            // screen (the terminal is still connected) with a blank composer.
+            view: isSshWorkspaceId(ws.id) ? state.view : state.active ? 'home' : state.view
           }
         : { tasksByWorkspace: next, runs, taskLlm }
     })
@@ -2237,10 +2283,15 @@ export const useApp = create<AppState>((set, get) => {
 
   deleteSshConnection(id) {
     get().closeSshTerminal(id)
+    // Removing a host removes its saved chats too — nothing else can reach them.
+    const wsId = sshWorkspaceId(id)
+    for (const chat of get().tasksByWorkspace[wsId] ?? []) void api.workspace.deleteTask(chat.id)
     set((state) => {
       const sshConnections = state.sshConnections.filter((c) => c.id !== id)
       void api.settings.set('ssh.connections', sshConnections)
-      return { sshConnections }
+      const tasksByWorkspace = { ...state.tasksByWorkspace }
+      delete tasksByWorkspace[wsId]
+      return { sshConnections, tasksByWorkspace }
     })
   },
 
@@ -2257,6 +2308,7 @@ export const useApp = create<AppState>((set, get) => {
       activeSsh: id,
       view: 'workspace'
     }))
+    void switchToSshProviderIfNeeded()
     if (!alreadyActive || get().treeRoots.length === 0) void get().loadSshData(id)
   },
 
@@ -2289,6 +2341,86 @@ export const useApp = create<AppState>((set, get) => {
     })
     const next = get().activeSsh
     if (next) void get().loadSshData(next)
+  },
+
+  async openSshTask(connId, taskId) {
+    // Re-selecting the chat that's already open just returns to its view.
+    if (get().activeTaskId === taskId && get().activeSsh === connId) {
+      set({ view: 'workspace' })
+      return
+    }
+    const sameContext = get().activeSsh === connId && isSshWorkspaceId(get().active?.id)
+    set((state) => ({
+      openSshTerminals: state.openSshTerminals.includes(connId)
+        ? state.openSshTerminals
+        : [...state.openSshTerminals, connId],
+      activeSsh: connId,
+      view: 'workspace'
+    }))
+    void switchToSshProviderIfNeeded()
+    // Bring the host context up first (loadSshData stashes any streaming task
+    // and blanks the chat pane), then hydrate this chat on top of it.
+    if (!sameContext || get().treeRoots.length === 0) await get().loadSshData(connId)
+    else stashAndDetach()
+    // The user may have switched context while the connection was coming up.
+    if (get().activeSsh !== connId) return
+    if (!hydrateForeground(taskId)) {
+      const task = await api.workspace.task(taskId)
+      if (!task || task.workspaceId !== sshWorkspaceId(connId)) return
+      if (get().activeSsh !== connId) return
+      set({
+        activeTaskId: task.id,
+        activeTaskTitle: task.title,
+        messages: task.messages,
+        convo: task.convo,
+        streaming: false,
+        streamId: null,
+        thinking: false,
+        thinkingTokens: 0,
+        thinkingStartedAt: null,
+        codexThreadId: null,
+        copilotSessionId: null,
+        claudeSessionId: null,
+        geminiSessionId: null,
+        glmSessionId: null
+      })
+    }
+    // Restore this chat's own model/provider when it has one pinned.
+    const savedTaskLlm = get().taskLlm[taskId]
+    if (savedTaskLlm) await applyLlm(savedTaskLlm)
+  },
+
+  newSshTask(connId) {
+    const alreadyActive = get().activeSsh === connId && isSshWorkspaceId(get().active?.id)
+    if (!alreadyActive) {
+      // Opening the host fresh already lands on a blank chat.
+      get().openSshTerminal(connId)
+      return
+    }
+    stashAndDetach()
+    set({
+      messages: [],
+      convo: [],
+      activeTaskId: null,
+      activeTaskTitle: '',
+      streaming: false,
+      streamId: null,
+      thinking: false,
+      thinkingTokens: 0,
+      thinkingStartedAt: null,
+      codexThreadId: null,
+      copilotSessionId: null,
+      claudeSessionId: null,
+      geminiSessionId: null,
+      glmSessionId: null,
+      view: 'workspace'
+    })
+  },
+
+  async deleteSshTask(connId, taskId) {
+    const conn = get().sshConnections.find((c) => c.id === connId)
+    if (!conn) return
+    await get().deleteTask(sshWorkspace(conn), taskId)
   },
 
   async refreshModels() {
@@ -2356,6 +2488,7 @@ export const useApp = create<AppState>((set, get) => {
   },
 
   async setProvider(provider) {
+    if (get().activeSsh && !isSshCapableProvider(provider)) return
     set({ provider })
     await api.llm.setConfig({ provider })
     get().persistWorkspaceLlm()
@@ -2364,6 +2497,7 @@ export const useApp = create<AppState>((set, get) => {
     else if (provider === 'claude') await get().checkClaude()
     else if (provider === 'gemini') await get().checkGemini()
     else if (provider === 'glm') await get().checkGlm()
+    else if (provider === 'wprovider') await get().checkWProvider()
     else await get().refreshModels()
   },
 
@@ -2584,6 +2718,41 @@ export const useApp = create<AppState>((set, get) => {
     }
   },
 
+  async checkWProvider() {
+    set({ wproviderChecking: true })
+    try {
+      const res = await api.wprovider.check()
+      set({ wproviderCheck: res, wproviderChecking: false })
+    } catch (err) {
+      set({
+        wproviderCheck: {
+          ok: false,
+          service: 'qwen',
+          loggedIn: false,
+          error: err instanceof Error ? err.message : String(err)
+        },
+        wproviderChecking: false
+      })
+    }
+  },
+
+  async wproviderLogin() {
+    if (get().wproviderLoggingIn) return
+    set({ wproviderLoggingIn: true })
+    try {
+      await api.wprovider.login()
+    } finally {
+      set({ wproviderLoggingIn: false })
+    }
+    await get().checkWProvider()
+  },
+
+  async wproviderLogout() {
+    set({ wproviderChecking: true })
+    const res = await api.wprovider.logout().catch(() => null)
+    set({ wproviderCheck: res, wproviderChecking: false })
+  },
+
   persistWorkspaceLlm() {
     const snapshot = snapshotLlm(get())
     const id = get().active?.id
@@ -2765,19 +2934,8 @@ export const useApp = create<AppState>((set, get) => {
     await get().saveTaskRun(taskId, 'running')
 
     try {
-      // ===== Codex / Copilot / Claude / GLM CLI backends: delegate the turn to the agent CLI =====
       const agentProvider = provider
-      // The CLI backends run on THIS machine in the workspace folder — they can't
-      // target a remote host. If an SSH session is the active context, refuse
-      // loudly instead of silently working on the local project.
-      if (
-        sshId &&
-        (agentProvider === 'codex' ||
-          agentProvider === 'copilot' ||
-          agentProvider === 'claude' ||
-          agentProvider === 'gemini' ||
-          agentProvider === 'glm')
-      ) {
+      if (sshId && !isSshCapableProvider(agentProvider)) {
         finalStatus = 'error'
         addMsg({
           id: crypto.randomUUID(),
@@ -2785,12 +2943,12 @@ export const useApp = create<AppState>((set, get) => {
           kind: 'text',
           model: assistantModel,
           text:
-            '⚠ This SSH session can only be driven by a local OpenAI-compatible agent. The ' +
-            "Codex / Copilot / Claude / Gemini / GLM CLIs run on your machine and can't target the remote host. " +
-            'Switch the model to LM Studio or Ollama to work over SSH, or pick a workspace to work locally.'
+            "⚠ can't work from ssh. " +
+            'Switch the provider to LM Studio or Ascora WProvider to work over SSH, or pick a local workspace.'
         })
         return
       }
+      // ===== Codex / Copilot / Claude / GLM CLI backends: delegate the turn to the agent CLI =====
       if (
         agentProvider === 'codex' ||
         agentProvider === 'copilot' ||
@@ -3027,28 +3185,43 @@ export const useApp = create<AppState>((set, get) => {
 
       const isOpenRouter = agentProvider === 'openrouter'
       const isOllama = agentProvider === 'ollama'
+      const isWProvider = agentProvider === 'wprovider'
       for (let step = 0; step < MAX_STEPS && !aborted(); step += 1) {
         // 1) Stream one model turn into a fresh assistant bubble.
         const replyId = crypto.randomUUID()
         addMsg({ id: replyId, role: 'assistant', kind: 'text', model: assistantModel, text: '' })
         writeRun(taskId, { streamId: replyId, thinking: true })
         const base = buildSystemPrompt(sshHost, sshHost ? root : undefined)
-        const systemPrompt = skillsBlock ? `${base}\n\n${skillsBlock}` : base
+        // Web chats have no native function calling — pin the model to the
+        // text tool protocol so every tool request arrives as a parseable block.
+        const wpNote = isWProvider
+          ? '\n\nIMPORTANT: In this environment you CANNOT emit native/structured tool calls. ' +
+            'To use a tool, reply with ONLY one fenced ```tool_call block in the exact format above — ' +
+            'no prose before or after it. Reply in plain prose (no tool_call block) only when the task is fully done.'
+          : ''
+        const systemPrompt = (skillsBlock ? `${base}\n\n${skillsBlock}` : base) + wpNote
         const messages: LlmMessage[] = [
           { role: 'system', content: systemPrompt },
           ...(readRun(taskId)?.convo ?? [])
         ]
-        const result = await api.llm.chat(
-          crypto.randomUUID(),
-          { model: isOpenRouter ? orModel : isOllama ? ollamaModel : lmModel, messages, tools: TOOLS },
-          (delta) => {
-            streamedChars += delta.length
-            writeRun(taskId, (r) => ({
-              thinkingTokens: tokensFromChars(streamedChars),
-              messages: r.messages.map((m) => (m.id === replyId ? { ...m, text: m.text + delta } : m))
-            }))
-          }
-        )
+        const onDelta = (delta: string): void => {
+          streamedChars += delta.length
+          writeRun(taskId, (r) => ({
+            thinkingTokens: tokensFromChars(streamedChars),
+            messages: r.messages.map((m) => (m.id === replyId ? { ...m, text: m.text + delta } : m))
+          }))
+        }
+        // WProvider relays the turn through the provider's web chat in a hidden
+        // browser (the site keeps its own history, so only new messages travel).
+        // The chat request id doubles as this bubble's id so stopStreaming's
+        // abort (which sends streamId) reaches the right in-flight turn.
+        const result = isWProvider
+          ? await api.wprovider.chat(replyId, { sessionKey: taskId, messages }, onDelta)
+          : await api.llm.chat(
+              crypto.randomUUID(),
+              { model: isOpenRouter ? orModel : isOllama ? ollamaModel : lmModel, messages, tools: TOOLS },
+              onDelta
+            )
         writeRun(taskId, { streamId: null, thinking: false })
         // The connection indicator only reflects the foreground backend.
         if (get().activeTaskId === taskId) {
@@ -3072,12 +3245,14 @@ export const useApp = create<AppState>((set, get) => {
             workspaceId,
             workspaceName,
             taskId,
-            provider: isOpenRouter ? 'openrouter' : isOllama ? 'ollama' : 'lmstudio',
-            model: isOpenRouter
-              ? orModel || 'openrouter/free'
-              : isOllama
-                ? ollamaModel || 'ollama'
-                : lmModel || 'local-model',
+            provider: isWProvider ? 'wprovider' : isOpenRouter ? 'openrouter' : isOllama ? 'ollama' : 'lmstudio',
+            model: isWProvider
+              ? 'qwen-web'
+              : isOpenRouter
+                ? orModel || 'openrouter/free'
+                : isOllama
+                  ? ollamaModel || 'ollama'
+                  : lmModel || 'local-model',
             inputTokens: usage.inputTokens,
             outputTokens: usage.outputTokens,
             userMessages: step === 0 ? 1 : 0,
@@ -3425,6 +3600,7 @@ export const useApp = create<AppState>((set, get) => {
       else if (p === 'claude') void api.claude.abort(streamId)
       else if (p === 'gemini') void api.gemini.abort(streamId)
       else if (p === 'glm') void api.glm.abort(streamId)
+      else if (p === 'wprovider') void api.wprovider.abort(streamId)
       else void api.llm.abort(streamId)
     }
     // Reject only this run's pending Ask-mode approvals.

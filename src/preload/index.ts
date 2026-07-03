@@ -33,6 +33,9 @@ import {
   type GeminiRunParams,
   type GlmRunParams,
   type GlmCaptchaConfigResult,
+  type WProviderChatParams,
+  type WProviderCheckResult,
+  type WProviderLoginResult,
   type UsageEvent,
   type UsageEventInput,
   type GitStatusResult,
@@ -302,6 +305,29 @@ const api = {
         .finally(() => ipcRenderer.removeListener(IPC.glm.event, listener))
     },
     abort: (id: string): Promise<void> => ipcRenderer.invoke(IPC.glm.abort, id)
+  },
+  wprovider: {
+    /** Probe the persisted web session for a signed-in state. */
+    check: (): Promise<WProviderCheckResult> => ipcRenderer.invoke(IPC.wprovider.check),
+    /** Open a visible browser window to sign in; resolves once signed in (or closed). */
+    login: (): Promise<WProviderLoginResult> => ipcRenderer.invoke(IPC.wprovider.login),
+    /** Clear the web session (cookies + storage) and forget site chats. */
+    logout: (): Promise<WProviderCheckResult> => ipcRenderer.invoke(IPC.wprovider.logout),
+    /** Runs one turn through the hidden web chat; `onChunk` fires per answer delta. */
+    chat: (
+      id: string,
+      params: WProviderChatParams,
+      onChunk: (delta: string) => void
+    ): Promise<ChatResult> => {
+      const listener = (_e: IpcRendererEvent, payload: ChatChunkPayload): void => {
+        if (payload.id === id) onChunk(payload.delta)
+      }
+      ipcRenderer.on(IPC.wprovider.chunk, listener)
+      return ipcRenderer
+        .invoke(IPC.wprovider.chat, id, params)
+        .finally(() => ipcRenderer.removeListener(IPC.wprovider.chunk, listener))
+    },
+    abort: (id: string): Promise<void> => ipcRenderer.invoke(IPC.wprovider.abort, id)
   },
   analytics: {
     record: (event: UsageEventInput): Promise<UsageEvent> =>

@@ -2,6 +2,9 @@
 What's new?
 
 ### Added
+- **Ascora WProvider — web-chat backend (Qwen)** — a new agent backend that "emulates an API" on top of a provider's web chat, driven inside a hidden Electron browser window. Sign in to the site once in a visible window (the login persists in a dedicated session partition); afterwards each agent turn is typed into the site's own composer and the reply is captured from the site's streaming response (DOM scraping only as a fallback). Each ADE chat maps to its own web-chat conversation and only not-yet-seen messages are relayed per turn. Includes sign-in/sign-out and status in Connection Settings, status-bar state, streaming with abort, and tool use via the agent loop's text protocol. Works over SSH alongside LM Studio.
+- **Chat history for SSH hosts** — each SSH connection in the left rail now keeps its own list of saved chats, just like workspace tasks (an SSH host can hold many chats). Chats are persisted under the host's pseudo-workspace, loaded at app start (visible before ever connecting), and reopening one reconnects to the host, restores the transcript and the chat's pinned model/provider. The host row gains a collapse twisty, a "new chat" button, and per-chat delete; deleting a connection also removes its saved chats.
+- **New backend dropdown (`ProviderSelect`)** — the provider pickers in the composer and status bar are now a custom accessible dropdown with per-option disabled states and native tooltips (a plain `<select>` can't hint why an option is unavailable).
 - **UI localization (English + Russian)** — the interface is now fully translatable via a central catalog (`src/renderer/src/language`), with a language picker in the left-rail footer next to the theme selector. Hardcoded strings across every renderer component (rail, title bar, composer, chat, connection/usage/SSH/skills modals, editor, explorer, Git, status bar, terminals, home view) are routed through a `tr()` helper. The choice is persisted (`appearance.language`), restored on launch, applied to `<html lang>`, and used for locale-aware date/time formatting.
 - **Ollama backend** — Ollama is now a selectable local OpenAI-compatible provider with its own saved base URL (`http://localhost:11434/v1` by default), model refresh, model selection, streaming chat, tool-call loop, status-bar state, usage analytics, and Git AI commit-message support.
 - **Google Gemini CLI backend** — the `gemini` CLI is now a selectable agent provider (`gemini -p --output-format stream-json`), with an optional binary path and `--model` override, `--approval-mode` selection (`plan` / `default` / `auto_edit` / `yolo`), a reachability check, and `--resume` session continuation. It reuses the normalized Codex event/item pipeline so every CLI backend shares one renderer code path.
@@ -13,6 +16,8 @@ What's new?
 - Workspace LLM persistence (`persistWorkspaceLlm`) now also pins the current selection to the active task, so each chat keeps its own model.
 
 ### Changed
+- **Provider pickers respect the SSH context** — while an SSH host is the active context, backends that cannot drive a remote host (Ollama, OpenRouter, Codex, Copilot, Claude, Gemini, GLM) are disabled in the pickers with a "can't work from SSH" hint; the SSH-capable set (LM Studio, Ascora WProvider) stays selectable and is switched to automatically.
+- Deleting the currently open chat of an SSH host now stays on that host with a blank composer (the terminal is still connected) instead of returning to the home view.
 - **Local OpenAI-compatible backend handling** now supports separate LM Studio and Ollama URLs/models so switching providers does not overwrite the other local backend's saved model.
 - Provider pickers now keep LM Studio **and Ollama** visible but disabled while the corresponding local server is unreachable; both are probed in the background every 5 seconds (new `llm:checkOllama` IPC alongside the existing LM Studio probe).
 - **Claude model presets** now include the `fable` alias alongside `default` / `opus` / `sonnet` / `haiku`. Aliases are resolved by the Claude Code CLI to the newest model of each family, so new model releases within a family are picked up automatically without an app update.
@@ -23,6 +28,7 @@ What's new?
 - Workspace LLM persistence (`persistWorkspaceLlm`) now also pins the current selection to the active task, so each chat keeps its own model.
 
 ### Fixed
+- Edit/delete buttons on SSH host rows in the left rail were effectively invisible (the hover-reveal CSS rule only covered task rows); they now appear on hover and on the active host.
 - **Backend-picker availability tooltip** no longer shows a generic "The application is not running." over the whole provider list. The tooltip now names the specific unavailable server ("LM Studio is not running." / "Ollama is not running.", localized), appears only when at least one local server is actually down, and each disabled option in the open dropdown carries its own native hint.
 - Ollama can no longer be selected as the agent backend while its server is not running (previously the option was always selectable and failed only after switching).
 - Deleting a running task now correctly removes its pinned model/provider from settings, preventing stale selections from persisting.

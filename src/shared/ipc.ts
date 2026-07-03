@@ -106,6 +106,14 @@ export const IPC = {
     abort: 'glm:abort',
     event: 'glm:event'
   },
+  wprovider: {
+    check: 'wprovider:check',
+    login: 'wprovider:login',
+    logout: 'wprovider:logout',
+    chat: 'wprovider:chat',
+    chunk: 'wprovider:chunk',
+    abort: 'wprovider:abort'
+  },
   analytics: {
     record: 'analytics:record',
     list: 'analytics:list'
@@ -240,6 +248,13 @@ export type LlmProvider =
   | 'claude'
   | 'gemini'
   | 'glm'
+  | 'wprovider'
+
+export const SSH_CAPABLE_LLM_PROVIDERS: readonly LlmProvider[] = ['lmstudio', 'wprovider']
+
+export function isSshCapableProvider(provider: LlmProvider): boolean {
+  return SSH_CAPABLE_LLM_PROVIDERS.includes(provider)
+}
 
 export type LlmRole = 'system' | 'user' | 'assistant' | 'tool'
 
@@ -348,6 +363,49 @@ export type GlmMode = 'plan' | 'build' | 'edit' | 'yolo'
 /** Selectable GLM permission modes, from most to least restrictive. */
 export const GLM_MODES: GlmMode[] = ['plan', 'build', 'edit', 'yolo']
 
+// ---------- Ascora WProvider (drives a provider's web chat in a hidden browser) ----------
+// WProvider emulates an API on top of a chat website: the user signs in to the
+// site in a visible window once; afterwards a hidden BrowserWindow types the
+// prompt into the site's own composer and the reply is captured from the
+// site's streaming response. Tool use rides the agent loop's text protocol
+// (the fenced ```tool_call blocks), since web chats have no native tool calls.
+
+/** Which web chat the WProvider drives. Qwen first; more services later. */
+export type WProviderService = 'qwen'
+
+export const WPROVIDER_SERVICES: WProviderService[] = ['qwen']
+
+/** Display name + login origin for each supported web service. */
+export const WPROVIDER_SERVICE_INFO: Record<WProviderService, { label: string; origin: string }> = {
+  qwen: { label: 'Qwen', origin: 'https://chat.qwen.ai' }
+}
+
+/** Result of probing the WProvider web session (cookie-based sign-in state). */
+export interface WProviderCheckResult {
+  ok: boolean
+  service: WProviderService
+  /** True when the persisted browser session holds a login for the service. */
+  loggedIn: boolean
+  error?: string
+}
+
+export interface WProviderLoginResult {
+  ok: boolean
+  loggedIn: boolean
+  error?: string
+}
+
+export interface WProviderChatParams {
+  /**
+   * Stable key of the conversation (the ADE task id). The main process keeps a
+   * web chat per key and only sends messages the site hasn't seen yet — the
+   * chat website carries its own history, unlike a stateless API.
+   */
+  sessionKey: string
+  /** Full agent transcript; main relays the not-yet-sent slice to the site. */
+  messages: LlmMessage[]
+}
+
 export interface LlmConfig {
   /** Active backend for the agent chat. */
   provider: LlmProvider
@@ -401,6 +459,8 @@ export interface LlmConfig {
   glmPath: string
   /** Permission mode the GLM/ZCode agent runs under (`--mode`). */
   glmMode: GlmMode
+  /** Which web chat Ascora WProvider drives (hidden-browser backend). */
+  wproviderService: WProviderService
 }
 
 export const DEFAULT_LLM_CONFIG: LlmConfig = {
@@ -427,7 +487,8 @@ export const DEFAULT_LLM_CONFIG: LlmConfig = {
   geminiModel: '',
   geminiPermission: 'yolo',
   glmPath: '',
-  glmMode: 'yolo'
+  glmMode: 'yolo',
+  wproviderService: 'qwen'
 }
 
 export interface ChatParams {

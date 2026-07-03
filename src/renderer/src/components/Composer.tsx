@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState, type DragEvent, type JSX, type KeyboardEvent } from 'react'
 import { Icon } from './Icon'
+import { ProviderSelect, type ProviderSelectOption } from './ProviderSelect'
 import { useApp, type AgentMode, type AppLanguage } from '@/state/store'
 import { api } from '@/lib/api'
 import { tr, type TranslationKey } from '@/language'
 import {
   DEFAULT_LLM_CONFIG,
+  isSshCapableProvider,
   CODEX_REASONING_LEVELS,
   COPILOT_PERMISSION_MODES,
   COPILOT_REASONING_LEVELS,
@@ -251,13 +253,66 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
   const openRouterReady = openRouterEnabled && openRouterApiKey.trim().length > 0
   const lmStudioUnavailable = !lmStudioReachable
   const ollamaUnavailable = !ollamaReachable
-  const backendTooltip =
-    [
-      lmStudioUnavailable ? t('composer.lmStudioNotRunning') : null,
-      ollamaUnavailable ? t('composer.ollamaNotRunning') : null
-    ]
-      .filter(Boolean)
-      .join(' ') || undefined
+  const cantWorkFromSsh = t('composer.cantWorkFromSsh')
+  const blockedBySsh = (next: LlmProvider): boolean =>
+    !!activeSsh && !isSshCapableProvider(next)
+  const sshBlockedTitle = (next: LlmProvider): string | undefined =>
+    blockedBySsh(next) ? cantWorkFromSsh : undefined
+  const providerOptions: ProviderSelectOption[] = [
+    {
+      value: 'lmstudio',
+      label: 'LM Studio',
+      disabled: lmStudioUnavailable,
+      tooltip: lmStudioUnavailable ? t('composer.lmStudioNotRunning') : undefined
+    },
+    {
+      value: 'ollama',
+      label: 'Ollama',
+      disabled: ollamaUnavailable || blockedBySsh('ollama'),
+      tooltip: sshBlockedTitle('ollama') ?? (ollamaUnavailable ? t('composer.ollamaNotRunning') : undefined)
+    },
+    ...(openRouterReady
+      ? [
+          {
+            value: 'openrouter' as const,
+            label: 'OpenRouter',
+            disabled: blockedBySsh('openrouter'),
+            tooltip: sshBlockedTitle('openrouter')
+          }
+        ]
+      : []),
+    {
+      value: 'codex',
+      label: 'Codex',
+      disabled: blockedBySsh('codex'),
+      tooltip: sshBlockedTitle('codex')
+    },
+    {
+      value: 'copilot',
+      label: 'GitHub Copilot',
+      disabled: blockedBySsh('copilot'),
+      tooltip: sshBlockedTitle('copilot')
+    },
+    {
+      value: 'claude',
+      label: 'Claude',
+      disabled: blockedBySsh('claude'),
+      tooltip: sshBlockedTitle('claude')
+    },
+    {
+      value: 'gemini',
+      label: 'Gemini CLI',
+      disabled: blockedBySsh('gemini'),
+      tooltip: sshBlockedTitle('gemini')
+    },
+    {
+      value: 'glm',
+      label: 'GLM (ZCode)',
+      disabled: blockedBySsh('glm'),
+      tooltip: sshBlockedTitle('glm')
+    },
+    { value: 'wprovider', label: 'Ascora WProvider' }
+  ]
   const selectedLocalModel = provider === 'ollama' ? ollamaModel : model
   const modelOptions =
     provider === 'openrouter'
@@ -513,40 +568,19 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
 
         <span className="composer-spacer" />
 
-        <span className="provider-select-wrap" data-tooltip={backendTooltip}>
-          <select
-            className="composer-select"
-            value={provider}
-            onChange={(e) => {
-              const next = e.target.value as LlmProvider
-              if (next === 'lmstudio' && lmStudioUnavailable) return
-              if (next === 'ollama' && ollamaUnavailable) return
-              void setProvider(next)
-            }}
-            aria-label={t('composer.agentBackend')}
-          >
-            <option
-              value="lmstudio"
-              disabled={lmStudioUnavailable}
-              title={lmStudioUnavailable ? t('composer.lmStudioNotRunning') : undefined}
-            >
-              LM Studio
-            </option>
-            <option
-              value="ollama"
-              disabled={ollamaUnavailable}
-              title={ollamaUnavailable ? t('composer.ollamaNotRunning') : undefined}
-            >
-              Ollama
-            </option>
-            {openRouterReady && <option value="openrouter">OpenRouter</option>}
-            <option value="codex">Codex</option>
-            <option value="copilot">GitHub Copilot</option>
-            <option value="claude">Claude</option>
-            <option value="gemini">Gemini CLI</option>
-            <option value="glm">GLM (ZCode)</option>
-          </select>
-        </span>
+        <ProviderSelect
+          value={provider}
+          options={providerOptions}
+          onChange={(next) => {
+            if (blockedBySsh(next)) return
+            if (next === 'lmstudio' && lmStudioUnavailable) return
+            if (next === 'ollama' && ollamaUnavailable) return
+            void setProvider(next)
+          }}
+          className="composer-select"
+          ariaLabel={t('composer.agentBackend')}
+          placement="top"
+        />
 
         {provider === 'codex' ? (
           <>
@@ -653,6 +687,15 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
             title={t('composer.glmModelHint')}
           >
             <option value="glm">GLM · ZCode</option>
+          </select>
+        ) : provider === 'wprovider' ? (
+          <select
+            className="composer-select"
+            value="qwen"
+            disabled
+            title={t('composer.wproviderModelHint')}
+          >
+            <option value="qwen">Qwen · Web</option>
           </select>
         ) : provider === 'openrouter' ? (
           <select

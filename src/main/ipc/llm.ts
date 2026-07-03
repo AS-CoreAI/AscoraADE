@@ -14,7 +14,8 @@ import {
   type GlmMode,
   type LlmConfig,
   type LlmProvider,
-  type ListModelsResult
+  type ListModelsResult,
+  type WProviderService
 } from '@shared/ipc'
 import { getStore } from '../store'
 import { LmStudioClient, LmStudioError } from '../llm/client'
@@ -67,7 +68,9 @@ function readConfig(): LlmConfig {
     geminiPermission:
       store.getSetting<GeminiApprovalMode>('gemini.permission') ?? DEFAULT_LLM_CONFIG.geminiPermission,
     glmPath: store.getSetting<string>('glm.path') ?? DEFAULT_LLM_CONFIG.glmPath,
-    glmMode: store.getSetting<GlmMode>('glm.mode') ?? DEFAULT_LLM_CONFIG.glmMode
+    glmMode: store.getSetting<GlmMode>('glm.mode') ?? DEFAULT_LLM_CONFIG.glmMode,
+    wproviderService:
+      store.getSetting<WProviderService>('wprovider.service') ?? DEFAULT_LLM_CONFIG.wproviderService
   }
 }
 
@@ -120,6 +123,9 @@ export function registerLlmHandlers(): void {
     if (typeof patch.geminiPermission === 'string') store.setSetting('gemini.permission', patch.geminiPermission)
     if (typeof patch.glmPath === 'string') store.setSetting('glm.path', patch.glmPath.trim())
     if (typeof patch.glmMode === 'string') store.setSetting('glm.mode', patch.glmMode)
+    if (typeof patch.wproviderService === 'string') {
+      store.setSetting('wprovider.service', patch.wproviderService)
+    }
     getClient() // refresh the cached client with the new config
   })
 
