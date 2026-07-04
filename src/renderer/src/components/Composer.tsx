@@ -6,6 +6,8 @@ import { api } from '@/lib/api'
 import { tr, type TranslationKey } from '@/language'
 import {
   DEFAULT_LLM_CONFIG,
+  WPROVIDER_SERVICE_INFO,
+  WPROVIDER_SERVICES,
   isSshCapableProvider,
   CODEX_REASONING_LEVELS,
   COPILOT_PERMISSION_MODES,
@@ -22,7 +24,8 @@ import {
   type ClaudePermissionMode,
   type GeminiApprovalMode,
   type GlmMode,
-  type AttachmentFile
+  type AttachmentFile,
+  type WProviderService
 } from '@shared/ipc'
 
 export const MODE_LABEL_KEY: Record<AgentMode, TranslationKey> = {
@@ -229,6 +232,11 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
   const setGeminiPermission = useApp((s) => s.setGeminiPermission)
   const glmMode = useApp((s) => s.glmMode)
   const setGlmMode = useApp((s) => s.setGlmMode)
+  const wproviderService = useApp((s) => s.wproviderService)
+  const setWProviderService = useApp((s) => s.setWProviderService)
+  const wproviderChecks = useApp((s) => s.wproviderChecks)
+  const wproviderChecking = useApp((s) => s.wproviderChecking)
+  const wproviderLoggingIn = useApp((s) => s.wproviderLoggingIn)
   const mode = useApp((s) => s.mode)
   const setMode = useApp((s) => s.setMode)
   const submitTask = useApp((s) => s.submitTask)
@@ -691,11 +699,24 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
         ) : provider === 'wprovider' ? (
           <select
             className="composer-select"
-            value="qwen"
-            disabled
+            value={wproviderService}
+            disabled={wproviderChecking || wproviderLoggingIn}
+            onChange={(e) => void setWProviderService(e.target.value as WProviderService)}
             title={t('composer.wproviderModelHint')}
           >
-            <option value="qwen">Qwen · Web</option>
+            {WPROVIDER_SERVICES.map((service) => {
+              const signedIn = wproviderChecks[service]?.loggedIn ?? false
+              return (
+                <option
+                  key={service}
+                  value={service}
+                  disabled={!signedIn}
+                  title={signedIn ? undefined : t('composer.wproviderNotSignedIn', { name: WPROVIDER_SERVICE_INFO[service].label })}
+                >
+                  {WPROVIDER_SERVICE_INFO[service].label} · Web{signedIn ? '' : ` — ${t('status.signInNeeded')}`}
+                </option>
+              )
+            })}
           </select>
         ) : provider === 'openrouter' ? (
           <select

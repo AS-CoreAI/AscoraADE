@@ -30,11 +30,14 @@ import type {
   AgentSearchResult,
   AgentDirEntry,
   AgentSearchMatch,
-  WProviderCheckResult
+  WProviderCheckResult,
+  WProviderService
 } from '@shared/ipc'
 import {
   DEFAULT_LLM_CONFIG,
   EXCLUDED_DIRS,
+  WPROVIDER_SERVICE_INFO,
+  WPROVIDER_SERVICES,
   isSshCapableProvider,
   normalizeOpenRouterApiKey
 } from '@shared/ipc'
@@ -707,6 +710,7 @@ function modelLabel(s: {
   copilotModel: string
   claudeModel: string
   geminiModel: string
+  wproviderService: WProviderService
 }): string {
   switch (s.provider) {
     case 'lmstudio':
@@ -726,7 +730,7 @@ function modelLabel(s: {
     case 'glm':
       return 'GLM'
     case 'wprovider':
-      return 'Qwen Web'
+      return `${WPROVIDER_SERVICE_INFO[s.wproviderService].label} Web`
     default:
       return 'Assistant'
   }
@@ -861,6 +865,7 @@ interface WorkspaceLlm {
   geminiModel: string
   geminiPermission: GeminiApprovalMode
   glmMode: GlmMode
+  wproviderService: WProviderService
 }
 
 /** Snapshot the active backend selection for persisting against a workspace. */
@@ -880,6 +885,7 @@ function snapshotLlm(s: {
   geminiModel: string
   geminiPermission: GeminiApprovalMode
   glmMode: GlmMode
+  wproviderService: WProviderService
 }): WorkspaceLlm {
   return {
     provider: s.provider,
@@ -896,7 +902,8 @@ function snapshotLlm(s: {
     claudePermission: s.claudePermission,
     geminiModel: s.geminiModel,
     geminiPermission: s.geminiPermission,
-    glmMode: s.glmMode
+    glmMode: s.glmMode,
+    wproviderService: s.wproviderService
   }
 }
 
@@ -1117,8 +1124,11 @@ interface AppState {
   glmSessionId: string | null
   glmCheck: CodexCheckResult | null
   glmChecking: boolean
-  // Ascora WProvider (hidden-browser web chat backend; Qwen first)
+  // Ascora WProvider (hidden-browser web chat backend)
+  wproviderService: WProviderService
   wproviderCheck: WProviderCheckResult | null
+  /** Last known sign-in state per web service, so the quick-switch picker can grey out unsigned-in ones. */
+  wproviderChecks: Partial<Record<WProviderService, WProviderCheckResult>>
   wproviderChecking: boolean
   /** True while the visible WProvider sign-in window is open. */
   wproviderLoggingIn: boolean
@@ -1254,6 +1264,7 @@ interface AppState {
   setGlmPath: (path: string) => Promise<void>
   setGlmMode: (m: GlmMode) => void
   checkGlm: () => Promise<void>
+  setWProviderService: (service: WProviderService) => Promise<void>
   checkWProvider: () => Promise<void>
   wproviderLogin: () => Promise<void>
   wproviderLogout: () => Promise<void>
@@ -1439,7 +1450,8 @@ export const useApp = create<AppState>((set, get) => {
         claudePermission: saved.claudePermission,
         geminiModel: saved.geminiModel ?? DEFAULT_LLM_CONFIG.geminiModel,
         geminiPermission: saved.geminiPermission ?? DEFAULT_LLM_CONFIG.geminiPermission,
-        glmMode: saved.glmMode
+        glmMode: saved.glmMode,
+        wproviderService: saved.wproviderService ?? DEFAULT_LLM_CONFIG.wproviderService
       })
     }
     const provider = get().provider
@@ -1465,7 +1477,8 @@ export const useApp = create<AppState>((set, get) => {
       claudePermission: get().claudePermission,
       geminiModel: get().geminiModel,
       geminiPermission: get().geminiPermission,
-      glmMode: get().glmMode
+      glmMode: get().glmMode,
+      wproviderService: get().wproviderService
     })
     if (provider === 'codex') await get().checkCodex()
     else if (provider === 'copilot') await get().checkCopilot()
@@ -1557,7 +1570,9 @@ export const useApp = create<AppState>((set, get) => {
   glmSessionId: null,
   glmCheck: null,
   glmChecking: false,
+  wproviderService: DEFAULT_LLM_CONFIG.wproviderService,
   wproviderCheck: null,
+  wproviderChecks: {},
   wproviderChecking: false,
   wproviderLoggingIn: false,
   settingsOpen: false,
@@ -1659,6 +1674,7 @@ export const useApp = create<AppState>((set, get) => {
       geminiPermission: cfg.geminiPermission,
       glmPath: cfg.glmPath,
       glmMode: cfg.glmMode,
+      wproviderService: cfg.wproviderService,
       themePreference,
       resolvedTheme,
       appLanguage
@@ -2718,16 +2734,44 @@ export const useApp = create<AppState>((set, get) => {
     }
   },
 
+  async setWProviderService(wproviderService) {
+    if (get().wproviderService === wproviderService) return
+    set({ wproviderService, wproviderCheck: null })
+    await api.llm.setConfig({ wproviderService })
+    get().persistWorkspaceLlm()
+    if (get().provider === 'wprovider') await get().checkWProvider()
+  },
+
   async checkWProvider() {
     set({ wproviderChecking: true })
     try {
-      const res = await api.wprovider.check()
-      set({ wproviderCheck: res, wproviderChecking: false })
+      // Check every service, not just the active one, so the quick-switch
+      // picker in the composer can grey out ones that aren't signed in yet.
+      const results = await Promise.all(
+        WPROVIDER_SERVICES.map((service) =>
+          api.wprovider.check(service).catch(
+            (err): WProviderCheckResult => ({
+              ok: false,
+              service,
+              loggedIn: false,
+              error: err instanceof Error ? err.message : String(err)
+            })
+          )
+        )
+      )
+      const wproviderChecks = Object.fromEntries(results.map((r) => [r.service, r])) as Partial<
+        Record<WProviderService, WProviderCheckResult>
+      >
+      set({
+        wproviderCheck: wproviderChecks[get().wproviderService] ?? null,
+        wproviderChecks,
+        wproviderChecking: false
+      })
     } catch (err) {
       set({
         wproviderCheck: {
           ok: false,
-          service: 'qwen',
+          service: get().wproviderService,
           loggedIn: false,
           error: err instanceof Error ? err.message : String(err)
         },
@@ -2893,6 +2937,7 @@ export const useApp = create<AppState>((set, get) => {
     const geminiModel = get().geminiModel
     const geminiPermission = get().geminiPermission
     const glmMode = get().glmMode
+    const wproviderService = get().wproviderService
     const sshConn = get().sshConnections.find((c) => c.id === sshId)
     const sshHost = sshConn ? `${sshConn.username}@${sshConn.host}` : undefined
     runProviders.set(taskId, provider)
@@ -3247,7 +3292,7 @@ export const useApp = create<AppState>((set, get) => {
             taskId,
             provider: isWProvider ? 'wprovider' : isOpenRouter ? 'openrouter' : isOllama ? 'ollama' : 'lmstudio',
             model: isWProvider
-              ? 'qwen-web'
+              ? `${wproviderService}-web`
               : isOpenRouter
                 ? orModel || 'openrouter/free'
                 : isOllama

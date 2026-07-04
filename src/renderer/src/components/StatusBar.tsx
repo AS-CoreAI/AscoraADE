@@ -11,6 +11,7 @@ import {
   GLM_MODE_SHORT_KEY,
   MODE_LABEL_KEY
 } from './Composer'
+import { WPROVIDER_SERVICE_INFO } from '@shared/ipc'
 
 /** Re-poll Claude usage every few minutes while it's the active backend. */
 const USAGE_POLL_MS = 3 * 60 * 1000
@@ -68,6 +69,7 @@ export function StatusBar(): JSX.Element {
   const glmCheck = useApp((s) => s.glmCheck)
   const glmChecking = useApp((s) => s.glmChecking)
   const glmMode = useApp((s) => s.glmMode)
+  const wproviderService = useApp((s) => s.wproviderService)
   const wproviderCheck = useApp((s) => s.wproviderCheck)
   const wproviderChecking = useApp((s) => s.wproviderChecking)
   const openFiles = useApp((s) => s.openFiles)
@@ -116,6 +118,7 @@ export function StatusBar(): JSX.Element {
 
   // Headline usage window (most-consumed) for the status-bar indicator.
   const usageWin = isCodex ? codexUsage?.headline : isClaude ? claudeUsage?.headline : undefined
+  const wproviderLabel = WPROVIDER_SERVICE_INFO[wproviderService].label
 
   // Status dot color + label for the active backend.
   let dotColor: string
@@ -123,16 +126,16 @@ export function StatusBar(): JSX.Element {
   if (isWProvider) {
     if (wproviderChecking) {
       dotColor = CONN_COLOR.connecting
-      label = `Qwen Web: ${t('status.checking')}`
+      label = `${wproviderLabel} Web: ${t('status.checking')}`
     } else if (!wproviderCheck) {
       dotColor = CONN_COLOR.unknown
-      label = 'Qwen Web: —'
+      label = `${wproviderLabel} Web: —`
     } else if (!wproviderCheck.loggedIn) {
       dotColor = CONN_COLOR.error
-      label = `Qwen Web: ${t('status.signInNeeded')}`
+      label = `${wproviderLabel} Web: ${t('status.signInNeeded')}`
     } else {
       dotColor = CONN_COLOR.connected
-      label = `Qwen Web: ${t('status.ready')}`
+      label = `${wproviderLabel} Web: ${t('status.ready')}`
     }
   } else if (isCodex || isCopilot || isClaude || isGemini || isGlm) {
     const name = isCopilot ? 'Copilot' : isClaude ? 'Claude' : isGemini ? 'Gemini' : isGlm ? 'GLM' : 'Codex'
@@ -190,7 +193,7 @@ export function StatusBar(): JSX.Element {
   }
 
   const modelLabel = isWProvider
-    ? 'Qwen · Web'
+    ? `${wproviderLabel} · Web`
     : isGlm
     ? 'GLM (ZCode)'
     : isGemini

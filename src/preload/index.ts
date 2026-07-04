@@ -36,6 +36,7 @@ import {
   type WProviderChatParams,
   type WProviderCheckResult,
   type WProviderLoginResult,
+  type WProviderService,
   type UsageEvent,
   type UsageEventInput,
   type GitStatusResult,
@@ -307,8 +308,9 @@ const api = {
     abort: (id: string): Promise<void> => ipcRenderer.invoke(IPC.glm.abort, id)
   },
   wprovider: {
-    /** Probe the persisted web session for a signed-in state. */
-    check: (): Promise<WProviderCheckResult> => ipcRenderer.invoke(IPC.wprovider.check),
+    /** Probe the persisted web session for a signed-in state (defaults to the configured service). */
+    check: (service?: WProviderService): Promise<WProviderCheckResult> =>
+      ipcRenderer.invoke(IPC.wprovider.check, service),
     /** Open a visible browser window to sign in; resolves once signed in (or closed). */
     login: (): Promise<WProviderLoginResult> => ipcRenderer.invoke(IPC.wprovider.login),
     /** Clear the web session (cookies + storage) and forget site chats. */

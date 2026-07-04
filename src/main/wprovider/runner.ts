@@ -12,7 +12,7 @@ import {
 
 /**
  * Ascora WProvider — an "API emulator" that drives a provider's web chat
- * (Qwen first) inside an offscreen Electron BrowserWindow:
+ * inside an offscreen Electron BrowserWindow:
  *
  *  1. The user signs in once in a VISIBLE window; the login lives in a
  *     persistent session partition, so the hidden window inherits it.
@@ -22,8 +22,8 @@ import {
  *  3. The reply is captured from the site's streaming response: the window's
  *     preload (src/preload/wprovider.ts) tees the `chat/completions` fetch and
  *     forwards raw SSE text here, where the answer deltas are parsed out.
- *     The DOM is only a last-resort fallback — Qwen renders code blocks in
- *     virtualized Monaco editors, so innerText would truncate long code.
+ *     The DOM is only a last-resort fallback — some providers render code
+ *     blocks in virtualized editors, so innerText can truncate long code.
  *
  * The web chat keeps its own history, so per conversation (ADE task) we track
  * the site chat URL and how many transcript messages were already relayed —
@@ -43,6 +43,8 @@ const INACTIVITY_TIMEOUT_MS = 180_000
 const HARD_TIMEOUT_MS = 15 * 60_000
 /** Cookie names that indicate a signed-in Qwen session. */
 const QWEN_AUTH_COOKIES = ['token', 'auth_token', 'authorization']
+/** DeepSeek stores its web-chat bearer token in localStorage. */
+const DEEPSEEK_AUTH_STORAGE_KEY = 'userToken'
 
 interface NetEvent {
   kind: 'start' | 'chunk' | 'done' | 'error'
@@ -97,7 +99,16 @@ function wpSession(): Session {
   return ses
 }
 
-function createWindow(show: boolean): BrowserWindow {
+/**
+ * @param withTap Patch window.fetch/XHR to tap chat-completion streams. Only
+ *   the hidden driver window needs this — bot-management on these sites
+ *   commonly fingerprints a hooked fetch (toString() no longer native) or a
+ *   disabled context isolation, so the visible sign-in window is kept as
+ *   close to a stock Chromium tab as possible. Without this, DeepSeek's login
+ *   modal was closing itself into a "verifying" challenge before sign-in
+ *   could complete.
+ */
+function createWindow(show: boolean, withTap = true): BrowserWindow {
   wpSession() // make sure the partition exists with the cleaned UA
   const win = new BrowserWindow({
     show,
@@ -105,17 +116,25 @@ function createWindow(show: boolean): BrowserWindow {
     height: 840,
     title: 'Ascora WProvider',
     autoHideMenuBar: true,
-    webPreferences: {
-      partition: PARTITION,
-      preload: join(__dirname, '../preload/wprovider.js'),
-      // The preload must patch the PAGE's window.fetch, so no isolation here.
-      // Nothing is exposed to the page — ipcRenderer stays in the preload's
-      // closure — and the window only ever navigates to the provider's site.
-      contextIsolation: false,
-      sandbox: false,
-      nodeIntegration: false,
-      backgroundThrottling: false
-    }
+    webPreferences: withTap
+      ? {
+          partition: PARTITION,
+          preload: join(__dirname, '../preload/wprovider.js'),
+          // The preload must patch the PAGE's window.fetch, so no isolation here.
+          // Nothing is exposed to the page — ipcRenderer stays in the preload's
+          // closure — and the window only ever navigates to the provider's site.
+          contextIsolation: false,
+          sandbox: false,
+          nodeIntegration: false,
+          backgroundThrottling: false
+        }
+      : {
+          partition: PARTITION,
+          contextIsolation: true,
+          sandbox: false,
+          nodeIntegration: false,
+          backgroundThrottling: false
+        }
   })
   return win
 }
@@ -194,6 +213,10 @@ function extractDeltas(json: Record<string, unknown>): { text: string; phase?: s
         if (typeof d.content === 'string' && d.content.length > 0) {
           out.push({ text: d.content, phase: typeof d.phase === 'string' ? d.phase : undefined })
         }
+        if (typeof (d as { reasoning_content?: unknown }).reasoning_content === 'string') {
+          const reasoning = (d as { reasoning_content: string }).reasoning_content
+          if (reasoning) out.push({ text: reasoning, phase: 'think' })
+        }
         continue
       }
       // Non-streaming shape: choices[0].message.content
@@ -205,10 +228,80 @@ function extractDeltas(json: Record<string, unknown>): { text: string; phase?: s
     }
     return out
   }
+  for (const delta of extractDeepSeekDeltas(json)) out.push(delta)
   // Bare shapes some backends use: { content: "..." } / { response: "..." }
+  if (typeof json.reasoning_content === 'string' && json.reasoning_content) {
+    out.push({ text: json.reasoning_content, phase: 'think' })
+  }
   if (typeof json.content === 'string' && json.content) out.push({ text: json.content })
   else if (typeof json.response === 'string' && json.response) out.push({ text: json.response })
   return out
+}
+
+function record(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' ? (value as Record<string, unknown>) : null
+}
+
+function extractDeepSeekDeltas(json: Record<string, unknown>): { text: string; phase?: string }[] {
+  const out: { text: string; phase?: string }[] = []
+  const visitUpdate = (value: unknown, parentPath = ''): void => {
+    const update = record(value)
+    if (!update) return
+    const pathPart = typeof update.p === 'string' ? update.p : ''
+    const path = [parentPath, pathPart].filter(Boolean).join('/')
+    const op = typeof update.o === 'string' ? update.o.toUpperCase() : ''
+    const payload = update.v
+
+    if (op === 'BATCH' && Array.isArray(payload)) {
+      for (const child of payload) visitUpdate(child, path)
+      return
+    }
+
+    if (op === 'APPEND') {
+      out.push(...extractDeepSeekAppend(payload, path))
+    }
+  }
+
+  visitUpdate(json)
+  return out
+}
+
+function extractDeepSeekAppend(
+  value: unknown,
+  path: string,
+  fragmentType?: string
+): { text: string; phase?: string }[] {
+  const out: { text: string; phase?: string }[] = []
+  if (typeof value === 'string') {
+    if (/(content|text|markdown|reason|think)/i.test(path)) {
+      out.push({ text: value, phase: deepSeekPhase(path, fragmentType) })
+    }
+    return out
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      out.push(...extractDeepSeekAppend(item, path, fragmentType))
+    }
+    return out
+  }
+  const obj = record(value)
+  if (!obj) return out
+  const type = typeof obj.type === 'string' ? obj.type : fragmentType
+  if (type && /^(tip|status|action|quote|source)$/i.test(type)) return out
+  for (const key of ['content', 'text', 'markdown']) {
+    const text = obj[key]
+    if (typeof text === 'string' && text) {
+      out.push({ text, phase: deepSeekPhase(path, type) })
+      return out
+    }
+  }
+  const nested = obj.v
+  if (nested !== undefined) out.push(...extractDeepSeekAppend(nested, path, type))
+  return out
+}
+
+function deepSeekPhase(path: string, fragmentType?: string): string | undefined {
+  return /reason|think/i.test(`${path}/${fragmentType ?? ''}`) ? 'think' : undefined
 }
 
 function finalizeActiveOp(error?: string): void {
@@ -229,6 +322,8 @@ async function runJs<T>(win: BrowserWindow, code: string): Promise<T> {
 }
 
 const COMPOSER_SELECTORS = [
+  'textarea[placeholder*="DeepSeek" i]',
+  'textarea[name="search"]',
   'textarea.message-input-textarea',
   '#message-input-container textarea',
   'textarea[placeholder]',
@@ -237,6 +332,7 @@ const COMPOSER_SELECTORS = [
 
 const SEND_BUTTON_SELECTORS = [
   '#send-message-button',
+  '[role="button"].ds-button--primary.ds-button--circle',
   'button[aria-label*="send" i]',
   '.message-input-right-button-send .omni-button-content-btn',
   '.message-input-right-button-send button',
@@ -262,6 +358,14 @@ function composerLookupJs(): string {
 }
 
 async function throwIfProviderBlocked(win: BrowserWindow, service: WProviderService): Promise<void> {
+  if (service === 'deepseek') {
+    if (isDeepSeekSignInUrl(win.webContents.getURL())) {
+      throw new WProviderError(
+        'DeepSeek session expired. Open Agent backend settings → Ascora WProvider and sign in again.'
+      )
+    }
+    return
+  }
   if (service !== 'qwen') return
   const pendingActivation = await runJs<boolean>(
     win,
@@ -295,7 +399,11 @@ async function readComposerDebug(win: BrowserWindow): Promise<string> {
           found: true,
           className: el.className || '',
           text: (el.innerText || '').trim().slice(0, 80),
-          disabled: Boolean(el.disabled || el.getAttribute('aria-disabled') === 'true'),
+          disabled: Boolean(
+            el.disabled ||
+            el.getAttribute('aria-disabled') === 'true' ||
+            el.classList.contains('ds-button--disabled')
+          ),
           visible: rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden',
           pointerEvents: style.pointerEvents,
           rect: { x: Math.round(rect.x), y: Math.round(rect.y), width: Math.round(rect.width), height: Math.round(rect.height) }
@@ -326,7 +434,7 @@ async function waitForComposer(win: BrowserWindow, service: WProviderService): P
   const deadline = Date.now() + UI_READY_TIMEOUT_MS
   for (;;) {
     await throwIfProviderBlocked(win, service)
-    const found = await runJs<boolean>(win, `!!${composerLookupJs()}`).catch(() => false)
+    const found = await hasComposer(win)
     if (found) return
     if (Date.now() > deadline) {
       const debug = await readComposerDebug(win)
@@ -334,6 +442,22 @@ async function waitForComposer(win: BrowserWindow, service: WProviderService): P
         `The web chat did not finish loading (no message box found). Diagnostics: ${debug}`
       )
     }
+    await sleep(500)
+  }
+}
+
+async function hasComposer(win: BrowserWindow): Promise<boolean> {
+  if (win.isDestroyed()) return false
+  return runJs<boolean>(win, `!!${composerLookupJs()}`).catch(() => false)
+}
+
+async function waitForComposerIfTokenPresent(win: BrowserWindow, timeoutMs: number): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs
+  for (;;) {
+    if (win.isDestroyed() || !windowOnService(win, 'deepseek')) return false
+    if (isDeepSeekSignInUrl(win.webContents.getURL())) return false
+    if (await hasComposer(win)) return true
+    if (Date.now() >= deadline) return false
     await sleep(500)
   }
 }
@@ -346,6 +470,61 @@ async function loadChat(win: BrowserWindow, service: WProviderService, url: stri
     })
   }
   await waitForComposer(win, service)
+}
+
+function windowOnService(win: BrowserWindow | null, service: WProviderService): boolean {
+  if (!win || win.isDestroyed()) return false
+  return win.webContents.getURL().startsWith(serviceOrigin(service))
+}
+
+async function readDeepSeekToken(win: BrowserWindow): Promise<string> {
+  return runJs<string>(
+    win,
+    `(() => {
+      try {
+        return String(window.localStorage?.getItem(${JSON.stringify(DEEPSEEK_AUTH_STORAGE_KEY)}) || '');
+      } catch {
+        return '';
+      }
+    })()`
+  ).catch(() => '')
+}
+
+/**
+ * `userToken` in localStorage outlives the server-side session — DeepSeek
+ * keeps the old value around and only actually invalidates it by redirecting
+ * the page to /sign_in. So a present token is necessary but not sufficient;
+ * sitting on /sign_in overrides it regardless of what's in storage.
+ */
+function isDeepSeekSignInUrl(url: string): boolean {
+  return /\/sign_in(?:[/?#]|$)/i.test(url)
+}
+
+async function isDeepSeekPromptReady(win: BrowserWindow, waitMs = 0): Promise<boolean> {
+  if (!windowOnService(win, 'deepseek')) return false
+  if (isDeepSeekSignInUrl(win.webContents.getURL())) return false
+  const token = await readDeepSeekToken(win)
+  if (token.length <= 8) return false
+  return waitMs > 0 ? waitForComposerIfTokenPresent(win, waitMs) : hasComposer(win)
+}
+
+async function checkDeepSeekLoggedIn(): Promise<boolean> {
+  for (const win of [authWin, hiddenWin]) {
+    if (!win || !windowOnService(win, 'deepseek')) continue
+    if (await isDeepSeekPromptReady(win)) return true
+  }
+
+  // Do not navigate the hidden driver out from under an in-flight generation.
+  if (activeOp) return false
+
+  const win = ensureHiddenWindow()
+  if (!windowOnService(win, 'deepseek')) {
+    await win.loadURL(serviceOrigin('deepseek')).catch(() => undefined)
+    // A logged-out session redirects to /sign_in client-side, after the
+    // initial load already resolved — give that redirect a moment to land.
+    await sleep(1200)
+  }
+  return isDeepSeekPromptReady(win, 2500)
 }
 
 /** Set the composer's value the React-safe way and confirm it stuck. */
@@ -441,7 +620,11 @@ async function clickSendButton(win: BrowserWindow): Promise<string> {
         if (!el) continue;
         const rect = el.getBoundingClientRect();
         const style = window.getComputedStyle(el);
-        const disabled = Boolean(el.disabled || el.getAttribute('aria-disabled') === 'true');
+        const disabled = Boolean(
+          el.disabled ||
+          el.getAttribute('aria-disabled') === 'true' ||
+          el.classList.contains('ds-button--disabled')
+        );
         const visible =
           rect.width > 0 &&
           rect.height > 0 &&
@@ -486,17 +669,24 @@ async function clickSendButton(win: BrowserWindow): Promise<string> {
  * request but produced no text (site changed its stream format). Long code
  * blocks may be truncated here — Monaco only renders visible lines.
  */
-async function readLastAssistantMessage(win: BrowserWindow): Promise<string> {
+async function readLastAssistantMessage(win: BrowserWindow, service: WProviderService): Promise<string> {
+  const selector =
+    service === 'deepseek'
+      ? '.ds-assistant-message-main-content, .ds-message .ds-markdown, [class*="assistant"] [class*="markdown"]'
+      : '.qwen-chat-message-assistant .custom-qwen-markdown, .qwen-chat-message-assistant, [class*="message-assistant"]'
   return runJs<string>(
     win,
     `(() => {
-      const nodes = document.querySelectorAll(
-        '.qwen-chat-message-assistant .custom-qwen-markdown, .qwen-chat-message-assistant, [class*="message-assistant"]'
-      );
+      const nodes = document.querySelectorAll(${JSON.stringify(selector)});
       const last = nodes[nodes.length - 1];
       return last ? (last.innerText || '').trim() : '';
     })()`
   ).catch(() => '')
+}
+
+function isProviderChatUrl(service: WProviderService, url: string): boolean {
+  if (!url.startsWith(serviceOrigin(service))) return false
+  return service === 'deepseek' ? /\/a\/chat\/s\//.test(url) : /\/c\//.test(url)
 }
 
 function sleep(ms: number): Promise<void> {
@@ -507,6 +697,9 @@ function sleep(ms: number): Promise<void> {
 
 export async function checkWProvider(service: WProviderService): Promise<WProviderCheckResult> {
   try {
+    if (service === 'deepseek') {
+      return { ok: true, service, loggedIn: await checkDeepSeekLoggedIn() }
+    }
     const cookies = await wpSession().cookies.get({ url: serviceOrigin(service) })
     const loggedIn = cookies.some(
       (c) => QWEN_AUTH_COOKIES.includes(c.name.toLowerCase()) && (c.value ?? '').length > 8
@@ -519,14 +712,15 @@ export async function checkWProvider(service: WProviderService): Promise<WProvid
 
 /**
  * Open a visible window on the provider's site so the user can sign in, and
- * resolve once a login cookie appears (or the user closes the window).
+ * resolve once credentials are usable by the chat composer (or the user closes
+ * the window).
  */
 export async function loginWProvider(service: WProviderService): Promise<WProviderLoginResult> {
   if (authWin && !authWin.isDestroyed()) {
     authWin.focus()
     return { ok: true, loggedIn: (await checkWProvider(service)).loggedIn }
   }
-  authWin = createWindow(true)
+  authWin = createWindow(true, false)
   const win = authWin
   win.on('closed', () => {
     authWin = null
@@ -539,6 +733,7 @@ export async function loginWProvider(service: WProviderService): Promise<WProvid
 
   return new Promise<WProviderLoginResult>((resolve) => {
     let settled = false
+    let probing = false
     const settle = (result: WProviderLoginResult): void => {
       if (settled) return
       settled = true
@@ -546,15 +741,24 @@ export async function loginWProvider(service: WProviderService): Promise<WProvid
       resolve(result)
     }
     const timer = setInterval(() => {
+      if (probing) return
+      probing = true
       void (async () => {
-        if (win.isDestroyed()) {
-          settle({ ok: true, loggedIn: (await checkWProvider(service)).loggedIn })
-          return
-        }
-        const { loggedIn } = await checkWProvider(service)
-        if (loggedIn) {
-          if (!win.isDestroyed()) win.close()
-          settle({ ok: true, loggedIn: true })
+        try {
+          if (win.isDestroyed()) {
+            settle({ ok: true, loggedIn: (await checkWProvider(service)).loggedIn })
+            return
+          }
+          const loggedIn =
+            service === 'deepseek'
+              ? await isDeepSeekPromptReady(win, 1000)
+              : (await checkWProvider(service)).loggedIn
+          if (loggedIn) {
+            if (!win.isDestroyed()) win.close()
+            settle({ ok: true, loggedIn: true })
+          }
+        } finally {
+          probing = false
         }
       })()
     }, 1500)
@@ -620,8 +824,9 @@ async function runChatTurn(
     )
   }
 
-  const sess = sessions.get(params.sessionKey) ?? { chatUrl: null, sent: 0 }
-  sessions.set(params.sessionKey, sess)
+  const siteSessionKey = `${service}:${params.sessionKey}`
+  const sess = sessions.get(siteSessionKey) ?? { chatUrl: null, sent: 0 }
+  sessions.set(siteSessionKey, sess)
 
   // Only relay what the site hasn't seen: its chat carries its own history.
   // Assistant turns are skipped — they came FROM the site.
@@ -642,6 +847,7 @@ async function runChatTurn(
   const result = await new Promise<ChatResult>((resolve, reject) => {
     let inactivity: NodeJS.Timeout | undefined
     const hardCap = setTimeout(() => fail('The web chat took too long to answer.'), HARD_TIMEOUT_MS)
+    const serviceLabel = WPROVIDER_SERVICE_INFO[service].label
 
     const cleanup = (): void => {
       clearTimeout(hardCap)
@@ -685,9 +891,9 @@ async function runChatTurn(
     touch()
 
     void (async () => {
-      // The initial Qwen page creates a chat only after the current composer
-      // control is activated. Retry because the send control swaps state after
-      // React processes the textarea input.
+      // The initial chat page creates a site-side conversation only after the
+      // current composer control is activated. Retry because the send control
+      // swaps state after React processes the textarea input.
       await sleep(250)
       await pressEnter(win)
       const startDeadline = Date.now() + START_TIMEOUT_MS
@@ -697,7 +903,7 @@ async function runChatTurn(
         if (Date.now() > startDeadline) {
           const debug = await readComposerDebug(win)
           fail(
-            `The prompt was typed but Qwen did not create/start a chat. Diagnostics: ${debug}`
+            `The prompt was typed but ${serviceLabel} did not create/start a chat. Diagnostics: ${debug}`
           )
           return
         }
@@ -712,12 +918,12 @@ async function runChatTurn(
 
   // Remember the site-side chat so the next turn continues the conversation.
   const url = win.isDestroyed() ? '' : win.webContents.getURL()
-  if (url && /\/c\//.test(url)) sess.chatUrl = url
+  if (url && isProviderChatUrl(service, url)) sess.chatUrl = url
   sess.sent = params.messages.length
 
   if (result.ok && !result.aborted && !result.content.trim()) {
     // Network tap came up empty — try the rendered page before giving up.
-    const domText = await readLastAssistantMessage(win)
+    const domText = await readLastAssistantMessage(win, service)
     if (domText) return { ...result, content: domText }
     return {
       ok: false,

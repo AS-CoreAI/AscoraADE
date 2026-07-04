@@ -2,6 +2,7 @@ import { ipcMain } from 'electron'
 import {
   IPC,
   DEFAULT_LLM_CONFIG,
+  WPROVIDER_SERVICES,
   normalizeOpenRouterApiKey,
   type ChatParams,
   type ChatResult,
@@ -37,6 +38,7 @@ function readConfig(): LlmConfig {
     savedProvider === 'openrouter' && (!openRouterEnabled || !openRouterApiKey.trim())
       ? DEFAULT_LLM_CONFIG.provider
       : savedProvider
+  const savedWProviderService = store.getSetting<WProviderService>('wprovider.service')
   return {
     provider,
     baseUrl: store.getSetting<string>('llm.baseUrl') ?? DEFAULT_LLM_CONFIG.baseUrl,
@@ -70,7 +72,9 @@ function readConfig(): LlmConfig {
     glmPath: store.getSetting<string>('glm.path') ?? DEFAULT_LLM_CONFIG.glmPath,
     glmMode: store.getSetting<GlmMode>('glm.mode') ?? DEFAULT_LLM_CONFIG.glmMode,
     wproviderService:
-      store.getSetting<WProviderService>('wprovider.service') ?? DEFAULT_LLM_CONFIG.wproviderService
+      savedWProviderService && WPROVIDER_SERVICES.includes(savedWProviderService)
+        ? savedWProviderService
+        : DEFAULT_LLM_CONFIG.wproviderService
   }
 }
 
@@ -123,7 +127,7 @@ export function registerLlmHandlers(): void {
     if (typeof patch.geminiPermission === 'string') store.setSetting('gemini.permission', patch.geminiPermission)
     if (typeof patch.glmPath === 'string') store.setSetting('glm.path', patch.glmPath.trim())
     if (typeof patch.glmMode === 'string') store.setSetting('glm.mode', patch.glmMode)
-    if (typeof patch.wproviderService === 'string') {
+    if (typeof patch.wproviderService === 'string' && WPROVIDER_SERVICES.includes(patch.wproviderService)) {
       store.setSetting('wprovider.service', patch.wproviderService)
     }
     getClient() // refresh the cached client with the new config

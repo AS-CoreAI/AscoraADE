@@ -370,17 +370,18 @@ export const GLM_MODES: GlmMode[] = ['plan', 'build', 'edit', 'yolo']
 // site's streaming response. Tool use rides the agent loop's text protocol
 // (the fenced ```tool_call blocks), since web chats have no native tool calls.
 
-/** Which web chat the WProvider drives. Qwen first; more services later. */
-export type WProviderService = 'qwen'
+/** Which web chat the WProvider drives. */
+export type WProviderService = 'qwen' | 'deepseek'
 
-export const WPROVIDER_SERVICES: WProviderService[] = ['qwen']
+export const WPROVIDER_SERVICES: WProviderService[] = ['qwen', 'deepseek']
 
 /** Display name + login origin for each supported web service. */
 export const WPROVIDER_SERVICE_INFO: Record<WProviderService, { label: string; origin: string }> = {
-  qwen: { label: 'Qwen', origin: 'https://chat.qwen.ai' }
+  qwen: { label: 'Qwen', origin: 'https://chat.qwen.ai' },
+  deepseek: { label: 'DeepSeek', origin: 'https://chat.deepseek.com' }
 }
 
-/** Result of probing the WProvider web session (cookie-based sign-in state). */
+/** Result of probing the WProvider web session (provider-specific sign-in state). */
 export interface WProviderCheckResult {
   ok: boolean
   service: WProviderService

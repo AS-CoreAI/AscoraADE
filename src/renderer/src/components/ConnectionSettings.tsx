@@ -18,6 +18,8 @@ import { useApp } from '@/state/store'
 import { tr, type TranslationKey } from '@/language'
 import {
   DEFAULT_LLM_CONFIG,
+  WPROVIDER_SERVICES,
+  WPROVIDER_SERVICE_INFO,
   isSshCapableProvider,
   CODEX_REASONING_LEVELS,
   COPILOT_PERMISSION_MODES,
@@ -34,7 +36,8 @@ import {
   type ClaudePermissionMode,
   type GeminiApprovalMode,
   type GlmMode,
-  type LlmProvider
+  type LlmProvider,
+  type WProviderService
 } from '@shared/ipc'
 
 function useT(): (key: TranslationKey, values?: Record<string, string | number>) => string {
@@ -753,16 +756,33 @@ function WProviderPanel(): JSX.Element {
   const check = useApp((s) => s.wproviderCheck)
   const checking = useApp((s) => s.wproviderChecking)
   const loggingIn = useApp((s) => s.wproviderLoggingIn)
+  const wproviderService = useApp((s) => s.wproviderService)
+  const setWProviderService = useApp((s) => s.setWProviderService)
   const checkWProvider = useApp((s) => s.checkWProvider)
   const wproviderLogin = useApp((s) => s.wproviderLogin)
   const wproviderLogout = useApp((s) => s.wproviderLogout)
+  const selectedInfo = WPROVIDER_SERVICE_INFO[wproviderService]
+  const checkedInfo = check ? WPROVIDER_SERVICE_INFO[check.service] : selectedInfo
+  const selectedHost = selectedInfo.origin.replace(/^https?:\/\//, '')
 
   return (
     <>
       <label className="field">
         <span className="field-label">{t('settings.wproviderService')}</span>
-        <select className="text-input" value="qwen" onChange={() => undefined}>
-          <option value="qwen">Qwen (chat.qwen.ai)</option>
+        <select
+          className="text-input"
+          value={wproviderService}
+          disabled={checking || loggingIn}
+          onChange={(e) => void setWProviderService(e.target.value as WProviderService)}
+        >
+          {WPROVIDER_SERVICES.map((service) => {
+            const info = WPROVIDER_SERVICE_INFO[service]
+            return (
+              <option key={service} value={service}>
+                {info.label} ({info.origin.replace(/^https?:\/\//, '')})
+              </option>
+            )
+          })}
         </select>
         <span className="field-hint">{t('settings.wproviderHint')}</span>
       </label>
@@ -778,18 +798,22 @@ function WProviderPanel(): JSX.Element {
                 : 'error'
         }`}
       >
-        {(checking || loggingIn) && t('settings.checkingName', { name: 'Qwen' })}
+        {(checking || loggingIn) && t('settings.checkingName', { name: selectedInfo.label })}
         {!checking && !loggingIn && !check && t('settings.notCheckedYet')}
         {!checking && !loggingIn && check && (
           <>
-            {check.loggedIn ? `✓ ${t('settings.wproviderSignedIn')}` : `✗ ${t('settings.wproviderNotSignedIn')}`}
+            {check.loggedIn
+              ? `✓ ${t('settings.wproviderSignedIn', { name: checkedInfo.label })}`
+              : `✗ ${t('settings.wproviderNotSignedIn')}`}
             {check.error ? <div className="field-hint">{check.error}</div> : null}
           </>
         )}
       </div>
 
       {!checking && !loggingIn && check && !check.loggedIn && (
-        <div className="field-hint">{t('settings.wproviderSigninHint')}</div>
+        <div className="field-hint">
+          {t('settings.wproviderSigninHint', { origin: selectedHost })}
+        </div>
       )}
 
       <div className="field-row" style={{ alignSelf: 'flex-start' }}>

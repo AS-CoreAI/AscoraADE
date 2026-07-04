@@ -18,15 +18,17 @@ import {
   logoutWProvider
 } from '../wprovider/runner'
 
-/** The configured WProvider service ('qwen' for now). */
+/** The configured WProvider web service. */
 function configuredService(): WProviderService {
   const saved = getStore().getSetting<WProviderService>('wprovider.service')
   return saved && WPROVIDER_SERVICES.includes(saved) ? saved : DEFAULT_LLM_CONFIG.wproviderService
 }
 
 export function registerWProviderHandlers(): void {
-  ipcMain.handle(IPC.wprovider.check, (): Promise<WProviderCheckResult> =>
-    checkWProvider(configuredService())
+  ipcMain.handle(
+    IPC.wprovider.check,
+    (_e, service?: WProviderService): Promise<WProviderCheckResult> =>
+      checkWProvider(service && WPROVIDER_SERVICES.includes(service) ? service : configuredService())
   )
   ipcMain.handle(IPC.wprovider.login, (): Promise<WProviderLoginResult> =>
     loginWProvider(configuredService())
