@@ -228,6 +228,8 @@ const en = {
   'settings.wproviderNotSignedIn': 'Not signed in',
   'settings.wproviderSigninHint':
     'Click "Sign in" — a browser window opens {origin}; log in there and the window closes by itself.',
+  'settings.wproviderSigninHintManual':
+    'Click "Sign in" — a browser window opens {origin}; log in there, wait until the prompt box appears, then close the window when you are done.',
   'settings.wproviderSignIn': 'Sign in',
   'settings.wproviderSigningIn': 'Waiting for sign-in…',
   'settings.wproviderSignOut': 'Sign out',
@@ -615,6 +617,8 @@ const ru: Record<TranslationKey, string> = {
   'settings.wproviderNotSignedIn': 'Вход не выполнен',
   'settings.wproviderSigninHint':
     'Нажмите «Войти» — откроется окно с {origin}; авторизуйтесь там, и окно закроется само.',
+  'settings.wproviderSigninHintManual':
+    'Нажмите «Войти» — откроется окно с {origin}; авторизуйтесь там, дождитесь поля ввода промта и закройте окно вручную, когда закончите.',
   'settings.wproviderSignIn': 'Войти',
   'settings.wproviderSigningIn': 'Ожидание входа…',
   'settings.wproviderSignOut': 'Выйти',

@@ -35,6 +35,8 @@ const NET_CHANNEL = 'wprovider:net'
 
 /** How long to wait for the site's composer to appear after navigation. */
 const UI_READY_TIMEOUT_MS = 45_000
+/** DeepSeek can briefly mount a hidden/covered composer before the chat page is actually usable. */
+const DEEPSEEK_PROMPT_STABLE_MS = 2500
 /** How long after "send" to wait for the completion request to start. */
 const START_TIMEOUT_MS = 25_000
 /** Abort a generation when the stream goes silent for this long. */
@@ -321,6 +323,20 @@ async function runJs<T>(win: BrowserWindow, code: string): Promise<T> {
   return (await win.webContents.executeJavaScript(code, true)) as T
 }
 
+async function loadURLBestEffort(win: BrowserWindow, url: string, timeoutMs: number): Promise<void> {
+  let timer: NodeJS.Timeout | undefined
+  try {
+    await Promise.race([
+      win.loadURL(url).catch(() => undefined),
+      new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, timeoutMs)
+      })
+    ])
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
+}
+
 const COMPOSER_SELECTORS = [
   'textarea[placeholder*="DeepSeek" i]',
   'textarea[name="search"]',
@@ -451,12 +467,89 @@ async function hasComposer(win: BrowserWindow): Promise<boolean> {
   return runJs<boolean>(win, `!!${composerLookupJs()}`).catch(() => false)
 }
 
-async function waitForComposerIfTokenPresent(win: BrowserWindow, timeoutMs: number): Promise<boolean> {
+async function hasDeepSeekPromptComposer(win: BrowserWindow): Promise<boolean> {
+  if (win.isDestroyed()) return false
+  return runJs<boolean>(
+    win,
+    `(() => {
+      const selectors = [
+        'textarea[placeholder*="DeepSeek" i]',
+        'textarea[name="search"]',
+        'textarea.message-input-textarea',
+        '#message-input-container textarea',
+        'textarea[placeholder]',
+        'textarea'
+      ];
+      const sendSelectors = ${JSON.stringify(SEND_BUTTON_SELECTORS)};
+      const isVisible = (el) => {
+        if (!el || el.disabled || el.getAttribute('aria-disabled') === 'true') return false;
+        const rect = el.getBoundingClientRect();
+        const style = window.getComputedStyle(el);
+        return (
+          rect.width >= 80 &&
+          rect.height >= 18 &&
+          rect.bottom > 0 &&
+          rect.right > 0 &&
+          rect.top < window.innerHeight &&
+          rect.left < window.innerWidth &&
+          style.display !== 'none' &&
+          style.visibility !== 'hidden' &&
+          style.opacity !== '0'
+        );
+      };
+      const isAuthSurface = (el) => {
+        for (let node = el; node && node !== document.body; node = node.parentElement) {
+          const idClass = String(node.id || '') + ' ' + String(node.className || '');
+          const role = node.getAttribute?.('role') || '';
+          if (/captcha|login|sign[-_\\s]?in|auth|verify|verification/i.test(idClass)) return true;
+          if (role === 'dialog' && !/composer|message|chat|input|textarea/i.test(idClass)) return true;
+        }
+        return false;
+      };
+      const allTextareas = selectors.flatMap((sel) => Array.from(document.querySelectorAll(sel)));
+      const textareas = Array.from(new Set(allTextareas)).filter((el) => isVisible(el) && !isAuthSurface(el));
+      if (textareas.length === 0) return false;
+      const sendControls = sendSelectors
+        .map((sel) => document.querySelector(sel))
+        .filter((el) => el && isVisible(el) && !isAuthSurface(el));
+      const hasNearbySend = textareas.some((ta) => {
+        const taRect = ta.getBoundingClientRect();
+        return sendControls.some((btn) => {
+          const btnRect = btn.getBoundingClientRect();
+          const sameBand = Math.abs((btnRect.top + btnRect.bottom) / 2 - (taRect.top + taRect.bottom) / 2) < 160;
+          return sameBand || Boolean(ta.closest('form, [class*="input" i], [class*="composer" i], [class*="message" i]')?.contains(btn));
+        });
+      });
+      const hasPromptHint = textareas.some((ta) =>
+        /deepseek|message|ask|prompt|search|chat/i.test(
+          [
+            ta.getAttribute('placeholder') || '',
+            ta.getAttribute('aria-label') || '',
+            String(ta.className || ''),
+            String(ta.id || ''),
+            String(ta.name || '')
+          ].join(' ')
+        )
+      );
+      return hasNearbySend || hasPromptHint;
+    })()`
+  ).catch(() => false)
+}
+
+async function waitForDeepSeekPromptReady(win: BrowserWindow, timeoutMs: number): Promise<boolean> {
   const deadline = Date.now() + timeoutMs
+  let readySince = 0
   for (;;) {
     if (win.isDestroyed() || !windowOnService(win, 'deepseek')) return false
     if (isDeepSeekSignInUrl(win.webContents.getURL())) return false
-    if (await hasComposer(win)) return true
+    const token = await readDeepSeekToken(win)
+    const ready = token.length > 8 && (await hasDeepSeekPromptComposer(win))
+    if (ready) {
+      if (!readySince) readySince = Date.now()
+      if (Date.now() - readySince >= DEEPSEEK_PROMPT_STABLE_MS) return true
+    } else {
+      readySince = 0
+    }
     if (Date.now() >= deadline) return false
     await sleep(500)
   }
@@ -505,7 +598,7 @@ async function isDeepSeekPromptReady(win: BrowserWindow, waitMs = 0): Promise<bo
   if (isDeepSeekSignInUrl(win.webContents.getURL())) return false
   const token = await readDeepSeekToken(win)
   if (token.length <= 8) return false
-  return waitMs > 0 ? waitForComposerIfTokenPresent(win, waitMs) : hasComposer(win)
+  return waitMs > 0 ? waitForDeepSeekPromptReady(win, waitMs) : hasDeepSeekPromptComposer(win)
 }
 
 async function checkDeepSeekLoggedIn(): Promise<boolean> {
@@ -519,12 +612,12 @@ async function checkDeepSeekLoggedIn(): Promise<boolean> {
 
   const win = ensureHiddenWindow()
   if (!windowOnService(win, 'deepseek')) {
-    await win.loadURL(serviceOrigin('deepseek')).catch(() => undefined)
+    await loadURLBestEffort(win, serviceOrigin('deepseek'), 10_000)
     // A logged-out session redirects to /sign_in client-side, after the
     // initial load already resolved — give that redirect a moment to land.
     await sleep(1200)
   }
-  return isDeepSeekPromptReady(win, 2500)
+  return isDeepSeekPromptReady(win, 5000)
 }
 
 /** Set the composer's value the React-safe way and confirm it stuck. */
@@ -726,7 +819,7 @@ export async function loginWProvider(service: WProviderService): Promise<WProvid
     authWin = null
   })
   try {
-    await win.loadURL(serviceOrigin(service))
+    await loadURLBestEffort(win, serviceOrigin(service), 15_000)
   } catch {
     /* keep the window open anyway — the user may retry inside it */
   }
@@ -751,10 +844,10 @@ export async function loginWProvider(service: WProviderService): Promise<WProvid
           }
           const loggedIn =
             service === 'deepseek'
-              ? await isDeepSeekPromptReady(win, 1000)
+              ? await isDeepSeekPromptReady(win, 8000)
               : (await checkWProvider(service)).loggedIn
           if (loggedIn) {
-            if (!win.isDestroyed()) win.close()
+            if (service !== 'deepseek' && !win.isDestroyed()) win.close()
             settle({ ok: true, loggedIn: true })
           }
         } finally {

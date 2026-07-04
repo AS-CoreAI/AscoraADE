@@ -812,7 +812,12 @@ function WProviderPanel(): JSX.Element {
 
       {!checking && !loggingIn && check && !check.loggedIn && (
         <div className="field-hint">
-          {t('settings.wproviderSigninHint', { origin: selectedHost })}
+          {t(
+            wproviderService === 'deepseek'
+              ? 'settings.wproviderSigninHintManual'
+              : 'settings.wproviderSigninHint',
+            { origin: selectedHost }
+          )}
         </div>
       )}
 
