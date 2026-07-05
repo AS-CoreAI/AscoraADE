@@ -60,12 +60,17 @@ interface ChatSession {
   sent: number
 }
 
+type DeepSeekPhase = 'answer' | 'think' | 'skip'
+
 interface ActiveOp {
   id: string
+  service: WProviderService
   webContentsId: number
   sseBuffer: string
   content: string
   thinking: string
+  /** Where a bare DeepSeek `{"v": "token"}` frame appends (patch-protocol cursor). */
+  dsCursor: DeepSeekPhase
   started: boolean
   doneStreams: number
   openStreams: number
@@ -176,7 +181,8 @@ function installNetListener(): void {
 /**
  * Feed raw SSE text into the op, extracting answer deltas. Qwen streams
  * OpenAI-style frames whose delta carries a `phase` ("think" for reasoning,
- * "answer" for the reply); untagged deltas count as answer.
+ * "answer" for the reply); untagged deltas count as answer. DeepSeek streams
+ * a patch protocol instead — see extractDeepSeekDeltas.
  */
 function consumeSse(op: ActiveOp, text: string): void {
   op.sseBuffer += text
@@ -189,7 +195,7 @@ function consumeSse(op: ActiveOp, text: string): void {
     if (!data || data === '[DONE]') continue
     try {
       const json = JSON.parse(data) as Record<string, unknown>
-      for (const delta of extractDeltas(json)) {
+      for (const delta of extractDeltas(op, json)) {
         if (delta.phase === 'think') {
           op.thinking += delta.text
         } else if (delta.text) {
@@ -204,7 +210,10 @@ function consumeSse(op: ActiveOp, text: string): void {
 }
 
 /** Pull `{ text, phase }` deltas out of one SSE JSON frame, shape-tolerantly. */
-function extractDeltas(json: Record<string, unknown>): { text: string; phase?: string }[] {
+function extractDeltas(
+  op: ActiveOp,
+  json: Record<string, unknown>
+): { text: string; phase?: string }[] {
   const out: { text: string; phase?: string }[] = []
   const choices = json.choices
   if (Array.isArray(choices)) {
@@ -230,7 +239,11 @@ function extractDeltas(json: Record<string, unknown>): { text: string; phase?: s
     }
     return out
   }
-  for (const delta of extractDeepSeekDeltas(json)) out.push(delta)
+  // The patch-protocol parser keeps cursor state on the op, so only run it
+  // for the service that actually speaks that protocol.
+  if (op.service === 'deepseek') {
+    for (const delta of extractDeepSeekDeltas(op, json)) out.push(delta)
+  }
   // Bare shapes some backends use: { content: "..." } / { response: "..." }
   if (typeof json.reasoning_content === 'string' && json.reasoning_content) {
     out.push({ text: json.reasoning_content, phase: 'think' })
@@ -244,66 +257,86 @@ function record(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' ? (value as Record<string, unknown>) : null
 }
 
-function extractDeepSeekDeltas(json: Record<string, unknown>): { text: string; phase?: string }[] {
+/**
+ * DeepSeek streams the answer as a patch protocol: each SSE frame is
+ * `{ v, p?, o? }` where `p` is a path ("response/content", "response/fragments",
+ * "title", ...) and `o` an operation (APPEND / SET / PATCH / BATCH). Only the
+ * frame that switches targets carries `p` — the token frames that follow are
+ * bare `{ "v": "token" }` and mean "keep appending at the last declared path",
+ * so the parser keeps that cursor on the op across frames. Strings default to
+ * APPEND; SET/PATCH re-send state the page already rendered and are never
+ * emitted (a missed answer still surfaces through the DOM fallback).
+ */
+function extractDeepSeekDeltas(
+  op: ActiveOp,
+  json: Record<string, unknown>
+): { text: string; phase?: string }[] {
   const out: { text: string; phase?: string }[] = []
-  const visitUpdate = (value: unknown, parentPath = ''): void => {
+  const emit = (text: string, phase: DeepSeekPhase): void => {
+    if (!text || phase === 'skip') return
+    out.push({ text, phase: phase === 'think' ? 'think' : undefined })
+  }
+
+  const visitUpdate = (value: unknown, parentPath: string): void => {
     const update = record(value)
     if (!update) return
-    const pathPart = typeof update.p === 'string' ? update.p : ''
-    const path = [parentPath, pathPart].filter(Boolean).join('/')
-    const op = typeof update.o === 'string' ? update.o.toUpperCase() : ''
+    const rawPath = typeof update.p === 'string' ? update.p : null
+    const path = [parentPath, rawPath ?? ''].filter(Boolean).join('/')
+    const oper = typeof update.o === 'string' ? update.o.toUpperCase() : ''
     const payload = update.v
 
-    if (op === 'BATCH' && Array.isArray(payload)) {
+    // Any frame with an explicit path moves the append cursor.
+    if (rawPath !== null) op.dsCursor = deepSeekPathPhase(path)
+
+    if (oper === 'BATCH' && Array.isArray(payload)) {
       for (const child of payload) visitUpdate(child, path)
       return
     }
-
-    if (op === 'APPEND') {
-      out.push(...extractDeepSeekAppend(payload, path))
+    if (typeof payload === 'string') {
+      if (oper === '' || oper === 'APPEND') emit(payload, op.dsCursor)
+      return
     }
+    if (oper === 'APPEND') appendFragment(payload, path)
   }
 
-  visitUpdate(json)
+  // A fragment appended to "response/fragments" carries the text type (THINK /
+  // RESPONSE / ...); bare token frames that follow extend that fragment.
+  const appendFragment = (value: unknown, path: string): void => {
+    if (Array.isArray(value)) {
+      for (const item of value) appendFragment(item, path)
+      return
+    }
+    const obj = record(value)
+    if (!obj) return
+    const type = typeof obj.type === 'string' ? obj.type : undefined
+    const phase = deepSeekFragmentPhase(type, path)
+    op.dsCursor = phase
+    for (const key of ['content', 'text', 'markdown']) {
+      const text = obj[key]
+      if (typeof text === 'string') {
+        emit(text, phase)
+        return
+      }
+    }
+    if (obj.v !== undefined) appendFragment(obj.v, path)
+  }
+
+  visitUpdate(json, '')
   return out
 }
 
-function extractDeepSeekAppend(
-  value: unknown,
-  path: string,
-  fragmentType?: string
-): { text: string; phase?: string }[] {
-  const out: { text: string; phase?: string }[] = []
-  if (typeof value === 'string') {
-    if (/(content|text|markdown|reason|think)/i.test(path)) {
-      out.push({ text: value, phase: deepSeekPhase(path, fragmentType) })
-    }
-    return out
-  }
-  if (Array.isArray(value)) {
-    for (const item of value) {
-      out.push(...extractDeepSeekAppend(item, path, fragmentType))
-    }
-    return out
-  }
-  const obj = record(value)
-  if (!obj) return out
-  const type = typeof obj.type === 'string' ? obj.type : fragmentType
-  if (type && /^(tip|status|action|quote|source)$/i.test(type)) return out
-  for (const key of ['content', 'text', 'markdown']) {
-    const text = obj[key]
-    if (typeof text === 'string' && text) {
-      out.push({ text, phase: deepSeekPhase(path, type) })
-      return out
-    }
-  }
-  const nested = obj.v
-  if (nested !== undefined) out.push(...extractDeepSeekAppend(nested, path, type))
-  return out
+function deepSeekPathPhase(path: string): DeepSeekPhase {
+  if (/reason|think/i.test(path)) return 'think'
+  if (/content|markdown|text/i.test(path)) return 'answer'
+  // title, status, search results, timings, ... — not part of the answer.
+  return 'skip'
 }
 
-function deepSeekPhase(path: string, fragmentType?: string): string | undefined {
-  return /reason|think/i.test(`${path}/${fragmentType ?? ''}`) ? 'think' : undefined
+function deepSeekFragmentPhase(type: string | undefined, path: string): DeepSeekPhase {
+  if (/reason|think/i.test(`${path}/${type ?? ''}`)) return 'think'
+  // Untyped fragments count as answer; typed ones must be the response itself
+  // (SUMMARY / TIP / STATUS / QUOTE / SEARCH fragments are chrome, not answer).
+  return type && !/^response$/i.test(type) ? 'skip' : 'answer'
 }
 
 function finalizeActiveOp(error?: string): void {
@@ -964,10 +997,12 @@ async function runChatTurn(
 
     activeOp = {
       id,
+      service,
       webContentsId: win.webContents.id,
       sseBuffer: '',
       content: '',
       thinking: '',
+      dsCursor: 'skip',
       started: false,
       doneStreams: 0,
       openStreams: 0,

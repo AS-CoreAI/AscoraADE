@@ -1,3 +1,9 @@
+## Ascora ADE 1.2.1
+What's new?
+
+### Fixed
+- **DeepSeek WProvider replies are no longer garbled or truncated** — the stream parser now implements DeepSeek's patch protocol: bare `{"v": "token"}` continuation frames append at the last declared path instead of being dropped, and non-answer updates (chat title, thinking summaries, statuses) are classified by path/fragment type and kept out of the reply. Qwen's OpenAI-style stream parsing is unchanged.
+
 ## Ascora ADE 1.2.0
 What's new?
 
