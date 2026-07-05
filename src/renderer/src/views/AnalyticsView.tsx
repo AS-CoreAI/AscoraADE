@@ -192,12 +192,14 @@ function TokensPerDay({ data }: { data: Analytics }): JSX.Element {
 function ModelDonut({ data }: { data: Analytics }): JSX.Element {
   const r = 54
   const C = 2 * Math.PI * r
+  const [hovered, setHovered] = useState<number | null>(null)
   let offset = 0
   const segments = data.perModel.map((m, i) => {
     const seg = { ...m, color: colorAt(i), dash: m.share * C, offset }
     offset += m.share * C
     return seg
   })
+  const active = hovered != null ? segments[hovered] : null
 
   return (
     <div className="an-panel">
@@ -208,27 +210,48 @@ function ModelDonut({ data }: { data: Analytics }): JSX.Element {
         <div className="an-donut-wrap">
           <svg viewBox="0 0 140 140" className="an-donut">
             <circle cx="70" cy="70" r={r} className="an-donut-track" />
-            {segments.map((s) => (
+            {segments.map((s, i) => (
               <circle
                 key={s.model}
                 cx="70"
                 cy="70"
                 r={r}
-                className="an-donut-seg"
+                className={`an-donut-seg${
+                  hovered == null ? '' : hovered === i ? ' is-active' : ' is-dimmed'
+                }`}
                 stroke={s.color}
                 strokeDasharray={`${s.dash} ${C - s.dash}`}
                 strokeDashoffset={-s.offset}
+                onMouseEnter={() => setHovered(i)}
+                onMouseLeave={() => setHovered(null)}
               />
             ))}
           </svg>
           <div className="an-donut-center">
-            <div className="an-donut-total">{formatTokens(data.totalTokens)}</div>
-            <div className="an-donut-cap">tokens</div>
+            {active ? (
+              <div>
+                <div className="an-donut-model" style={{ color: active.color }}>
+                  {active.model}
+                </div>
+                <div className="an-donut-total">{Math.round(active.share * 100)}%</div>
+                <div className="an-donut-cap">{formatTokens(active.tokens)} tokens</div>
+              </div>
+            ) : (
+              <div>
+                <div className="an-donut-total">{formatTokens(data.totalTokens)}</div>
+                <div className="an-donut-cap">tokens</div>
+              </div>
+            )}
           </div>
         </div>
         <div className="an-model-list">
           {data.perModel.map((m, i) => (
-            <div className="an-model-row" key={m.model}>
+            <div
+              className={`an-model-row${hovered === i ? ' is-active' : ''}`}
+              key={m.model}
+              onMouseEnter={() => setHovered(i)}
+              onMouseLeave={() => setHovered(null)}
+            >
               <span className="an-dot" style={{ background: colorAt(i) }} />
               <div className="an-model-text">
                 <span className="an-model-name">{m.model}</span>

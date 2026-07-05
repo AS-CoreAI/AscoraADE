@@ -216,6 +216,34 @@ export function registerFsHandlers(): void {
   )
 
   ipcMain.handle(
+    IPC.fs.movePath,
+    async (_e, sourcePath: string, targetDirectoryPath: string): Promise<FileActionResult> => {
+      try {
+        const source = resolve(sourcePath)
+        const targetDirectory = resolve(targetDirectoryPath)
+        const sourceInfo = await stat(source)
+        const targetInfo = await stat(targetDirectory)
+        if (!sourceInfo.isFile() && !sourceInfo.isDirectory()) {
+          return { ok: false, error: 'The selected path is not a file or directory.' }
+        }
+        if (!targetInfo.isDirectory()) return { ok: false, error: 'The target path is not a directory.' }
+        if (sourceInfo.isDirectory() && isInside(source, targetDirectory)) {
+          return { ok: false, error: 'Cannot move a folder into itself.' }
+        }
+        const nextPath = join(targetDirectory, basename(source))
+        if (resolve(nextPath) === source) return { ok: true, path: nextPath }
+        if (await pathExists(nextPath)) {
+          return { ok: false, error: `${basename(nextPath)} already exists in the target folder.` }
+        }
+        await rename(source, nextPath)
+        return { ok: true, path: nextPath }
+      } catch (err) {
+        return { ok: false, error: err instanceof Error ? err.message : String(err) }
+      }
+    }
+  )
+
+  ipcMain.handle(
     IPC.fs.renameFile,
     async (_e, filePath: string, newName: string): Promise<FileActionResult> => {
       try {

@@ -22,6 +22,7 @@ export const IPC = {
     readFile: 'fs:readFile',
     openPath: 'fs:openPath',
     importFiles: 'fs:importFiles',
+    movePath: 'fs:movePath',
     renameFile: 'fs:renameFile',
     deleteFile: 'fs:deleteFile',
     createFile: 'fs:createFile',

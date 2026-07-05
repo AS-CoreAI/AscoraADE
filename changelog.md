@@ -1,6 +1,13 @@
 ## Ascora ADE 1.2.1
 What's new?
 
+### Added
+- **Explorer drag-and-drop file moves** — files can now be dragged into folders, and folders can be dragged into other folders directly in the Explorer tree. The move flow updates open editor tabs, refreshes the source and target folders, highlights the drop target, and blocks unsafe moves such as moving a folder into itself or over an existing name.
+- **Expandable task lists in the left rail** — workspace task lists now show the five most recent tasks by default, with localized Show more / Show less controls for longer histories.
+
+### Changed
+- **Analytics model donut is interactive** — hovering a model segment or model row now highlights that model and shows its token share and count in the donut center.
+
 ### Fixed
 - **DeepSeek WProvider replies are no longer garbled or truncated** — the stream parser now implements DeepSeek's patch protocol: bare `{"v": "token"}` continuation frames append at the last declared path instead of being dropped, and non-answer updates (chat title, thinking summaries, statuses) are classified by path/fragment type and kept out of the reply. Qwen's OpenAI-style stream parsing is unchanged.
 

@@ -505,6 +505,20 @@ button {
   font-size: 12.5px;
 }
 
+.task-show-more {
+  display: block;
+  padding: 5px 8px 5px 34px;
+  color: var(--text-faint);
+  font-size: 12px;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+}
+.task-show-more:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
 .rail-footer {
   position: relative;
   flex-shrink: 0;
@@ -1125,6 +1139,13 @@ button {
 }
 .tree-row.active {
   background: var(--bg-active);
+}
+.tree-row.dragging {
+  opacity: 0.45;
+}
+.tree-row.drop-target {
+  background: var(--accent-dim);
+  box-shadow: inset 0 0 0 1px var(--accent);
 }
 .tree-row .twisty {
   width: 14px;
@@ -3213,6 +3234,16 @@ button.changes-badge:hover {
 .an-donut-seg {
   fill: none;
   stroke-width: 16;
+  cursor: pointer;
+  transition:
+    stroke-width 0.15s ease,
+    opacity 0.15s ease;
+}
+.an-donut-seg.is-active {
+  stroke-width: 22;
+}
+.an-donut-seg.is-dimmed {
+  opacity: 0.3;
 }
 .an-donut-center {
   position: absolute;
@@ -3220,6 +3251,17 @@ button.changes-badge:hover {
   display: grid;
   place-items: center;
   text-align: center;
+  pointer-events: none;
+}
+.an-donut-model {
+  max-width: 88px;
+  margin: 0 auto 2px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .an-donut-total {
   font-size: 20px;
@@ -3240,6 +3282,9 @@ button.changes-badge:hover {
   display: flex;
   align-items: center;
   gap: 11px;
+}
+.an-model-row.is-active .an-model-name {
+  color: var(--accent);
 }
 .an-model-text {
   display: flex;

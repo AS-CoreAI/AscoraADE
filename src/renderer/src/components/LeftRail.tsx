@@ -13,6 +13,9 @@ interface VisibleWorkspace {
   collapsed: boolean
 }
 
+/** How many recent tasks a folder shows before "Show more" reveals the rest. */
+const TASK_PREVIEW_COUNT = 5
+
 const THEMES: ThemePreference[] = ['dark', 'light', 'system']
 const THEME_LABELS: Record<ThemePreference, TranslationKey> = {
   dark: 'app.theme.dark',
@@ -51,6 +54,8 @@ export function LeftRail(): JSX.Element {
   const newTask = useApp((s) => s.newTask)
   const [dragId, setDragId] = useState<string | null>(null)
   const [dragOverId, setDragOverId] = useState<string | null>(null)
+  // Folders whose full task list is revealed via "Show more" (session-only).
+  const [showAllTasks, setShowAllTasks] = useState<Record<string, boolean>>({})
   const [search, setSearch] = useState('')
   const [searchOpen, setSearchOpen] = useState(false)
   const searchInputRef = useRef<HTMLInputElement>(null)
@@ -227,6 +232,11 @@ export function LeftRail(): JSX.Element {
         )}
 
         {visibleWorkspaces.map(({ ws, tasks, collapsed }) => {
+          // While searching, all matches stay visible; otherwise cap at the
+          // preview count until the user asks for more.
+          const expanded = isSearching || !!showAllTasks[ws.id]
+          const visibleTasks = expanded ? tasks : tasks.slice(0, TASK_PREVIEW_COUNT)
+          const hiddenCount = tasks.length - visibleTasks.length
           return (
             <div className="ws-group" key={ws.id}>
               <div
@@ -272,7 +282,7 @@ export function LeftRail(): JSX.Element {
                 <span className="name">{ws.name}</span>
               </div>
               {!collapsed &&
-                tasks.map((task) => (
+                visibleTasks.map((task) => (
                   <div
                     className={`task-item${activeTaskId === task.id && !activeSsh ? ' active' : ''}`}
                     key={task.id}
@@ -303,6 +313,22 @@ export function LeftRail(): JSX.Element {
                     </button>
                   </div>
                 ))}
+              {!collapsed && hiddenCount > 0 && (
+                <button
+                  className="task-show-more"
+                  onClick={() => setShowAllTasks((s) => ({ ...s, [ws.id]: true }))}
+                >
+                  {t('rail.showMore', { count: hiddenCount })}
+                </button>
+              )}
+              {!collapsed && expanded && !isSearching && tasks.length > TASK_PREVIEW_COUNT && (
+                <button
+                  className="task-show-more"
+                  onClick={() => setShowAllTasks((s) => ({ ...s, [ws.id]: false }))}
+                >
+                  {t('rail.showLess')}
+                </button>
+              )}
               {!collapsed && tasks.length === 0 && (
                 <div className="task-empty">{t('rail.noTasksYet')}</div>
               )}

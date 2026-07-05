@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type JSX, type MouseEvent } from 'react'
+import { useEffect, useRef, useState, type DragEvent, type JSX, type MouseEvent } from 'react'
 import { createPortal } from 'react-dom'
 import type { TreeNode } from '@shared/ipc'
 import { Icon } from './Icon'
@@ -90,16 +90,30 @@ function Row({
   node,
   depth,
   editSession,
+  draggingPath,
+  dropTargetPath,
   onItemContextMenu,
   onSubmitEdit,
-  onCancelEdit
+  onCancelEdit,
+  onDragStartNode,
+  onDragOverNode,
+  onDragLeaveNode,
+  onDropNode,
+  onDragEndNode
 }: {
   node: TreeNode
   depth: number
   editSession: EditSession | null
+  draggingPath: string | null
+  dropTargetPath: string | null
   onItemContextMenu: (event: MouseEvent, node: TreeNode) => void
   onSubmitEdit: (value: string) => void
   onCancelEdit: () => void
+  onDragStartNode: (event: DragEvent<HTMLDivElement>, node: TreeNode) => void
+  onDragOverNode: (event: DragEvent<HTMLDivElement>, node: TreeNode) => void
+  onDragLeaveNode: (event: DragEvent<HTMLDivElement>, node: TreeNode) => void
+  onDropNode: (event: DragEvent<HTMLDivElement>, node: TreeNode) => void
+  onDragEndNode: () => void
 }): JSX.Element {
   const isDir = node.type === 'directory'
   const expanded = useApp((s) => !!s.expanded[node.path])
@@ -109,6 +123,8 @@ function Row({
   const openFile = useApp((s) => s.openFile)
 
   const isRenaming = editSession?.mode === 'rename' && editSession.node.path === node.path
+  const isDragging = draggingPath === node.path
+  const isDropTarget = dropTargetPath === node.path
   const draft =
     editSession?.mode === 'create' && editSession.parentPath === node.path ? editSession : null
 
@@ -125,8 +141,16 @@ function Row({
         />
       ) : (
         <div
-          className={`tree-row${!isDir && activeFile === node.path ? ' active' : ''}`}
+          className={`tree-row${!isDir && activeFile === node.path ? ' active' : ''}${
+            isDragging ? ' dragging' : ''
+          }${isDropTarget ? ' drop-target' : ''}`}
           style={{ paddingLeft: 8 + depth * 12 }}
+          draggable
+          onDragStart={(event) => onDragStartNode(event, node)}
+          onDragOver={(event) => onDragOverNode(event, node)}
+          onDragLeave={(event) => onDragLeaveNode(event, node)}
+          onDrop={(event) => onDropNode(event, node)}
+          onDragEnd={onDragEndNode}
           onClick={() => (isDir ? toggleDir(node) : openFile(node))}
           onContextMenu={(event) => onItemContextMenu(event, node)}
           title={node.name}
@@ -162,9 +186,16 @@ function Row({
               node={child}
               depth={depth + 1}
               editSession={editSession}
+              draggingPath={draggingPath}
+              dropTargetPath={dropTargetPath}
               onItemContextMenu={onItemContextMenu}
               onSubmitEdit={onSubmitEdit}
               onCancelEdit={onCancelEdit}
+              onDragStartNode={onDragStartNode}
+              onDragOverNode={onDragOverNode}
+              onDragLeaveNode={onDragLeaveNode}
+              onDropNode={onDropNode}
+              onDragEndNode={onDragEndNode}
             />
           ))}
         </>
@@ -187,6 +218,7 @@ export function Explorer(): JSX.Element {
   const createFile = useApp((s) => s.createFile)
   const createDirectory = useApp((s) => s.createDirectory)
   const renamePath = useApp((s) => s.renamePath)
+  const movePath = useApp((s) => s.movePath)
   const deleteFilePath = useApp((s) => s.deleteFilePath)
   const deleteDirectoryPath = useApp((s) => s.deleteDirectoryPath)
   const renameOpenFile = useApp((s) => s.renameOpenFile)
@@ -207,6 +239,8 @@ export function Explorer(): JSX.Element {
     workspaceRoot?: boolean
   } | null>(null)
   const [edit, setEdit] = useState<EditSession | null>(null)
+  const [dragNode, setDragNode] = useState<TreeNode | null>(null)
+  const [dropTargetPath, setDropTargetPath] = useState<string | null>(null)
 
   useEffect(() => {
     if (!menu) return
@@ -261,8 +295,33 @@ export function Explorer(): JSX.Element {
   }
 
   const parentPath = (path: string): string => {
-    const index = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'))
-    return index > 0 ? path.slice(0, index) : path
+    const trimmed = path.replace(/[\\/]+$/, '')
+    if (!trimmed) return path
+    const index = Math.max(trimmed.lastIndexOf('/'), trimmed.lastIndexOf('\\'))
+    if (index < 0) return path
+    if (index === 0) return trimmed.slice(0, 1)
+    const parent = trimmed.slice(0, index)
+    return /^[a-z]:$/i.test(parent) ? `${parent}\\` : parent
+  }
+
+  const comparablePath = (path: string): string => {
+    const normalized = path.replace(/\\/g, '/').replace(/\/+$/, '')
+    return activeSsh || api.system.platform !== 'win32' ? normalized : normalized.toLowerCase()
+  }
+
+  const isSamePath = (a: string, b: string): boolean => comparablePath(a) === comparablePath(b)
+
+  const isPathInside = (parent: string, child: string): boolean => {
+    const normalizedParent = comparablePath(parent)
+    return comparablePath(child).startsWith(`${normalizedParent}/`)
+  }
+
+  const canMoveToDirectory = (source: TreeNode | null, targetDirectoryPath: string): boolean => {
+    if (!source) return false
+    if (isSamePath(source.path, targetDirectoryPath)) return false
+    if (isSamePath(parentPath(source.path), targetDirectoryPath)) return false
+    if (source.type === 'directory' && isPathInside(source.path, targetDirectoryPath)) return false
+    return true
   }
 
   const cancelEdit = (): void => setEdit(null)
@@ -325,6 +384,64 @@ export function Explorer(): JSX.Element {
       await refreshDirectory(session.parentPath)
       await openFile({ name, path: result.path, type: 'file' })
     }
+  }
+
+  const finishDrag = (): void => {
+    setDragNode(null)
+    setDropTargetPath(null)
+  }
+
+  const moveNodeToDirectory = async (source: TreeNode, target: TreeNode): Promise<void> => {
+    const sourceParent = parentPath(source.path)
+    const result = await movePath(source.path, target.path)
+    if (!result.ok || !result.path) {
+      window.alert(result.error ?? `Failed to move ${source.type}.`)
+      return
+    }
+    if (source.type === 'file') renameOpenFile(source.path, result.path, source.name)
+    else renameOpenPathPrefix(source.path, result.path)
+    await refreshDirectory(sourceParent)
+    await refreshDirectory(target.path)
+    if (!expanded[target.path]) await toggleDir(target)
+  }
+
+  const startNodeDrag = (event: DragEvent<HTMLDivElement>, node: TreeNode): void => {
+    setMenu(null)
+    setEdit(null)
+    setDragNode(node)
+    setDropTargetPath(null)
+    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.setData('application/x-ascora-tree-path', node.path)
+    event.dataTransfer.setData('text/plain', node.path)
+  }
+
+  const dragOverNode = (event: DragEvent<HTMLDivElement>, node: TreeNode): void => {
+    if (node.type !== 'directory' || !canMoveToDirectory(dragNode, node.path)) {
+      if (dragNode) event.dataTransfer.dropEffect = 'none'
+      return
+    }
+    event.preventDefault()
+    event.stopPropagation()
+    event.dataTransfer.dropEffect = 'move'
+    if (dropTargetPath !== node.path) setDropTargetPath(node.path)
+  }
+
+  const leaveDragNode = (event: DragEvent<HTMLDivElement>, node: TreeNode): void => {
+    const nextTarget = event.relatedTarget
+    if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) return
+    if (dropTargetPath === node.path) setDropTargetPath(null)
+  }
+
+  const dropOnNode = (event: DragEvent<HTMLDivElement>, node: TreeNode): void => {
+    const source = dragNode
+    if (!source || node.type !== 'directory' || !canMoveToDirectory(source, node.path)) {
+      finishDrag()
+      return
+    }
+    event.preventDefault()
+    event.stopPropagation()
+    finishDrag()
+    void moveNodeToDirectory(source, node)
   }
 
   const deleteFile = async (): Promise<void> => {
@@ -450,9 +567,16 @@ export function Explorer(): JSX.Element {
               node={node}
               depth={0}
               editSession={edit}
+              draggingPath={dragNode?.path ?? null}
+              dropTargetPath={dropTargetPath}
               onItemContextMenu={openContextMenu}
               onSubmitEdit={submitEdit}
               onCancelEdit={cancelEdit}
+              onDragStartNode={startNodeDrag}
+              onDragOverNode={dragOverNode}
+              onDragLeaveNode={leaveDragNode}
+              onDropNode={dropOnNode}
+              onDragEndNode={finishDrag}
             />
           ))}
       </div>

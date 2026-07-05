@@ -194,6 +194,11 @@ function remoteParent(path: string): string {
   return i <= 0 ? '/' : s.slice(0, i)
 }
 
+function remoteBasename(path: string): string {
+  const s = (path || '').replace(/\/+$/, '')
+  return s.split('/').filter(Boolean).at(-1) ?? s
+}
+
 function safeEntryName(name: string): string | null {
   const trimmed = name.trim()
   if (
@@ -652,6 +657,21 @@ async function sshRenamePath(id: string, path: string, newName: string): Promise
   const nextPath = remoteChildPath(parent, safeName)
   const r = await api.ssh.exec(id, `mv -- ${shq(path)} ${shq(nextPath)}`)
   return fileResult(!sshFailed(r), nextPath, (r.stderr || r.stdout || r.error || 'Failed to rename.').trim())
+}
+
+async function sshMovePath(
+  id: string,
+  path: string,
+  targetDirectoryPath: string
+): Promise<FileActionResult> {
+  const name = remoteBasename(path)
+  if (!safeEntryName(name)) return { ok: false, error: 'Invalid name.' }
+  const nextPath = remoteChildPath(targetDirectoryPath, name)
+  const r = await api.ssh.exec(
+    id,
+    `test -d ${shq(targetDirectoryPath)} && test ! -e ${shq(nextPath)} && mv -- ${shq(path)} ${shq(nextPath)}`
+  )
+  return fileResult(!sshFailed(r), nextPath, (r.stderr || r.stdout || r.error || 'Failed to move.').trim())
 }
 
 async function sshDeleteFile(id: string, path: string): Promise<FileActionResult> {
@@ -1179,6 +1199,7 @@ interface AppState {
   createFile: (parentPath: string, name: string) => Promise<FileActionResult>
   createDirectory: (parentPath: string, name: string) => Promise<FileActionResult>
   renamePath: (path: string, newName: string, type: 'file' | 'directory') => Promise<FileActionResult>
+  movePath: (path: string, targetDirectoryPath: string) => Promise<FileActionResult>
   deleteFilePath: (path: string) => Promise<FileActionResult>
   deleteDirectoryPath: (path: string) => Promise<FileActionResult>
   renameOpenFile: (oldPath: string, newPath: string, newName: string) => void
@@ -2088,6 +2109,11 @@ export const useApp = create<AppState>((set, get) => {
       : type === 'directory'
         ? api.fs.renameDirectory(path, newName)
         : api.fs.renameFile(path, newName)
+  },
+
+  movePath(path, targetDirectoryPath) {
+    const id = get().activeSsh
+    return id ? sshMovePath(id, path, targetDirectoryPath) : api.fs.movePath(path, targetDirectoryPath)
   },
 
   deleteFilePath(path) {

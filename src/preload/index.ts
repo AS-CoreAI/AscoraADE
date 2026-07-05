@@ -112,6 +112,8 @@ const api = {
     openPath: (dir: string): Promise<string> => ipcRenderer.invoke(IPC.fs.openPath, dir),
     importFiles: (root: string, filePaths: string[]): Promise<AttachmentImportResult> =>
       ipcRenderer.invoke(IPC.fs.importFiles, root, filePaths),
+    movePath: (source: string, targetDirectory: string): Promise<FileActionResult> =>
+      ipcRenderer.invoke(IPC.fs.movePath, source, targetDirectory),
     renameFile: (file: string, newName: string): Promise<FileActionResult> =>
       ipcRenderer.invoke(IPC.fs.renameFile, file, newName),
     deleteFile: (file: string): Promise<FileActionResult> =>
