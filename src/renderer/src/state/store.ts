@@ -797,20 +797,86 @@ function applyLanguage(language: AppLanguage): void {
 /** Parse a fenced ```tool_call / ```json block from assistant text (fallback path). */
 function parseTextToolCall(content: string): { call: ParsedCall; block: string } | null {
   const fence = content.match(/```(?:tool_call|json)?\s*([\s\S]*?)```/i)
-  if (!fence) return null
-  try {
-    const obj = JSON.parse(fence[1].trim()) as Record<string, unknown>
-    const name = asStr(obj.tool) || asStr(obj.name)
-    if (!isToolName(name)) return null
-    const rawArgs = obj.args ?? obj.arguments ?? {}
-    const args =
-      rawArgs && typeof rawArgs === 'object'
-        ? (rawArgs as Record<string, unknown>)
-        : safeArgs(asStr(rawArgs))
-    return { call: { id: `call_${Math.random().toString(36).slice(2, 9)}`, name, args }, block: fence[0] }
-  } catch {
-    return null
+  if (fence) {
+    const call = toolCallFromJson(fence[1])
+    if (call) return { call, block: fence[0] }
   }
+  // Salvage path: stream loss can eat the opening backticks (leaving a bare
+  // "tool_call" label) and web-chat models sometimes skip the fence entirely —
+  // find a bare {"tool": ...} object and cut it out with a balanced scan.
+  const start = content.search(/\{\s*"(?:tool|name)"\s*:/)
+  if (start < 0) return null
+  const json = scanJsonObject(content, start)
+  const call = json ? toolCallFromJson(json) : null
+  if (!json || !call) return null
+  // Sweep the fence remnants around the object into the removed block.
+  const before = /(?:`{1,3})?(?:tool_call|json)?\s*$/i.exec(content.slice(0, start))
+  const after = /^\s*`{0,3}/.exec(content.slice(start + json.length))
+  return { call, block: `${before?.[0] ?? ''}${json}${after?.[0] ?? ''}` }
+}
+
+/** Parse `{"tool"|"name", "args"|"arguments"}` JSON into a ParsedCall. */
+function toolCallFromJson(text: string): ParsedCall | null {
+  // Models often put literal newlines inside multi-line string args, which
+  // strict JSON rejects — retry with control characters escaped.
+  for (const candidate of [text.trim(), escapeCtrlInJsonStrings(text.trim())]) {
+    try {
+      const obj = JSON.parse(candidate) as Record<string, unknown>
+      const name = asStr(obj.tool) || asStr(obj.name)
+      if (!isToolName(name)) return null
+      const rawArgs = obj.args ?? obj.arguments ?? {}
+      const args =
+        rawArgs && typeof rawArgs === 'object'
+          ? (rawArgs as Record<string, unknown>)
+          : safeArgs(asStr(rawArgs))
+      return { id: `call_${Math.random().toString(36).slice(2, 9)}`, name, args }
+    } catch {
+      /* try the escaped variant */
+    }
+  }
+  return null
+}
+
+/** Escape raw control characters found inside JSON string literals. */
+function escapeCtrlInJsonStrings(text: string): string {
+  let out = ''
+  let inStr = false
+  for (let i = 0; i < text.length; i += 1) {
+    const ch = text[i]
+    if (!inStr) {
+      if (ch === '"') inStr = true
+      out += ch
+    } else if (ch === '\\') {
+      out += ch + (text[i + 1] ?? '')
+      i += 1
+    } else if (ch === '"') {
+      inStr = false
+      out += ch
+    } else if (ch === '\n') out += '\\n'
+    else if (ch === '\r') out += '\\r'
+    else if (ch === '\t') out += '\\t'
+    else out += ch
+  }
+  return out
+}
+
+/** Cut one balanced `{...}` object out of `text` starting at `start`. */
+function scanJsonObject(text: string, start: number): string | null {
+  let depth = 0
+  let inStr = false
+  for (let i = start; i < text.length; i += 1) {
+    const ch = text[i]
+    if (inStr) {
+      if (ch === '\\') i += 1
+      else if (ch === '"') inStr = false
+    } else if (ch === '"') inStr = true
+    else if (ch === '{') depth += 1
+    else if (ch === '}') {
+      depth -= 1
+      if (depth === 0) return text.slice(start, i + 1)
+    }
+  }
+  return null
 }
 
 /** Map a Codex `status` string onto our tool-card lifecycle. */

@@ -3282,9 +3282,19 @@ button.changes-badge:hover {
   display: flex;
   align-items: center;
   gap: 11px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  transition: all 0.15s ease;
+  cursor: default;
+}
+.an-model-row.is-active {
+  background: var(--bg-hover);
+  transform: scale(1.02);
+  box-shadow: 0 0 16px rgba(63, 207, 142, 0.08);
 }
 .an-model-row.is-active .an-model-name {
   color: var(--accent);
+  font-weight: 600;
 }
 .an-model-text {
   display: flex;

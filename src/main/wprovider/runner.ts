@@ -264,17 +264,29 @@ function record(value: unknown): Record<string, unknown> | null {
  * frame that switches targets carries `p` — the token frames that follow are
  * bare `{ "v": "token" }` and mean "keep appending at the last declared path",
  * so the parser keeps that cursor on the op across frames. Strings default to
- * APPEND; SET/PATCH re-send state the page already rendered and are never
- * emitted (a missed answer still surfaces through the DOM fallback).
+ * APPEND; SET/PATCH carry snapshots of already-accumulated state, so they are
+ * reconciled — only the tail that extends what already streamed is emitted.
+ * The FIRST answer/think tokens often arrive as such a snapshot; dropping
+ * them outright cut the opening characters of every DeepSeek reply.
  */
 function extractDeepSeekDeltas(
   op: ActiveOp,
   json: Record<string, unknown>
 ): { text: string; phase?: string }[] {
   const out: { text: string; phase?: string }[] = []
+  // Emitted for this frame but not yet folded into op.content/op.thinking.
+  const pending = { answer: '', think: '' }
   const emit = (text: string, phase: DeepSeekPhase): void => {
     if (!text || phase === 'skip') return
+    pending[phase] += text
     out.push({ text, phase: phase === 'think' ? 'think' : undefined })
+  }
+  const reconcile = (snapshot: string, phase: DeepSeekPhase): void => {
+    if (!snapshot || phase === 'skip') return
+    const have = (phase === 'think' ? op.thinking : op.content) + pending[phase]
+    if (snapshot.length > have.length && snapshot.startsWith(have)) {
+      emit(snapshot.slice(have.length), phase)
+    }
   }
 
   const visitUpdate = (value: unknown, parentPath: string): void => {
@@ -294,16 +306,22 @@ function extractDeepSeekDeltas(
     }
     if (typeof payload === 'string') {
       if (oper === '' || oper === 'APPEND') emit(payload, op.dsCursor)
+      else reconcile(payload, op.dsCursor)
       return
     }
-    if (oper === 'APPEND') appendFragment(payload, path)
+    if (oper === 'APPEND') appendFragment(payload, path, emit)
+    else if (oper === 'SET' || oper === 'PATCH') appendFragment(payload, path, reconcile)
   }
 
   // A fragment appended to "response/fragments" carries the text type (THINK /
   // RESPONSE / ...); bare token frames that follow extend that fragment.
-  const appendFragment = (value: unknown, path: string): void => {
+  const appendFragment = (
+    value: unknown,
+    path: string,
+    sink: (text: string, phase: DeepSeekPhase) => void
+  ): void => {
     if (Array.isArray(value)) {
-      for (const item of value) appendFragment(item, path)
+      for (const item of value) appendFragment(item, path, sink)
       return
     }
     const obj = record(value)
@@ -314,11 +332,11 @@ function extractDeepSeekDeltas(
     for (const key of ['content', 'text', 'markdown']) {
       const text = obj[key]
       if (typeof text === 'string') {
-        emit(text, phase)
+        sink(text, phase)
         return
       }
     }
-    if (obj.v !== undefined) appendFragment(obj.v, path)
+    if (obj.v !== undefined) appendFragment(obj.v, path, sink)
   }
 
   visitUpdate(json, '')

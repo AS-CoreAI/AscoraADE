@@ -6,10 +6,13 @@ What's new?
 - **Expandable task lists in the left rail** — workspace task lists now show the five most recent tasks by default, with localized Show more / Show less controls for longer histories.
 
 ### Changed
-- **Analytics model donut is interactive** — hovering a model segment or model row now highlights that model and shows its token share and count in the donut center.
+- **Analytics model donut is interactive** — hovering a model segment or model row now highlights that model and shows its token share and count in the donut center. The hovered model's row in the legend is highlighted too: it gets a hover background, a subtle scale-up with an accent glow, and its name turns bold in the accent color.
+- **Version bump to 1.2.1** — the About section in the left-rail footer now reports version 1.2.1 (English and Russian).
 
 ### Fixed
 - **DeepSeek WProvider replies are no longer garbled or truncated** — the stream parser now implements DeepSeek's patch protocol: bare `{"v": "token"}` continuation frames append at the last declared path instead of being dropped, and non-answer updates (chat title, thinking summaries, statuses) are classified by path/fragment type and kept out of the reply. Qwen's OpenAI-style stream parsing is unchanged.
+- **DeepSeek WProvider replies no longer lose their first characters** — SET/PATCH snapshot frames (which often carry the first tokens of the answer and of each reasoning block) are now reconciled against the text already streamed and the missing head is emitted, instead of the frames being dropped wholesale.
+- **Text-protocol tool calls are parsed more tolerantly** — a `tool_call` block still runs when the opening backticks were lost in transit (bare `tool_call` label or fence-less `{"tool": ...}` JSON found via a balanced-brace scan) and when the model put literal newlines inside JSON string args (control characters inside strings are escaped on a retry). Fence remnants are still stripped from the chat bubble.
 
 ## Ascora ADE 1.2.0
 What's new?
