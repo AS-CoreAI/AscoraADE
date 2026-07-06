@@ -372,9 +372,26 @@ export const GLM_MODES: GlmMode[] = ['plan', 'build', 'edit', 'yolo']
 // (the fenced ```tool_call blocks), since web chats have no native tool calls.
 
 /** Which web chat the WProvider drives. */
-export type WProviderService = 'qwen' | 'deepseek' | 'alice' | 'mistral' | 'claude'
+export type WProviderService =
+  | 'qwen'
+  | 'deepseek'
+  | 'alice'
+  | 'mistral'
+  | 'claude'
+  | 'grok'
+  | 'gemini'
+  | 'chatgpt'
 
-export const WPROVIDER_SERVICES: WProviderService[] = ['qwen', 'deepseek', 'alice', 'mistral', 'claude']
+export const WPROVIDER_SERVICES: WProviderService[] = [
+  'qwen',
+  'deepseek',
+  'alice',
+  'mistral',
+  'claude',
+  'grok',
+  'gemini',
+  'chatgpt'
+]
 
 /** Display name + login origin for each supported web service. */
 export const WPROVIDER_SERVICE_INFO: Record<WProviderService, { label: string; origin: string }> = {
@@ -382,7 +399,10 @@ export const WPROVIDER_SERVICE_INFO: Record<WProviderService, { label: string; o
   deepseek: { label: 'DeepSeek', origin: 'https://chat.deepseek.com' },
   alice: { label: 'Alice', origin: 'https://alice.yandex.ru' },
   mistral: { label: 'Mistral', origin: 'https://chat.mistral.ai' },
-  claude: { label: 'Claude', origin: 'https://claude.ai' }
+  claude: { label: 'Claude', origin: 'https://claude.ai' },
+  grok: { label: 'Grok', origin: 'https://grok.com' },
+  gemini: { label: 'Gemini', origin: 'https://gemini.google.com' },
+  chatgpt: { label: 'ChatGPT', origin: 'https://chatgpt.com' }
 }
 
 /** Result of probing the WProvider web session (provider-specific sign-in state). */

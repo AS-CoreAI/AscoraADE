@@ -98,6 +98,7 @@ function serviceOrigin(service: WProviderService): string {
 
 function serviceChatUrl(service: WProviderService): string {
   const origin = serviceOrigin(service)
+  if (service === 'gemini') return `${origin}/app`
   if (service === 'claude') return `${origin}/new`
   if (service === 'mistral') return `${origin}/work`
   return `${origin}/`
@@ -110,7 +111,14 @@ function serviceLoginUrl(service: WProviderService): string {
 }
 
 function usesRenderedDomCapture(service: WProviderService): boolean {
-  return service === 'alice' || service === 'mistral' || service === 'claude'
+  return (
+    service === 'alice' ||
+    service === 'mistral' ||
+    service === 'claude' ||
+    service === 'grok' ||
+    service === 'gemini' ||
+    service === 'chatgpt'
+  )
 }
 
 function wpSession(): Session {
@@ -410,6 +418,12 @@ async function loadURLBestEffort(win: BrowserWindow, url: string, timeoutMs: num
 
 const COMPOSER_SELECTORS = [
   'div.ProseMirror[contenteditable="true"]',
+  'rich-textarea .ql-editor[contenteditable="true"]',
+  '.ql-editor[contenteditable="true"][role="textbox"]',
+  '[data-test-id="textarea-inner"] [contenteditable="true"]',
+  '[contenteditable="true"][aria-label*="Gemini" i]',
+  '#prompt-textarea[contenteditable="true"]',
+  '[contenteditable="true"][aria-label*="ChatGPT" i]',
   '[contenteditable="true"][data-placeholder*="Wpisz" i]',
   '.ProseMirror[contenteditable="true"]',
   'textarea[data-testid="inputbase-textarea"]',
@@ -430,6 +444,8 @@ const SEND_BUTTON_SELECTORS = [
   '[data-highlight-id="alice-oknyx-button"]',
   'button[aria-label*="Wyślij" i]',
   'button[aria-label*="Send" i]',
+  'button[aria-label*="Submit" i]',
+  'button[aria-label*="Отправ" i]',
   'button.bg-state-primary[aria-label]:not([aria-label*="głos" i]):not([aria-label*="voice" i])',
   '#send-message-button',
   '[role="button"].ds-button--primary.ds-button--circle',
@@ -504,6 +520,69 @@ async function throwIfProviderBlocked(win: BrowserWindow, service: WProviderServ
     if (loginVisible) {
       throw new WProviderError(
         'Claude session expired. Open Agent backend settings → Ascora WProvider and sign in again.'
+      )
+    }
+    return
+  }
+  if (service === 'grok') {
+    if (!windowOnService(win, service)) {
+      throw new WProviderError(
+        'Grok session expired. Open Agent backend settings → Ascora WProvider and sign in again.'
+      )
+    }
+    const loginVisible = await runJs<boolean>(
+      win,
+      `(() => {
+        if (${composerLookupJs()}) return false;
+        const text = document.body?.innerText || '';
+        return /Log\\s+in|Sign\\s+in|Continue\\s+with|Войти|Продолжить/i.test(text);
+      })()`
+    ).catch(() => false)
+    if (loginVisible) {
+      throw new WProviderError(
+        'Grok session expired. Open Agent backend settings → Ascora WProvider and sign in again.'
+      )
+    }
+    return
+  }
+  if (service === 'gemini') {
+    if (!windowOnService(win, service)) {
+      throw new WProviderError(
+        'Gemini session expired. Open Agent backend settings → Ascora WProvider and sign in again.'
+      )
+    }
+    const loginVisible = await runJs<boolean>(
+      win,
+      `(() => {
+        if (${composerLookupJs()}) return false;
+        const text = document.body?.innerText || '';
+        return /Log\\s+in|Sign\\s+in|Continue\\s+with|Zaloguj|Войти|Продолжить/i.test(text);
+      })()`
+    ).catch(() => false)
+    if (loginVisible) {
+      throw new WProviderError(
+        'Gemini session expired. Open Agent backend settings → Ascora WProvider and sign in again.'
+      )
+    }
+    return
+  }
+  if (service === 'chatgpt') {
+    if (!windowOnService(win, service)) {
+      throw new WProviderError(
+        'ChatGPT session expired. Open Agent backend settings → Ascora WProvider and sign in again.'
+      )
+    }
+    const loginVisible = await runJs<boolean>(
+      win,
+      `(() => {
+        if (${composerLookupJs()}) return false;
+        const text = document.body?.innerText || '';
+        return /Log\\s+in|Sign\\s+in|Continue\\s+with|Войти|Зарегистр|Продолжить/i.test(text);
+      })()`
+    ).catch(() => false)
+    if (loginVisible) {
+      throw new WProviderError(
+        'ChatGPT session expired. Open Agent backend settings → Ascora WProvider and sign in again.'
       )
     }
     return
@@ -801,6 +880,57 @@ async function checkClaudeLoggedIn(): Promise<boolean> {
   return waitForServiceComposerReady(win, 'claude', 8000)
 }
 
+async function checkGrokLoggedIn(): Promise<boolean> {
+  for (const win of [authWin, hiddenWin]) {
+    if (!win || !windowOnService(win, 'grok')) continue
+    if (await hasComposer(win)) return true
+  }
+
+  // Do not navigate the hidden driver out from under an in-flight generation.
+  if (activeOp) return false
+
+  const win = ensureHiddenWindow()
+  if (!windowOnService(win, 'grok')) {
+    await loadURLBestEffort(win, serviceChatUrl('grok'), 10_000)
+    await sleep(1200)
+  }
+  return waitForServiceComposerReady(win, 'grok', 8000)
+}
+
+async function checkGeminiLoggedIn(): Promise<boolean> {
+  for (const win of [authWin, hiddenWin]) {
+    if (!win || !windowOnService(win, 'gemini')) continue
+    if (await hasComposer(win)) return true
+  }
+
+  // Do not navigate the hidden driver out from under an in-flight generation.
+  if (activeOp) return false
+
+  const win = ensureHiddenWindow()
+  if (!windowOnService(win, 'gemini')) {
+    await loadURLBestEffort(win, serviceChatUrl('gemini'), 10_000)
+    await sleep(1200)
+  }
+  return waitForServiceComposerReady(win, 'gemini', 8000)
+}
+
+async function checkChatGptLoggedIn(): Promise<boolean> {
+  for (const win of [authWin, hiddenWin]) {
+    if (!win || !windowOnService(win, 'chatgpt')) continue
+    if (await hasComposer(win)) return true
+  }
+
+  // Do not navigate the hidden driver out from under an in-flight generation.
+  if (activeOp) return false
+
+  const win = ensureHiddenWindow()
+  if (!windowOnService(win, 'chatgpt')) {
+    await loadURLBestEffort(win, serviceChatUrl('chatgpt'), 10_000)
+    await sleep(1200)
+  }
+  return waitForServiceComposerReady(win, 'chatgpt', 8000)
+}
+
 /** Set the composer's value the React-safe way and confirm it stuck. */
 async function typePrompt(win: BrowserWindow, text: string): Promise<void> {
   const focusResult = await runJs<string>(
@@ -956,7 +1086,7 @@ async function clickSendButton(win: BrowserWindow): Promise<string> {
 }
 
 /**
- * DOM fallback for the final answer. Alice, Mistral, and Claude use this as their
+ * DOM fallback for the final answer. Alice, Mistral, Claude, Grok, Gemini, and ChatGPT use this as their
  * primary capture path because rendered Markdown is more stable there than
  * the sites' private web stream shapes.
  * Long code blocks may be truncated here — Monaco only renders visible lines.
@@ -970,6 +1100,15 @@ function assistantMessageSelector(service: WProviderService): string {
   if (service === 'alice') return '.MarkdownText.MarkdownText_no-bottom-margin, .MarkdownText_no-bottom-margin'
   if (service === 'claude') {
     return '.font-claude-response .standard-markdown, .font-claude-response'
+  }
+  if (service === 'grok') {
+    return '.response-content-markdown.markdown, .response-content-markdown'
+  }
+  if (service === 'gemini') {
+    return 'structured-content-container .markdown-main-panel, message-content .markdown-main-panel, .markdown-main-panel'
+  }
+  if (service === 'chatgpt') {
+    return '[data-message-author-role="assistant"] .markdown, section[data-turn="assistant"] .markdown'
   }
   if (service === 'mistral') {
     return '[data-message-part-type="answer"][data-testid="text-message-part"], [data-message-part-type="answer"]'
@@ -1069,6 +1208,7 @@ async function waitForRenderedAssistant(
 
 function isProviderChatUrl(service: WProviderService, url: string): boolean {
   if (!url.startsWith(serviceOrigin(service))) return false
+  if (service === 'gemini') return /\/app\/[^/?#]+\/?/.test(url)
   if (service === 'claude') return /\/chat\/[^/?#]+\/?/.test(url)
   if (service === 'deepseek') return /\/a\/chat\/s\//.test(url)
   if (service === 'alice') return /\/chat\/[^/?#]+\/?/.test(url)
@@ -1095,6 +1235,15 @@ export async function checkWProvider(service: WProviderService): Promise<WProvid
     }
     if (service === 'claude') {
       return { ok: true, service, loggedIn: await checkClaudeLoggedIn() }
+    }
+    if (service === 'grok') {
+      return { ok: true, service, loggedIn: await checkGrokLoggedIn() }
+    }
+    if (service === 'gemini') {
+      return { ok: true, service, loggedIn: await checkGeminiLoggedIn() }
+    }
+    if (service === 'chatgpt') {
+      return { ok: true, service, loggedIn: await checkChatGptLoggedIn() }
     }
     const cookies = await wpSession().cookies.get({ url: serviceOrigin(service) })
     const loggedIn = cookies.some(
@@ -1149,7 +1298,11 @@ export async function loginWProvider(service: WProviderService): Promise<WProvid
           const loggedIn =
             service === 'deepseek'
               ? await isDeepSeekPromptReady(win, 8000)
-              : service === 'mistral' || service === 'claude'
+              : service === 'mistral' ||
+                  service === 'claude' ||
+                  service === 'grok' ||
+                  service === 'gemini' ||
+                  service === 'chatgpt'
                 ? await waitForServiceComposerReady(win, service, 8000)
                 : (await checkWProvider(service)).loggedIn
           if (loggedIn) {

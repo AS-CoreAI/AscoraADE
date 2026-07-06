@@ -4,10 +4,12 @@ What's new?
 ### Added
 - **Claude web-chat support in Ascora WProvider** — WProvider can now drive `claude.ai` from `https://claude.ai/new`, detect signed-in Claude sessions through the ready composer, type into Claude's ProseMirror prompt box, capture rendered Claude responses, and resume site-side conversations from `/chat/<id>` URLs.
 - **Alice and Mistral web-chat support in Ascora WProvider** — WProvider service metadata now includes Alice (`alice.yandex.ru`) and Mistral (`chat.mistral.ai`) alongside Qwen, DeepSeek, and Claude.
-- **Rendered-response capture for non-SSE web chats** — Alice, Mistral, and Claude use rendered Markdown snapshots as the primary capture path when their private web stream formats are less stable than OpenAI-style SSE.
+- **Grok, Gemini, and ChatGPT web-chat support in Ascora WProvider** — WProvider can now drive `grok.com`, `gemini.google.com/app`, and `chatgpt.com`, detect their signed-in composer states, resume Grok/ChatGPT `/c/<id>` conversations and Gemini `/app/<id>` conversations, and capture rendered assistant Markdown from each site.
+- **Rendered-response capture for non-SSE web chats** — Alice, Mistral, Claude, Grok, Gemini, and ChatGPT use rendered Markdown snapshots as the primary capture path when their private web stream formats are less stable than OpenAI-style SSE.
 
 ### Changed
-- **WProvider composer handling now supports contenteditable prompts** — the hidden web-chat driver can clear, focus, type into, and validate ProseMirror/contenteditable composers as well as textarea-based inputs.
+- **WProvider composer handling now supports contenteditable prompts** — the hidden web-chat driver can clear, focus, type into, and validate ProseMirror, Quill, and other contenteditable composers as well as textarea-based inputs.
+- **WProvider send-control detection handles more localized labels** — send-button lookup now covers English and Russian submit labels used by the newly supported web chats.
 - **WProvider sign-in checks now run sequentially** — the renderer probes each web service one at a time so services that need the shared hidden browser do not navigate it concurrently during availability checks.
 - **WProvider diagnostics include contenteditable inputs** — failed composer/send detection now reports visible contenteditable prompt boxes in addition to textareas and send controls.
 
