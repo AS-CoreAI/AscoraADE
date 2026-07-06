@@ -1,28 +1,23 @@
-## Ascora ADE 1.3.1
-What's new?
-
-### Added
-- **Claude web-chat support in Ascora WProvider** — WProvider can now drive `claude.ai` from `https://claude.ai/new`, detect signed-in Claude sessions through the ready composer, type into Claude's ProseMirror prompt box, capture rendered Claude responses, and resume site-side conversations from `/chat/<id>` URLs.
-- **Alice and Mistral web-chat support in Ascora WProvider** — WProvider service metadata now includes Alice (`alice.yandex.ru`) and Mistral (`chat.mistral.ai`) alongside Qwen, DeepSeek, and Claude.
-- **Grok, Gemini, and ChatGPT web-chat support in Ascora WProvider** — WProvider can now drive `grok.com`, `gemini.google.com/app`, and `chatgpt.com`, detect their signed-in composer states, resume Grok/ChatGPT `/c/<id>` conversations and Gemini `/app/<id>` conversations, and capture rendered assistant Markdown from each site.
-- **Rendered-response capture for non-SSE web chats** — Alice, Mistral, Claude, Grok, Gemini, and ChatGPT use rendered Markdown snapshots as the primary capture path when their private web stream formats are less stable than OpenAI-style SSE.
-
-### Changed
-- **WProvider composer handling now supports contenteditable prompts** — the hidden web-chat driver can clear, focus, type into, and validate ProseMirror, Quill, and other contenteditable composers as well as textarea-based inputs.
-- **WProvider send-control detection handles more localized labels** — send-button lookup now covers English and Russian submit labels used by the newly supported web chats.
-- **WProvider sign-in checks now run sequentially** — the renderer probes each web service one at a time so services that need the shared hidden browser do not navigate it concurrently during availability checks.
-- **WProvider diagnostics include contenteditable inputs** — failed composer/send detection now reports visible contenteditable prompt boxes in addition to textareas and send controls.
-
 ## Ascora ADE 1.2.1
 What's new?
 
 ### Added
 - **Explorer drag-and-drop file moves** — files can now be dragged into folders, and folders can be dragged into other folders directly in the Explorer tree. The move flow updates open editor tabs, refreshes the source and target folders, highlights the drop target, and blocks unsafe moves such as moving a folder into itself or over an existing name.
 - **Expandable task lists in the left rail** — workspace task lists now show the five most recent tasks by default, with localized Show more / Show less controls for longer histories.
+- **Update badge opens a changelog modal** — clicking the title-bar "Update" badge now opens a modal listing every published release newer than the running build (version, publish date, and release notes), with localized loading/failure states, the current version, and an Update button that opens the download page.
+- **GitHub Releases fallback for update checks** — when the site's release feed is unreachable, the update check and the changelog list fall back to the public GitHub Releases feed, and the modal's Update button follows whichever source actually answered.
+- **Claude web-chat support in Ascora WProvider** — WProvider can now drive `claude.ai` from `https://claude.ai/new`, detect signed-in Claude sessions through the ready composer, type into Claude's ProseMirror prompt box, capture rendered Claude responses, and resume site-side conversations from `/chat/<id>` URLs.
+- **Alice and Mistral web-chat support in Ascora WProvider** — WProvider service metadata now includes Alice (`alice.yandex.ru`) and Mistral (`chat.mistral.ai`) alongside Qwen, DeepSeek, and Claude.
+- **Grok, Gemini, and ChatGPT web-chat support in Ascora WProvider** — WProvider can now drive `grok.com`, `gemini.google.com/app`, and `chatgpt.com`, detect their signed-in composer states, resume Grok/ChatGPT `/c/<id>` conversations and Gemini `/app/<id>` conversations, and capture rendered assistant Markdown from each site.
+- **Rendered-response capture for non-SSE web chats** — Alice, Mistral, Claude, Grok, Gemini, and ChatGPT use rendered Markdown snapshots as the primary capture path when their private web stream formats are less stable than OpenAI-style SSE.
 
 ### Changed
 - **Analytics model donut is interactive** — hovering a model segment or model row now highlights that model and shows its token share and count in the donut center. The hovered model's row in the legend is highlighted too: it gets a hover background, a subtle scale-up with an accent glow, and its name turns bold in the accent color.
 - **Version bump to 1.2.1** — the About section in the left-rail footer now reports version 1.2.1 (English and Russian).
+- **WProvider composer handling now supports contenteditable prompts** — the hidden web-chat driver can clear, focus, type into, and validate ProseMirror, Quill, and other contenteditable composers as well as textarea-based inputs.
+- **WProvider send-control detection handles more localized labels** — send-button lookup now covers English and Russian submit labels used by the newly supported web chats.
+- **WProvider sign-in checks now run sequentially** — the renderer probes each web service one at a time so services that need the shared hidden browser do not navigate it concurrently during availability checks.
+- **WProvider diagnostics include contenteditable inputs** — failed composer/send detection now reports visible contenteditable prompt boxes in addition to textareas and send controls.
 
 ### Fixed
 - **DeepSeek WProvider replies are no longer garbled or truncated** — the stream parser now implements DeepSeek's patch protocol: bare `{"v": "token"}` continuation frames append at the last declared path instead of being dropped, and non-answer updates (chat title, thinking summaries, statuses) are classified by path/fragment type and kept out of the reply. Qwen's OpenAI-style stream parsing is unchanged.

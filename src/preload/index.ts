@@ -58,7 +58,8 @@ import {
   type AgentEditResult,
   type AgentSearchResult,
   type AgentRunResult,
-  type UpdateInfo
+  type UpdateInfo,
+  type ChangelogInfo
 } from '@shared/ipc'
 
 let lastDroppedFilePaths: string[] = []
@@ -406,8 +407,10 @@ const api = {
       ipcRenderer.invoke(IPC.agent.runCommand, root, command)
   },
   update: {
-    /** Probe the website for a newer build. */
+    /** Probe release feeds for a newer build. */
     check: (): Promise<UpdateInfo> => ipcRenderer.invoke(IPC.update.check),
+    /** Fetch the changelog of releases newer than this build for the update modal. */
+    changelog: (): Promise<ChangelogInfo> => ipcRenderer.invoke(IPC.update.changelog),
     /** Open the download page (or a specific URL) in the system browser. */
     openDownload: (url?: string): Promise<void> =>
       ipcRenderer.invoke(IPC.update.openDownload, url)

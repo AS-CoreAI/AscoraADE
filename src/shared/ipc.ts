@@ -152,6 +152,7 @@ export const IPC = {
   },
   update: {
     check: 'update:check',
+    changelog: 'update:changelog',
     openDownload: 'update:openDownload'
   }
 } as const
@@ -1079,12 +1080,12 @@ export interface AgentRunResult {
   error?: string
 }
 
-// ---------- App updates (checked against ade.ascoreai.com) ----------
+// ---------- App updates (checked against ade.ascoreai.com, then GitHub fallback) ----------
 
 /**
- * Result of probing the website's release feed for a newer build. The renderer
- * uses this to show/hide the title-bar "Update" badge; clicking it opens the
- * download page via `update.openDownload`.
+ * Result of probing the release feeds for a newer build. The renderer uses this
+ * to show/hide the title-bar "Update" badge; clicking it opens the download or
+ * release page via `update.openDownload`.
  */
 export interface UpdateInfo {
   ok: boolean
@@ -1096,9 +1097,35 @@ export interface UpdateInfo {
   updateAvailable: boolean
   /** Changelog/release notes for the latest version (markdown), if any. */
   notes?: string
-  /** Page to open when the user clicks the badge (the site's download section). */
+  /** Page to open when the user clicks the badge. */
   url?: string
-  /** Populated when the feed could not be reached or parsed. */
+  /** Populated when neither feed could be reached or parsed. */
+  error?: string
+}
+
+/** One published release shown in the update modal's changelog list. */
+export interface ReleaseEntry {
+  version: string
+  /** ISO publish date, when the feed provides one. */
+  date?: string
+  /** Release notes (markdown), if any. */
+  notes?: string
+}
+
+/**
+ * Changelog fetched when the user clicks the "Update" badge. Lists releases
+ * newer than the running build (site `/api/releases` first, GitHub releases
+ * as fallback); `url` is where the modal's "Update" button sends the user.
+ */
+export interface ChangelogInfo {
+  ok: boolean
+  /** Which feed answered — the site's changelog or the GitHub fallback. */
+  source?: 'website' | 'github'
+  /** Releases newer than the running build, newest first. */
+  releases: ReleaseEntry[]
+  /** Download/release page matching `source`. */
+  url?: string
+  /** Populated when neither feed could be reached or parsed. */
   error?: string
 }
 

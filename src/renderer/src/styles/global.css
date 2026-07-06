@@ -2453,6 +2453,8 @@ button.changes-badge:hover {
   display: grid;
   place-items: center;
   z-index: 50;
+  /* The update modal renders inside the draggable title bar. */
+  -webkit-app-region: no-drag;
 }
 .modal {
   width: min(520px, 90%);
@@ -2580,6 +2582,64 @@ button.changes-badge:hover {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+}
+
+/* ---------- Update modal ---------- */
+.modal-update {
+  width: min(620px, 92%);
+}
+.modal-update .modal-body {
+  max-height: min(520px, 70vh);
+  overflow-y: auto;
+}
+.update-release-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.update-release {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: var(--bg-input);
+}
+.update-release-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.update-release-version {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+}
+.update-release-date {
+  font-size: 11.5px;
+  color: var(--text-faint);
+}
+.update-release-notes {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.update-modal-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.update-download-btn {
+  background: var(--accent-dim);
+  color: var(--accent);
+  border-color: transparent;
+  font-weight: 600;
+}
+.update-download-btn:hover {
+  background: var(--accent-dim);
+  filter: brightness(1.12);
 }
 
 /* ---------- Skills modal ---------- */
