@@ -39,6 +39,8 @@ const UI_READY_TIMEOUT_MS = 45_000
 const DEEPSEEK_PROMPT_STABLE_MS = 2500
 /** How long after "send" to wait for the completion request to start. */
 const START_TIMEOUT_MS = 25_000
+/** Some services do not expose a stable OpenAI-style stream; wait for rendered markdown to stop changing. */
+const RENDERED_DOM_STABLE_MS = 4000
 /** Abort a generation when the stream goes silent for this long. */
 const INACTIVITY_TIMEOUT_MS = 180_000
 /** Absolute cap on a single turn. */
@@ -92,6 +94,23 @@ let netListenerInstalled = false
 
 function serviceOrigin(service: WProviderService): string {
   return WPROVIDER_SERVICE_INFO[service].origin
+}
+
+function serviceChatUrl(service: WProviderService): string {
+  const origin = serviceOrigin(service)
+  if (service === 'claude') return `${origin}/new`
+  if (service === 'mistral') return `${origin}/work`
+  return `${origin}/`
+}
+
+function serviceLoginUrl(service: WProviderService): string {
+  const origin = serviceOrigin(service)
+  if (service === 'mistral') return `${origin}/chat`
+  return serviceChatUrl(service)
+}
+
+function usesRenderedDomCapture(service: WProviderService): boolean {
+  return service === 'alice' || service === 'mistral' || service === 'claude'
 }
 
 function wpSession(): Session {
@@ -162,6 +181,7 @@ function installNetListener(): void {
     const op = activeOp
     if (!op || event.sender.id !== op.webContentsId) return
     if (!payload || typeof payload !== 'object') return
+    if (usesRenderedDomCapture(op.service)) return
     op.touch()
     if (payload.kind === 'start') {
       op.started = true
@@ -389,6 +409,13 @@ async function loadURLBestEffort(win: BrowserWindow, url: string, timeoutMs: num
 }
 
 const COMPOSER_SELECTORS = [
+  'div.ProseMirror[contenteditable="true"]',
+  '[contenteditable="true"][data-placeholder*="Wpisz" i]',
+  '.ProseMirror[contenteditable="true"]',
+  'textarea[data-testid="inputbase-textarea"]',
+  '[data-highlight-id="alice-input"] textarea',
+  '.AliceInput-TextareaWrapper textarea',
+  'textarea[placeholder*="Спросите" i]',
   'textarea[placeholder*="DeepSeek" i]',
   'textarea[name="search"]',
   'textarea.message-input-textarea',
@@ -398,6 +425,12 @@ const COMPOSER_SELECTORS = [
 ]
 
 const SEND_BUTTON_SELECTORS = [
+  '#oknyx-button',
+  '[data-testid="oknyx"]',
+  '[data-highlight-id="alice-oknyx-button"]',
+  'button[aria-label*="Wyślij" i]',
+  'button[aria-label*="Send" i]',
+  'button.bg-state-primary[aria-label]:not([aria-label*="głos" i]):not([aria-label*="voice" i])',
   '#send-message-button',
   '[role="button"].ds-button--primary.ds-button--circle',
   'button[aria-label*="send" i]',
@@ -433,6 +466,48 @@ async function throwIfProviderBlocked(win: BrowserWindow, service: WProviderServ
     }
     return
   }
+  if (service === 'mistral') {
+    if (!windowOnService(win, service)) {
+      throw new WProviderError(
+        'Mistral session expired. Open Agent backend settings → Ascora WProvider and sign in again.'
+      )
+    }
+    const loginVisible = await runJs<boolean>(
+      win,
+      `(() => {
+        if (${composerLookupJs()}) return false;
+        const text = document.body?.innerText || '';
+        return /Zaloguj\\s+się|Log\\s+in|Sign\\s+in|Se\\s+connecter|Anmelden/i.test(text);
+      })()`
+    ).catch(() => false)
+    if (loginVisible) {
+      throw new WProviderError(
+        'Mistral session expired. Open Agent backend settings → Ascora WProvider and sign in again.'
+      )
+    }
+    return
+  }
+  if (service === 'claude') {
+    if (!windowOnService(win, service)) {
+      throw new WProviderError(
+        'Claude session expired. Open Agent backend settings → Ascora WProvider and sign in again.'
+      )
+    }
+    const loginVisible = await runJs<boolean>(
+      win,
+      `(() => {
+        if (${composerLookupJs()}) return false;
+        const text = document.body?.innerText || '';
+        return /Log\\s+in|Sign\\s+in|Continue\\s+with\\s+Google|Continue\\s+with\\s+email/i.test(text);
+      })()`
+    ).catch(() => false)
+    if (loginVisible) {
+      throw new WProviderError(
+        'Claude session expired. Open Agent backend settings → Ascora WProvider and sign in again.'
+      )
+    }
+    return
+  }
   if (service !== 'qwen') return
   const pendingActivation = await runJs<boolean>(
     win,
@@ -455,6 +530,12 @@ async function readComposerDebug(win: BrowserWindow): Promise<string> {
         disabled: Boolean(ta.disabled),
         hidden: ta.offsetParent === null,
         valueLength: (ta.value || '').length
+      }));
+      const editables = Array.from(document.querySelectorAll('[contenteditable="true"]')).map((el) => ({
+        className: el.className || '',
+        placeholder: el.getAttribute('data-placeholder') || el.getAttribute('aria-label') || '',
+        hidden: el.offsetParent === null,
+        textLength: ((el.innerText || el.textContent) || '').trim().length
       }));
       const sendControls = ${JSON.stringify(SEND_BUTTON_SELECTORS)}.map((sel) => {
         const el = document.querySelector(sel);
@@ -490,6 +571,7 @@ async function readComposerDebug(win: BrowserWindow): Promise<string> {
           : null,
         bodyText: (document.body?.innerText || '').trim().slice(0, 180),
         textareas,
+        editables,
         sendControls
       };
       return JSON.stringify(snapshot);
@@ -671,22 +753,80 @@ async function checkDeepSeekLoggedIn(): Promise<boolean> {
   return isDeepSeekPromptReady(win, 5000)
 }
 
+async function waitForServiceComposerReady(
+  win: BrowserWindow,
+  service: WProviderService,
+  timeoutMs: number
+): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs
+  for (;;) {
+    if (win.isDestroyed() || !windowOnService(win, service)) return false
+    if (await hasComposer(win)) return true
+    if (Date.now() >= deadline) return false
+    await sleep(500)
+  }
+}
+
+async function checkMistralLoggedIn(): Promise<boolean> {
+  for (const win of [authWin, hiddenWin]) {
+    if (!win || !windowOnService(win, 'mistral')) continue
+    if (await hasComposer(win)) return true
+  }
+
+  // Do not navigate the hidden driver out from under an in-flight generation.
+  if (activeOp) return false
+
+  const win = ensureHiddenWindow()
+  if (!windowOnService(win, 'mistral')) {
+    await loadURLBestEffort(win, serviceChatUrl('mistral'), 10_000)
+    await sleep(1200)
+  }
+  return waitForServiceComposerReady(win, 'mistral', 8000)
+}
+
+async function checkClaudeLoggedIn(): Promise<boolean> {
+  for (const win of [authWin, hiddenWin]) {
+    if (!win || !windowOnService(win, 'claude')) continue
+    if (await hasComposer(win)) return true
+  }
+
+  // Do not navigate the hidden driver out from under an in-flight generation.
+  if (activeOp) return false
+
+  const win = ensureHiddenWindow()
+  if (!windowOnService(win, 'claude')) {
+    await loadURLBestEffort(win, serviceChatUrl('claude'), 10_000)
+    await sleep(1200)
+  }
+  return waitForServiceComposerReady(win, 'claude', 8000)
+}
+
 /** Set the composer's value the React-safe way and confirm it stuck. */
 async function typePrompt(win: BrowserWindow, text: string): Promise<void> {
   const focusResult = await runJs<string>(
     win,
     `(() => {
-      const ta = ${composerLookupJs()};
-      if (!ta) return 'no-composer';
-      ta.focus();
-      const proto = Object.getPrototypeOf(ta);
+      const el = ${composerLookupJs()};
+      if (!el) return 'no-composer';
+      el.focus();
+      if (el.isContentEditable) {
+        const selection = window.getSelection();
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        selection?.removeAllRanges();
+        selection?.addRange(range);
+        document.execCommand('delete');
+        el.dispatchEvent(new InputEvent('input', { bubbles: true, cancelable: true, inputType: 'deleteContentBackward' }));
+        return document.activeElement === el || el.contains(document.activeElement) ? 'ok' : 'not-focused';
+      }
+      const proto = Object.getPrototypeOf(el);
       const desc =
         Object.getOwnPropertyDescriptor(proto, 'value') ||
         Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value');
-      if (desc && desc.set) desc.set.call(ta, '');
-      else ta.value = '';
-      ta.dispatchEvent(new InputEvent('input', { bubbles: true, cancelable: true, inputType: 'deleteContentBackward' }));
-      return document.activeElement === ta ? 'ok' : 'not-focused';
+      if (desc && desc.set) desc.set.call(el, '');
+      else el.value = '';
+      el.dispatchEvent(new InputEvent('input', { bubbles: true, cancelable: true, inputType: 'deleteContentBackward' }));
+      return document.activeElement === el ? 'ok' : 'not-focused';
     })()`
   )
   if (focusResult === 'no-composer') throw new WProviderError('Could not find the message box on the chat page.')
@@ -700,9 +840,10 @@ async function typePrompt(win: BrowserWindow, text: string): Promise<void> {
   let result = await runJs<string>(
     win,
     `(() => {
-      const ta = ${composerLookupJs()};
-      if (!ta) return 'no-composer';
-      return ta.value.length > 0 ? 'ok' : 'empty';
+      const el = ${composerLookupJs()};
+      if (!el) return 'no-composer';
+      const value = el.isContentEditable ? (el.innerText || el.textContent || '').trim() : (el.value || '');
+      return value.length > 0 ? 'ok' : 'empty';
     })()`
   )
 
@@ -710,18 +851,24 @@ async function typePrompt(win: BrowserWindow, text: string): Promise<void> {
     result = await runJs<string>(
       win,
       `(() => {
-        const ta = ${composerLookupJs()};
-        if (!ta) return 'no-composer';
-        ta.focus();
-        const proto = Object.getPrototypeOf(ta);
+        const el = ${composerLookupJs()};
+        if (!el) return 'no-composer';
+        el.focus();
+        if (el.isContentEditable) {
+          el.textContent = ${JSON.stringify(text)};
+          el.dispatchEvent(new InputEvent('input', { bubbles: true, cancelable: true, inputType: 'insertText', data: ${JSON.stringify(text)} }));
+          el.dispatchEvent(new Event('change', { bubbles: true }));
+          return (el.innerText || el.textContent || '').trim().length > 0 ? 'ok' : 'empty';
+        }
+        const proto = Object.getPrototypeOf(el);
         const desc =
           Object.getOwnPropertyDescriptor(proto, 'value') ||
           Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value');
-        if (desc && desc.set) desc.set.call(ta, ${JSON.stringify(text)});
-        else ta.value = ${JSON.stringify(text)};
-        ta.dispatchEvent(new InputEvent('input', { bubbles: true, cancelable: true, inputType: 'insertText', data: ${JSON.stringify(text)} }));
-        ta.dispatchEvent(new Event('change', { bubbles: true }));
-        return ta.value.length > 0 ? 'ok' : 'empty';
+        if (desc && desc.set) desc.set.call(el, ${JSON.stringify(text)});
+        else el.value = ${JSON.stringify(text)};
+        el.dispatchEvent(new InputEvent('input', { bubbles: true, cancelable: true, inputType: 'insertText', data: ${JSON.stringify(text)} }));
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+        return el.value.length > 0 ? 'ok' : 'empty';
       })()`
     )
   }
@@ -809,28 +956,124 @@ async function clickSendButton(win: BrowserWindow): Promise<string> {
 }
 
 /**
- * DOM fallback for the final answer, used only when the network tap saw the
- * request but produced no text (site changed its stream format). Long code
- * blocks may be truncated here — Monaco only renders visible lines.
+ * DOM fallback for the final answer. Alice, Mistral, and Claude use this as their
+ * primary capture path because rendered Markdown is more stable there than
+ * the sites' private web stream shapes.
+ * Long code blocks may be truncated here — Monaco only renders visible lines.
  */
-async function readLastAssistantMessage(win: BrowserWindow, service: WProviderService): Promise<string> {
-  const selector =
-    service === 'deepseek'
-      ? '.ds-assistant-message-main-content, .ds-message .ds-markdown, [class*="assistant"] [class*="markdown"]'
-      : '.qwen-chat-message-assistant .custom-qwen-markdown, .qwen-chat-message-assistant, [class*="message-assistant"]'
-  return runJs<string>(
+interface AssistantSnapshot {
+  count: number
+  text: string
+}
+
+function assistantMessageSelector(service: WProviderService): string {
+  if (service === 'alice') return '.MarkdownText.MarkdownText_no-bottom-margin, .MarkdownText_no-bottom-margin'
+  if (service === 'claude') {
+    return '.font-claude-response .standard-markdown, .font-claude-response'
+  }
+  if (service === 'mistral') {
+    return '[data-message-part-type="answer"][data-testid="text-message-part"], [data-message-part-type="answer"]'
+  }
+  return service === 'deepseek'
+    ? '.ds-assistant-message-main-content, .ds-message .ds-markdown, [class*="assistant"] [class*="markdown"]'
+    : '.qwen-chat-message-assistant .custom-qwen-markdown, .qwen-chat-message-assistant, [class*="message-assistant"]'
+}
+
+async function readAssistantSnapshot(win: BrowserWindow, service: WProviderService): Promise<AssistantSnapshot> {
+  const selector = assistantMessageSelector(service)
+  return runJs<AssistantSnapshot>(
     win,
     `(() => {
-      const nodes = document.querySelectorAll(${JSON.stringify(selector)});
-      const last = nodes[nodes.length - 1];
-      return last ? (last.innerText || '').trim() : '';
+      const nodes = Array.from(document.querySelectorAll(${JSON.stringify(selector)}));
+      const clean = (node) => {
+        const clone = node.cloneNode(true);
+        clone.querySelectorAll?.('button, .CodeBlock-HeaderActions, .CodeBlock-StickyWrapper, .CodeBlock-Stopper').forEach((el) => el.remove());
+        return (clone.innerText || clone.textContent || '').replace(/\\n{3,}/g, '\\n\\n').trim();
+      };
+      const texts = nodes.map(clean).filter(Boolean);
+      return { count: nodes.length, text: texts[texts.length - 1] || '' };
     })()`
-  ).catch(() => '')
+  ).catch(() => ({ count: 0, text: '' }))
+}
+
+async function readLastAssistantMessage(win: BrowserWindow, service: WProviderService): Promise<string> {
+  return (await readAssistantSnapshot(win, service)).text
+}
+
+async function waitForRenderedAssistant(
+  win: BrowserWindow,
+  service: WProviderService,
+  before: AssistantSnapshot,
+  prompt: string,
+  id: string
+): Promise<string> {
+  const startDeadline = Date.now() + START_TIMEOUT_MS
+  let lastText = ''
+  let emitted = ''
+  let lastChange = Date.now()
+  let nextSendAttempt = 0
+
+  for (;;) {
+    if (activeOp?.id !== id) return ''
+    await throwIfProviderBlocked(win, service)
+
+    const snapshot = await readAssistantSnapshot(win, service)
+    let text =
+      snapshot.count > before.count || (snapshot.text && snapshot.text !== before.text)
+        ? snapshot.text
+        : ''
+
+    if (text && (text === prompt || prompt.includes(text) || text.includes(prompt.slice(0, 200)))) {
+      text = ''
+    }
+
+    if (text && text !== lastText) {
+      lastText = text
+      lastChange = Date.now()
+      const op = activeOp
+      if (op?.id === id) {
+        op.started = true
+        op.content = text
+        op.touch()
+        if (text.startsWith(emitted)) {
+          const delta = text.slice(emitted.length)
+          emitted = text
+          if (delta) op.onDelta(delta)
+        } else if (!emitted) {
+          emitted = text
+          op.onDelta(text)
+        } else {
+          emitted = text
+        }
+      }
+    }
+
+    if (lastText && Date.now() - lastChange >= RENDERED_DOM_STABLE_MS) return lastText
+
+    if (!lastText) {
+      if (Date.now() > startDeadline) {
+        const debug = await readComposerDebug(win)
+        throw new WProviderError(
+          `The prompt was typed but ${WPROVIDER_SERVICE_INFO[service].label} did not render an answer. Diagnostics: ${debug}`
+        )
+      }
+      if (Date.now() >= nextSendAttempt) {
+        await clickSendButton(win).catch(() => 'none')
+        nextSendAttempt = Date.now() + 1000
+      }
+    }
+
+    await sleep(500)
+  }
 }
 
 function isProviderChatUrl(service: WProviderService, url: string): boolean {
   if (!url.startsWith(serviceOrigin(service))) return false
-  return service === 'deepseek' ? /\/a\/chat\/s\//.test(url) : /\/c\//.test(url)
+  if (service === 'claude') return /\/chat\/[^/?#]+\/?/.test(url)
+  if (service === 'deepseek') return /\/a\/chat\/s\//.test(url)
+  if (service === 'alice') return /\/chat\/[^/?#]+\/?/.test(url)
+  if (service === 'mistral') return /\/(?:work|chat)(?:[/?#]|$)/.test(url)
+  return /\/c\//.test(url)
 }
 
 function sleep(ms: number): Promise<void> {
@@ -841,8 +1084,17 @@ function sleep(ms: number): Promise<void> {
 
 export async function checkWProvider(service: WProviderService): Promise<WProviderCheckResult> {
   try {
+    if (service === 'alice') {
+      return { ok: true, service, loggedIn: true }
+    }
     if (service === 'deepseek') {
       return { ok: true, service, loggedIn: await checkDeepSeekLoggedIn() }
+    }
+    if (service === 'mistral') {
+      return { ok: true, service, loggedIn: await checkMistralLoggedIn() }
+    }
+    if (service === 'claude') {
+      return { ok: true, service, loggedIn: await checkClaudeLoggedIn() }
     }
     const cookies = await wpSession().cookies.get({ url: serviceOrigin(service) })
     const loggedIn = cookies.some(
@@ -870,7 +1122,7 @@ export async function loginWProvider(service: WProviderService): Promise<WProvid
     authWin = null
   })
   try {
-    await loadURLBestEffort(win, serviceOrigin(service), 15_000)
+    await loadURLBestEffort(win, serviceLoginUrl(service), 15_000)
   } catch {
     /* keep the window open anyway — the user may retry inside it */
   }
@@ -893,10 +1145,13 @@ export async function loginWProvider(service: WProviderService): Promise<WProvid
             settle({ ok: true, loggedIn: (await checkWProvider(service)).loggedIn })
             return
           }
+          if (service === 'alice') return
           const loggedIn =
             service === 'deepseek'
               ? await isDeepSeekPromptReady(win, 8000)
-              : (await checkWProvider(service)).loggedIn
+              : service === 'mistral' || service === 'claude'
+                ? await waitForServiceComposerReady(win, service, 8000)
+                : (await checkWProvider(service)).loggedIn
           if (loggedIn) {
             if (service !== 'deepseek' && !win.isDestroyed()) win.close()
             settle({ ok: true, loggedIn: true })
@@ -983,9 +1238,9 @@ async function runChatTurn(
   if (!prompt) throw new WProviderError('Nothing new to send to the web chat.')
 
   const win = ensureHiddenWindow()
-  const origin = serviceOrigin(service)
-  await loadChat(win, service, sess.chatUrl ?? `${origin}/`)
+  await loadChat(win, service, sess.chatUrl ?? serviceChatUrl(service))
 
+  const renderedBefore = usesRenderedDomCapture(service) ? await readAssistantSnapshot(win, service) : null
   await typePrompt(win, prompt)
 
   const result = await new Promise<ChatResult>((resolve, reject) => {
@@ -1042,6 +1297,23 @@ async function runChatTurn(
       // swaps state after React processes the textarea input.
       await sleep(250)
       await pressEnter(win)
+      if (usesRenderedDomCapture(service)) {
+        const text = await waitForRenderedAssistant(
+          win,
+          service,
+          renderedBefore ?? { count: 0, text: '' },
+          prompt,
+          id
+        )
+        if (activeOp?.id !== id) return
+        if (!text.trim()) {
+          fail('The web chat answered, but the reply could not be captured from the page.')
+          return
+        }
+        activeOp.content = text
+        finalizeActiveOp()
+        return
+      }
       const startDeadline = Date.now() + START_TIMEOUT_MS
       let nextSendAttempt = 0
       while (activeOp?.id === id && !activeOp.started) {

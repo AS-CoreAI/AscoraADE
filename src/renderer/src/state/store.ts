@@ -2839,9 +2839,10 @@ export const useApp = create<AppState>((set, get) => {
     try {
       // Check every service, not just the active one, so the quick-switch
       // picker in the composer can grey out ones that aren't signed in yet.
-      const results = await Promise.all(
-        WPROVIDER_SERVICES.map((service) =>
-          api.wprovider.check(service).catch(
+      const results: WProviderCheckResult[] = []
+      for (const service of WPROVIDER_SERVICES) {
+        results.push(
+          await api.wprovider.check(service).catch(
             (err): WProviderCheckResult => ({
               ok: false,
               service,
@@ -2850,7 +2851,7 @@ export const useApp = create<AppState>((set, get) => {
             })
           )
         )
-      )
+      }
       const wproviderChecks = Object.fromEntries(results.map((r) => [r.service, r])) as Partial<
         Record<WProviderService, WProviderCheckResult>
       >

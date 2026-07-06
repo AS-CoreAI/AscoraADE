@@ -1,3 +1,16 @@
+## Ascora ADE 1.3.1
+What's new?
+
+### Added
+- **Claude web-chat support in Ascora WProvider** — WProvider can now drive `claude.ai` from `https://claude.ai/new`, detect signed-in Claude sessions through the ready composer, type into Claude's ProseMirror prompt box, capture rendered Claude responses, and resume site-side conversations from `/chat/<id>` URLs.
+- **Alice and Mistral web-chat support in Ascora WProvider** — WProvider service metadata now includes Alice (`alice.yandex.ru`) and Mistral (`chat.mistral.ai`) alongside Qwen, DeepSeek, and Claude.
+- **Rendered-response capture for non-SSE web chats** — Alice, Mistral, and Claude use rendered Markdown snapshots as the primary capture path when their private web stream formats are less stable than OpenAI-style SSE.
+
+### Changed
+- **WProvider composer handling now supports contenteditable prompts** — the hidden web-chat driver can clear, focus, type into, and validate ProseMirror/contenteditable composers as well as textarea-based inputs.
+- **WProvider sign-in checks now run sequentially** — the renderer probes each web service one at a time so services that need the shared hidden browser do not navigate it concurrently during availability checks.
+- **WProvider diagnostics include contenteditable inputs** — failed composer/send detection now reports visible contenteditable prompt boxes in addition to textareas and send controls.
+
 ## Ascora ADE 1.2.1
 What's new?
 
