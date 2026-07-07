@@ -1,3 +1,15 @@
+## Ascora ADE 1.2.2
+What's new?
+
+### Added
+
+### Changed
+- **Version bump to 1.2.2** — the About section in the left-rail footer now reports version 1.2.2 (English and Russian).
+- **WProvider sign-in checks run through the shared browser queue** — availability checks are now serialized on the same queue as chat turns (via a shared `enqueueWProviderOp` helper), so a `checkWProvider` navigation can no longer collide with an in-flight generation in the single hidden browser window.
+
+### Fixed
+- **Copilot replies are no longer duplicated or garbled** — the Copilot JSONL parser now reads payloads wrapped in `data`, treats `assistant.message` as the one completed answer, and ignores streaming `*_delta`/`*_start` partials, `assistant.reasoning` chunks, session events, and the echoed `user.message` so only the finished reply becomes a chat bubble. Usage and error extraction also read the `data`-wrapped shape, and the original defensive guesser remains as a fallback for older schemas.
+
 ## Ascora ADE 1.2.1
 What's new?
 

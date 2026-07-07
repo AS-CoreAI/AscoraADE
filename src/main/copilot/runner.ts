@@ -589,21 +589,43 @@ export function runCopilot(
         emit({ kind: 'thread', threadId: sid })
       }
 
+      // Copilot's JSONL wraps every payload in `data`; the top-level guessers
+      // below are the fallback for other/older shapes.
+      const data = obj(raw.data)
       const u = usageFromJson(raw)
-      if (u) {
+      const outTokens = Number(data.outputTokens ?? 0) || 0
+      if (u || outTokens) {
         usage = {
-          inputTokens: (usage?.inputTokens ?? 0) + u.inputTokens,
-          outputTokens: (usage?.outputTokens ?? 0) + u.outputTokens
+          inputTokens: (usage?.inputTokens ?? 0) + (u?.inputTokens ?? 0),
+          outputTokens: (usage?.outputTokens ?? 0) + (u?.outputTokens ?? 0) + outTokens
         }
       }
 
       const type = String(raw.type ?? raw.event ?? raw.kind ?? '').toLowerCase()
-      const err = errorTextFromJson(raw)
-      if (err && (type.includes('error') || raw.error != null)) {
+      const err = errorTextFromJson(raw) || errorTextFromJson(data)
+      if (err && (type.includes('error') || raw.error != null || data.error != null)) {
         emit({ kind: 'error', message: err })
         return
       }
 
+      // The finished answer arrives as `assistant.message` with its text under
+      // data.content. Ignore streaming *_delta/_start partials, `assistant.reasoning`
+      // (also carries data.content), and the echoed `user.message` so only the
+      // completed reply becomes a chat bubble.
+      if (type === 'assistant.message') {
+        emitAssistant(str(data.content) || textFromContent(data.content))
+        return
+      }
+      if (
+        type.startsWith('assistant.') ||
+        type.startsWith('session.') ||
+        type === 'user.message' ||
+        type === 'result'
+      ) {
+        return
+      }
+
+      // Fallback for other/older Copilot schemas: the original defensive guesser.
       const text = assistantTextFromJson(raw)
       if (!text) return
       if (

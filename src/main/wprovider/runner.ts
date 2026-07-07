@@ -87,10 +87,19 @@ class WProviderError extends Error {}
 let hiddenWin: BrowserWindow | null = null
 let authWin: BrowserWindow | null = null
 let activeOp: ActiveOp | null = null
-/** Serializes chat turns — one hidden browser, one generation at a time. */
+/** Serializes hidden-browser work — one shared window, one navigation at a time. */
 let queue: Promise<unknown> = Promise.resolve()
 const sessions = new Map<string, ChatSession>()
 let netListenerInstalled = false
+
+function enqueueWProviderOp<T>(run: () => Promise<T>): Promise<T> {
+  const next = queue.then(
+    () => run(),
+    () => run()
+  )
+  queue = next.catch(() => undefined)
+  return next
+}
 
 function serviceOrigin(service: WProviderService): string {
   return WPROVIDER_SERVICE_INFO[service].origin
@@ -1222,7 +1231,7 @@ function sleep(ms: number): Promise<void> {
 
 // ---------------- public surface ----------------
 
-export async function checkWProvider(service: WProviderService): Promise<WProviderCheckResult> {
+async function checkWProviderNow(service: WProviderService): Promise<WProviderCheckResult> {
   try {
     if (service === 'alice') {
       return { ok: true, service, loggedIn: true }
@@ -1253,6 +1262,10 @@ export async function checkWProvider(service: WProviderService): Promise<WProvid
   } catch (err) {
     return { ok: false, service, loggedIn: false, error: err instanceof Error ? err.message : String(err) }
   }
+}
+
+export function checkWProvider(service: WProviderService): Promise<WProviderCheckResult> {
+  return enqueueWProviderOp(() => checkWProviderNow(service))
 }
 
 /**
@@ -1353,9 +1366,7 @@ export function chatWProvider(
   sender: WebContents
 ): Promise<ChatResult> {
   installNetListener()
-  const turn = queue.then(() => runChatTurn(id, service, params, sender))
-  // Keep the queue alive even when a turn fails.
-  queue = turn.catch(() => undefined)
+  const turn = enqueueWProviderOp(() => runChatTurn(id, service, params, sender))
   return turn.catch((err) => ({
     ok: false,
     content: '',
@@ -1369,7 +1380,7 @@ async function runChatTurn(
   params: WProviderChatParams,
   sender: WebContents
 ): Promise<ChatResult> {
-  const { loggedIn } = await checkWProvider(service)
+  const { loggedIn } = await checkWProviderNow(service)
   if (!loggedIn) {
     throw new WProviderError(
       `Not signed in to ${WPROVIDER_SERVICE_INFO[service].label}. Open Agent backend settings → Ascora WProvider and sign in.`
