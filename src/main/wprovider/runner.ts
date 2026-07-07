@@ -408,8 +408,20 @@ function finalizeActiveOp(error?: string): void {
   }
 }
 
-async function runJs<T>(win: BrowserWindow, code: string): Promise<T> {
-  return (await win.webContents.executeJavaScript(code, true)) as T
+/**
+ * `executeJavaScript`'s promise can hang forever (never resolve or reject) if
+ * the frame navigates/reloads mid-execution — a known Electron quirk. Every
+ * caller here polls in a loop with its own deadline, so a stuck call must not
+ * be allowed to block that loop forever; race it against a hard timeout.
+ */
+async function runJs<T>(win: BrowserWindow, code: string, timeoutMs = 8000): Promise<T> {
+  return Promise.race([
+    win.webContents.executeJavaScript(code, true) as Promise<T>,
+    new Promise<T>((_, reject) => {
+      const timer = setTimeout(() => reject(new Error('runJs timed out')), timeoutMs)
+      timer.unref?.()
+    })
+  ])
 }
 
 async function loadURLBestEffort(win: BrowserWindow, url: string, timeoutMs: number): Promise<void> {
@@ -647,7 +659,9 @@ async function readComposerDebug(win: BrowserWindow): Promise<string> {
         };
       });
       const assistantCandidates = Array.from(
-        document.querySelectorAll('[class*="Markdown" i], [class*="message" i], [class*="Message"]')
+        document.querySelectorAll(
+          '[class*="Markdown" i], [class*="message" i], [class*="Message"], [data-message-part-type], [data-testid*="message" i], [data-role], .prose, [role="article"], article'
+        )
       )
         .filter((el) => {
           const t = ((el.innerText || el.textContent) || '').trim();
@@ -657,6 +671,11 @@ async function readComposerDebug(win: BrowserWindow): Promise<string> {
         .map((el) => ({
           tag: el.tagName,
           className: String(el.className || '').slice(0, 140),
+          dataAttrs: Object.fromEntries(
+            Array.from(el.attributes)
+              .filter((a) => a.name.startsWith('data-') || a.name === 'role')
+              .map((a) => [a.name, a.value])
+          ),
           textLength: ((el.innerText || el.textContent) || '').trim().length,
           textHead: ((el.innerText || el.textContent) || '').trim().slice(0, 60)
         }));
@@ -857,6 +876,111 @@ async function checkDeepSeekLoggedIn(): Promise<boolean> {
   return isDeepSeekPromptReady(win, 5000)
 }
 
+/**
+ * Services whose page shows a usable-looking composer even when signed out —
+ * ChatGPT lets anonymous visitors type into the real composer, and Mistral's
+ * login screen carries a stray textarea that composerLookupJs picks up. For
+ * these, composer presence alone must never count as "signed in".
+ */
+const COMPOSER_NOT_ENOUGH_SERVICES: ReadonlySet<WProviderService> = new Set(['mistral', 'chatgpt'])
+
+/**
+ * Structural (language-independent) proof of a signed-in session, keyed by
+ * service. Mistral's UI locale rotates per session (RU/UK/DE/EN observed), so
+ * matching translated "Log in"/"Sign up" text is a losing game — instead we
+ * look for the account sidebar, which only the shadcn/ui `data-sidebar`
+ * component renders once the workspace/account is loaded.
+ */
+const SIGNED_IN_MARKER_SELECTORS: Partial<Record<WProviderService, string>> = {
+  mistral: '[data-sidebar="menu-button"]'
+}
+
+function isAuthPageUrl(url: string): boolean {
+  try {
+    return /\/(auth|log-?in|sign-?in|sign-?up)(?:\/|$)/i.test(new URL(url).pathname)
+  } catch {
+    return false
+  }
+}
+
+/** TEMP DEBUG: reports which signed-out-UI check fired, if any. */
+function signedOutUiDebugJs(): string {
+  return `(() => {
+    const isVisible = (el) => {
+      if (!el) return false;
+      const rect = el.getBoundingClientRect();
+      const style = window.getComputedStyle(el);
+      return (
+        rect.width > 0 &&
+        rect.height > 0 &&
+        style.display !== 'none' &&
+        style.visibility !== 'hidden' &&
+        style.opacity !== '0'
+      );
+    };
+    const describe = (el) => {
+      const rect = el.getBoundingClientRect();
+      return (el.outerHTML || '').slice(0, 200) + ' @ (' + Math.round(rect.left) + ',' + Math.round(rect.top) + ' ' + Math.round(rect.width) + 'x' + Math.round(rect.height) + ')';
+    };
+    const explicit = document.querySelectorAll(
+      '[data-testid="login-button"], [data-testid="signup-button"], [data-testid="mobile-login-button"], [data-testid="mobile-signup-button"]'
+    );
+    const hitExplicit = Array.from(explicit).find(isVisible);
+    if (hitExplicit) return { signedOut: true, reason: 'explicit-testid', el: describe(hitExplicit) };
+    // Contains, not exact-match: real buttons read "Log in to Mistral", "Continue with Google", etc.
+    const loginText = /log\\s?in|sign\\s?in|sign\\s?up|create\\s+account|continue\\s+with\\s+(google|apple|microsoft|email)|zaloguj(\\s+się)?|załóż\\s+konto|se\\s+connecter|anmelden|войти|зарегистрироваться/i;
+    const loginHref = /\\/auth\\/log-?in|\\/log-?in(?:[/?#]|$)|\\/sign-?in(?:[/?#]|$)|auth\\.openai\\.com/i;
+    for (const el of Array.from(document.querySelectorAll('a, button'))) {
+      if (!isVisible(el)) continue;
+      const text = (el.innerText || el.textContent || '').trim();
+      if (text && text.length <= 40 && loginText.test(text)) return { signedOut: true, reason: 'text:' + text, el: describe(el) };
+      const href = typeof el.getAttribute === 'function' ? el.getAttribute('href') || '' : '';
+      if (href && loginHref.test(href)) return { signedOut: true, reason: 'href:' + href, el: describe(el) };
+    }
+    return { signedOut: false };
+  })()`
+}
+
+/**
+ * "Composer present" plus, for COMPOSER_NOT_ENOUGH_SERVICES, "and the page is
+ * not an auth screen and shows no visible login/signup controls".
+ */
+async function serviceComposerSignedIn(win: BrowserWindow, service: WProviderService): Promise<boolean> {
+  if (win.isDestroyed() || !windowOnService(win, service)) return false
+  if (!(await hasComposer(win))) return false
+  if (!COMPOSER_NOT_ENOUGH_SERVICES.has(service)) return true
+
+  const marker = SIGNED_IN_MARKER_SELECTORS[service]
+  if (marker) {
+    const hasMarker = await runJs<boolean>(win, `!!document.querySelector(${JSON.stringify(marker)})`).catch(
+      (err) => {
+        console.log(`[wprovider debug] ${service}: signed-in marker probe failed: ${String(err)}`)
+        return false
+      }
+    )
+    if (!hasMarker) console.log(`[wprovider debug] ${service}: signed-in marker (${marker}) not found yet`)
+    return hasMarker
+  }
+
+  if (isAuthPageUrl(win.webContents.getURL())) {
+    console.log(`[wprovider debug] ${service}: treated as auth page, url=${win.webContents.getURL()}`)
+    return false
+  }
+  // On probe failure err on "signed out": a false "signed in" closes the login
+  // window under the user's cursor, which is the failure mode being avoided.
+  const debug = await runJs<{ signedOut: boolean; reason?: string; el?: string }>(
+    win,
+    signedOutUiDebugJs()
+  ).catch((err) => {
+    console.log(`[wprovider debug] ${service}: signedOutUi probe failed: ${String(err)}`)
+    return { signedOut: true } as { signedOut: boolean; reason?: string; el?: string }
+  })
+  if (debug.signedOut) {
+    console.log(`[wprovider debug] ${service}: signed-out UI detected (${debug.reason}) ${debug.el ?? ''}`)
+  }
+  return !debug.signedOut
+}
+
 async function waitForServiceComposerReady(
   win: BrowserWindow,
   service: WProviderService,
@@ -865,7 +989,7 @@ async function waitForServiceComposerReady(
   const deadline = Date.now() + timeoutMs
   for (;;) {
     if (win.isDestroyed() || !windowOnService(win, service)) return false
-    if (await hasComposer(win)) return true
+    if (await serviceComposerSignedIn(win, service)) return true
     if (Date.now() >= deadline) return false
     await sleep(500)
   }
@@ -942,7 +1066,7 @@ async function checkAliceLoggedIn(): Promise<boolean> {
 async function checkMistralLoggedIn(): Promise<boolean> {
   for (const win of [authWin, hiddenWin]) {
     if (!win || !windowOnService(win, 'mistral')) continue
-    if (await hasComposer(win)) return true
+    if (await serviceComposerSignedIn(win, 'mistral')) return true
   }
 
   // Do not navigate the hidden driver out from under an in-flight generation.
@@ -1010,7 +1134,7 @@ async function checkGeminiLoggedIn(): Promise<boolean> {
 async function checkChatGptLoggedIn(): Promise<boolean> {
   for (const win of [authWin, hiddenWin]) {
     if (!win || !windowOnService(win, 'chatgpt')) continue
-    if (await hasComposer(win)) return true
+    if (await serviceComposerSignedIn(win, 'chatgpt')) return true
   }
 
   // Do not navigate the hidden driver out from under an in-flight generation.
@@ -1226,7 +1350,12 @@ function assistantMessageSelector(service: WProviderService): string {
     return '[data-message-author-role="assistant"] .markdown, section[data-turn="assistant"] .markdown'
   }
   if (service === 'mistral') {
-    return '[data-message-part-type="answer"][data-testid="text-message-part"], [data-message-part-type="answer"]'
+    // The "answer" part-type selector was reverse-engineered against Le Chat's
+    // classic /chat surface. /work ("Vibe") is a separate agentic UI whose
+    // reply parts may use different data-message-part-type values (e.g. plain
+    // "text" instead of "answer") — cast a wider net and let the echoed-prompt
+    // filter in waitForRenderedAssistant discard the user's own bubble.
+    return '[data-message-part-type], [data-testid="text-message-part"], .prose'
   }
   return service === 'deepseek'
     ? '.ds-assistant-message-main-content, .ds-message .ds-markdown, [class*="assistant"] [class*="markdown"]'
