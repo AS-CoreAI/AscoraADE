@@ -63,6 +63,7 @@ interface ChatSession {
 }
 
 type DeepSeekPhase = 'answer' | 'think' | 'skip'
+type AliceAuthState = 'logged-in' | 'logged-out' | 'unknown'
 
 interface ActiveOp {
   id: string
@@ -645,11 +646,26 @@ async function readComposerDebug(win: BrowserWindow): Promise<string> {
           rect: { x: Math.round(rect.x), y: Math.round(rect.y), width: Math.round(rect.width), height: Math.round(rect.height) }
         };
       });
+      const assistantCandidates = Array.from(
+        document.querySelectorAll('[class*="Markdown" i], [class*="message" i], [class*="Message"]')
+      )
+        .filter((el) => {
+          const t = ((el.innerText || el.textContent) || '').trim();
+          return t.length > 0 && t.length < 8000;
+        })
+        .slice(-8)
+        .map((el) => ({
+          tag: el.tagName,
+          className: String(el.className || '').slice(0, 140),
+          textLength: ((el.innerText || el.textContent) || '').trim().length,
+          textHead: ((el.innerText || el.textContent) || '').trim().slice(0, 60)
+        }));
       const snapshot = {
         url: location.href,
         readyState: document.readyState,
         hasMain: Boolean(document.querySelector('main')),
         hasRoot: Boolean(document.querySelector('#root')),
+        assistantCandidates,
         activeElement: document.activeElement
           ? {
               tagName: document.activeElement.tagName,
@@ -855,6 +871,74 @@ async function waitForServiceComposerReady(
   }
 }
 
+function aliceAuthStateJs(): string {
+  return `(() => {
+    const isVisible = (el) => {
+      if (!el) return false;
+      const rect = el.getBoundingClientRect();
+      const style = window.getComputedStyle(el);
+      return (
+        rect.width > 0 &&
+        rect.height > 0 &&
+        style.display !== 'none' &&
+        style.visibility !== 'hidden' &&
+        style.opacity !== '0'
+      );
+    };
+    const textOf = (el) => ((el.innerText || el.textContent || '').replace(/\\s+/g, ' ').trim());
+    const hasHeaderLogin = Array.from(
+      document.querySelectorAll('.LandingHeader button, .LandingHeader .AliceButton')
+    ).some((el) => isVisible(el) && /^Войти$/i.test(textOf(el)));
+    const hasSidebarLogin =
+      Array.from(document.querySelectorAll('nav.ChatSidebar-ChatsList_unlogged, .ChatListLoginPanel')).some(isVisible) ||
+      Array.from(document.querySelectorAll('nav.ChatSidebar-ChatsList_unlogged button, .ChatListLoginPanel button')).some(
+        (el) => isVisible(el) && /^Войти$/i.test(textOf(el))
+      );
+    if (hasHeaderLogin || hasSidebarLogin) return 'logged-out';
+    if (document.readyState === 'loading') return 'unknown';
+    if (document.body && (document.body.innerText || '').trim()) return 'logged-in';
+    return 'unknown';
+  })()`
+}
+
+async function readAliceAuthState(win: BrowserWindow): Promise<AliceAuthState> {
+  if (!windowOnService(win, 'alice')) return 'unknown'
+  const state = await runJs<string>(win, aliceAuthStateJs()).catch(() => 'unknown')
+  return state === 'logged-in' || state === 'logged-out' ? state : 'unknown'
+}
+
+async function waitForAliceAuthState(win: BrowserWindow, timeoutMs: number): Promise<AliceAuthState> {
+  const deadline = Date.now() + timeoutMs
+  for (;;) {
+    if (win.isDestroyed() || !windowOnService(win, 'alice')) return 'unknown'
+    const state = await readAliceAuthState(win)
+    if (state !== 'unknown') return state
+    if (Date.now() >= deadline) return 'unknown'
+    await sleep(500)
+  }
+}
+
+async function checkAliceLoggedIn(): Promise<boolean> {
+  let sawLoggedOut = false
+  for (const win of [authWin, hiddenWin]) {
+    if (!win || !windowOnService(win, 'alice')) continue
+    const state = await readAliceAuthState(win)
+    if (state === 'logged-in') return true
+    if (state === 'logged-out') sawLoggedOut = true
+  }
+  if (sawLoggedOut) return false
+
+  // Do not navigate the hidden driver out from under an in-flight generation.
+  if (activeOp) return false
+
+  const win = ensureHiddenWindow()
+  if (!windowOnService(win, 'alice')) {
+    await loadURLBestEffort(win, serviceChatUrl('alice'), 10_000)
+    await sleep(1200)
+  }
+  return (await waitForAliceAuthState(win, 8000)) === 'logged-in'
+}
+
 async function checkMistralLoggedIn(): Promise<boolean> {
   for (const win of [authWin, hiddenWin]) {
     if (!win || !windowOnService(win, 'mistral')) continue
@@ -1044,6 +1128,18 @@ async function clickSendButton(win: BrowserWindow): Promise<string> {
   const target = await runJs<{ selector: string; x: number; y: number } | null>(
     win,
     `(() => {
+      // Only click when the prompt is still sitting in the composer. Once the
+      // message went out the composer is empty and the same control may mean
+      // something else — Alice's Oknyx button becomes "stop generation" while
+      // answering and a microphone toggle when idle, so a retry click there
+      // cancels the reply or starts voice input.
+      const composer = ${composerLookupJs()};
+      if (composer) {
+        const pending = composer.isContentEditable
+          ? (composer.innerText || composer.textContent || '').trim()
+          : (composer.value || '').trim();
+        if (!pending) return null;
+      }
       const selectors = ${JSON.stringify(SEND_BUTTON_SELECTORS)};
       for (const sel of selectors) {
         const el = document.querySelector(sel);
@@ -1106,7 +1202,17 @@ interface AssistantSnapshot {
 }
 
 function assistantMessageSelector(service: WProviderService): string {
-  if (service === 'alice') return '.MarkdownText.MarkdownText_no-bottom-margin, .MarkdownText_no-bottom-margin'
+  // Alice's "MarkdownText" bubble class from earlier UI builds is gone in the
+  // current Futuris-based redesign (confirmed via live diagnostics: assistant
+  // and user turns are both `.MessageBubble-Container`, distinguished only by
+  // the `_from-user` modifier on the user's own messages). Match any
+  // MessageBubble-Container that is NOT the user's, plus the legacy
+  // MarkdownText selector for resilience against older/A-B'd builds.
+  // readAssistantSnapshot keeps only the LAST match and waitForRenderedAssistant
+  // filters the echoed prompt, so once the reply renders it is the last match.
+  if (service === 'alice') {
+    return '.MessageBubble-Container:not(.MessageBubble-Container_from-user), [class*="MarkdownText"]'
+  }
   if (service === 'claude') {
     return '.font-claude-response .standard-markdown, .font-claude-response'
   }
@@ -1135,7 +1241,7 @@ async function readAssistantSnapshot(win: BrowserWindow, service: WProviderServi
       const nodes = Array.from(document.querySelectorAll(${JSON.stringify(selector)}));
       const clean = (node) => {
         const clone = node.cloneNode(true);
-        clone.querySelectorAll?.('button, .CodeBlock-HeaderActions, .CodeBlock-StickyWrapper, .CodeBlock-Stopper').forEach((el) => el.remove());
+        clone.querySelectorAll?.('button, .CodeBlock-HeaderActions, .CodeBlock-StickyWrapper, .CodeBlock-Stopper, .MessageBubble-CollapserOverlay').forEach((el) => el.remove());
         return (clone.innerText || clone.textContent || '').replace(/\\n{3,}/g, '\\n\\n').trim();
       };
       const texts = nodes.map(clean).filter(Boolean);
@@ -1234,7 +1340,7 @@ function sleep(ms: number): Promise<void> {
 async function checkWProviderNow(service: WProviderService): Promise<WProviderCheckResult> {
   try {
     if (service === 'alice') {
-      return { ok: true, service, loggedIn: true }
+      return { ok: true, service, loggedIn: await checkAliceLoggedIn() }
     }
     if (service === 'deepseek') {
       return { ok: true, service, loggedIn: await checkDeepSeekLoggedIn() }
@@ -1307,9 +1413,10 @@ export async function loginWProvider(service: WProviderService): Promise<WProvid
             settle({ ok: true, loggedIn: (await checkWProvider(service)).loggedIn })
             return
           }
-          if (service === 'alice') return
           const loggedIn =
-            service === 'deepseek'
+            service === 'alice'
+              ? (await waitForAliceAuthState(win, 8000)) === 'logged-in'
+              : service === 'deepseek'
               ? await isDeepSeekPromptReady(win, 8000)
               : service === 'mistral' ||
                   service === 'claude' ||
