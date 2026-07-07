@@ -835,7 +835,11 @@ function WProviderPanel(): JSX.Element {
             {t('settings.wproviderSignOut')}
           </button>
         )}
-        <button className="btn" onClick={() => void checkWProvider()} disabled={checking}>
+        <button
+          className="btn"
+          onClick={() => void checkWProvider(undefined, { force: true })}
+          disabled={checking}
+        >
           {t('settings.recheck')}
         </button>
       </div>

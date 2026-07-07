@@ -705,15 +705,18 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
             title={t('composer.wproviderModelHint')}
           >
             {WPROVIDER_SERVICES.map((service) => {
-              const signedIn = wproviderChecks[service]?.loggedIn ?? false
+              const result = wproviderChecks[service]
+              // Only grey out services we've actually probed and found signed-out;
+              // leave un-probed ones selectable so picking one runs its own check.
+              const knownSignedOut = result !== undefined && !result.loggedIn
               return (
                 <option
                   key={service}
                   value={service}
-                  disabled={!signedIn}
-                  title={signedIn ? undefined : t('composer.wproviderNotSignedIn', { name: WPROVIDER_SERVICE_INFO[service].label })}
+                  disabled={knownSignedOut}
+                  title={knownSignedOut ? t('composer.wproviderNotSignedIn', { name: WPROVIDER_SERVICE_INFO[service].label }) : undefined}
                 >
-                  {WPROVIDER_SERVICE_INFO[service].label} · Web{signedIn ? '' : ` — ${t('status.signInNeeded')}`}
+                  {WPROVIDER_SERVICE_INFO[service].label} · Web{knownSignedOut ? ` — ${t('status.signInNeeded')}` : ''}
                 </option>
               )
             })}

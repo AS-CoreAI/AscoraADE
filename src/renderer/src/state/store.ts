@@ -37,7 +37,6 @@ import {
   DEFAULT_LLM_CONFIG,
   EXCLUDED_DIRS,
   WPROVIDER_SERVICE_INFO,
-  WPROVIDER_SERVICES,
   isSshCapableProvider,
   normalizeOpenRouterApiKey
 } from '@shared/ipc'
@@ -1352,7 +1351,7 @@ interface AppState {
   setGlmMode: (m: GlmMode) => void
   checkGlm: () => Promise<void>
   setWProviderService: (service: WProviderService) => Promise<void>
-  checkWProvider: () => Promise<void>
+  checkWProvider: (service?: WProviderService, opts?: { force?: boolean }) => Promise<void>
   wproviderLogin: () => Promise<void>
   wproviderLogout: () => Promise<void>
   /** Save the current backend selection against the active workspace. */
@@ -2845,43 +2844,34 @@ export const useApp = create<AppState>((set, get) => {
     if (get().provider === 'wprovider') await get().checkWProvider()
   },
 
-  async checkWProvider() {
-    set({ wproviderChecking: true })
-    try {
-      // Check every service, not just the active one, so the quick-switch
-      // picker in the composer can grey out ones that aren't signed in yet.
-      const results: WProviderCheckResult[] = []
-      for (const service of WPROVIDER_SERVICES) {
-        results.push(
-          await api.wprovider.check(service).catch(
-            (err): WProviderCheckResult => ({
-              ok: false,
-              service,
-              loggedIn: false,
-              error: err instanceof Error ? err.message : String(err)
-            })
-          )
-        )
-      }
-      const wproviderChecks = Object.fromEntries(results.map((r) => [r.service, r])) as Partial<
-        Record<WProviderService, WProviderCheckResult>
-      >
-      set({
-        wproviderCheck: wproviderChecks[get().wproviderService] ?? null,
-        wproviderChecks,
-        wproviderChecking: false
-      })
-    } catch (err) {
-      set({
-        wproviderCheck: {
-          ok: false,
-          service: get().wproviderService,
-          loggedIn: false,
-          error: err instanceof Error ? err.message : String(err)
-        },
-        wproviderChecking: false
-      })
+  async checkWProvider(service, opts) {
+    // Probe only the selected service, not every one — each check drives a
+    // hidden browser, so looping all of them made switching chats/services
+    // needlessly re-verify (and always hit Qwen first). Results accumulate in
+    // `wproviderChecks` so the composer picker can still grey out signed-out ones.
+    const target = service ?? get().wproviderService
+    const cached = get().wproviderChecks[target]
+    // Reuse a prior result on ordinary provider/chat switches so we don't
+    // re-drive the browser every time. Sign-in and the explicit Re-check
+    // button pass { force } to refresh.
+    if (!opts?.force && cached) {
+      if (get().wproviderService === target) set({ wproviderCheck: cached })
+      return
     }
+    set({ wproviderChecking: true })
+    const result = await api.wprovider.check(target).catch(
+      (err): WProviderCheckResult => ({
+        ok: false,
+        service: target,
+        loggedIn: false,
+        error: err instanceof Error ? err.message : String(err)
+      })
+    )
+    set((s) => ({
+      wproviderChecks: { ...s.wproviderChecks, [target]: result },
+      wproviderCheck: get().wproviderService === target ? result : s.wproviderCheck,
+      wproviderChecking: false
+    }))
   },
 
   async wproviderLogin() {
@@ -2892,13 +2882,17 @@ export const useApp = create<AppState>((set, get) => {
     } finally {
       set({ wproviderLoggingIn: false })
     }
-    await get().checkWProvider()
+    await get().checkWProvider(undefined, { force: true })
   },
 
   async wproviderLogout() {
     set({ wproviderChecking: true })
     const res = await api.wprovider.logout().catch(() => null)
-    set({ wproviderCheck: res, wproviderChecking: false })
+    set((s) => ({
+      wproviderCheck: res,
+      wproviderChecks: res ? { ...s.wproviderChecks, [res.service]: res } : s.wproviderChecks,
+      wproviderChecking: false
+    }))
   },
 
   persistWorkspaceLlm() {

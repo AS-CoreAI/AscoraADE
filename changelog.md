@@ -10,6 +10,7 @@ What's new?
 - **Clearer Claude permission-mode labels** — the Claude permission selector now reads Plan mode / Manual / Edit automatically / Auto mode (localized in English and Russian) instead of the generic Plan only / Ask / Auto-edit / Full access wording.
 
 ### Fixed
+- **WProvider no longer re-verifies every web service on each chat switch** — the sign-in check now probes only the currently selected service instead of looping over all of them, and reuses a prior result on ordinary provider/chat switches. Switching between chats or creating a new chat within a workspace (e.g. with DeepSeek pinned) no longer re-drives the hidden browser, and selecting WProvider no longer forces a Qwen check before you can pick another model. Sign-in, sign-out, and the explicit Re-check button still force a fresh probe, and the composer picker only greys out services actually probed as signed-out (un-probed ones stay selectable so picking one runs its own check).
 - **Copilot replies are no longer duplicated or garbled** — the Copilot JSONL parser now reads payloads wrapped in `data`, treats `assistant.message` as the one completed answer, and ignores streaming `*_delta`/`*_start` partials, `assistant.reasoning` chunks, session events, and the echoed `user.message` so only the finished reply becomes a chat bubble. Usage and error extraction also read the `data`-wrapped shape, and the original defensive guesser remains as a fallback for older schemas.
 
 ## Ascora ADE 1.2.1
