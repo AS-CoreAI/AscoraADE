@@ -232,10 +232,24 @@ export interface TaskMessage {
   error?: string
 }
 
+/** CLI-agent session handles that carry a chat's server-side context across
+ *  reopens (each CLI keeps its own history keyed by these ids). Local/web
+ *  backends restore their context from `convo` instead and need none of these. */
+export interface TaskSessions {
+  codexThreadId?: string | null
+  copilotSessionId?: string | null
+  claudeSessionId?: string | null
+  geminiSessionId?: string | null
+  glmSessionId?: string | null
+}
+
 /** Complete persisted task, including display history and LLM context. */
 export interface TaskRecord extends TaskSummary {
   messages: TaskMessage[]
   convo: LlmMessage[]
+  /** CLI-agent session ids, so a reopened chat resumes its session instead of
+   *  starting the agent fresh; absent for older records and non-CLI chats. */
+  sessions?: TaskSessions
 }
 
 // ---------- LLM (provider-agnostic; local OpenAI-compatible, OpenRouter or CLI agents) ----------

@@ -53,10 +53,10 @@ export const PERMISSION_SHORT: Record<ClaudePermissionMode, string> = {
   bypassPermissions: 'Full access'
 }
 export const PERMISSION_SHORT_KEY: Record<ClaudePermissionMode, TranslationKey> = {
-  plan: 'composer.permission.planOnly',
-  default: 'composer.permission.ask',
-  acceptEdits: 'composer.permission.autoEdit',
-  bypassPermissions: 'composer.permission.fullAccess'
+  plan: 'composer.permission.claude.planMode',
+  default: 'composer.permission.claude.manual',
+  acceptEdits: 'composer.permission.claude.editAuto',
+  bypassPermissions: 'composer.permission.claude.auto'
 }
 
 /** Short access labels for the GLM / ZCode permission-mode selector. */

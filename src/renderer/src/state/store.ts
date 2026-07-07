@@ -1948,11 +1948,13 @@ export const useApp = create<AppState>((set, get) => {
         thinking: false,
         thinkingTokens: 0,
         thinkingStartedAt: null,
-        codexThreadId: null,
-        copilotSessionId: null,
-        claudeSessionId: null,
-        geminiSessionId: null,
-        glmSessionId: null,
+        // Restore the CLI session handles so a reopened chat keeps its context;
+        // null for older records and non-CLI chats (which resume from convo).
+        codexThreadId: task.sessions?.codexThreadId ?? null,
+        copilotSessionId: task.sessions?.copilotSessionId ?? null,
+        claudeSessionId: task.sessions?.claudeSessionId ?? null,
+        geminiSessionId: task.sessions?.geminiSessionId ?? null,
+        glmSessionId: task.sessions?.glmSessionId ?? null,
         // Opening a task returns the active context to its workspace, not an SSH host.
         activeSsh: null,
         view: 'workspace'
@@ -2025,7 +2027,16 @@ export const useApp = create<AppState>((set, get) => {
         status,
         updatedAt: Date.now(),
         messages: run.messages,
-        convo: run.convo
+        convo: run.convo,
+        // Keep the CLI session handles so reopening this chat resumes its
+        // server-side context instead of starting the agent from scratch.
+        sessions: {
+          codexThreadId: run.codexThreadId,
+          copilotSessionId: run.copilotSessionId,
+          claudeSessionId: run.claudeSessionId,
+          geminiSessionId: run.geminiSessionId,
+          glmSessionId: run.glmSessionId
+        }
       })
       set((current) => {
         const tasks = current.tasksByWorkspace[summary.workspaceId] ?? []

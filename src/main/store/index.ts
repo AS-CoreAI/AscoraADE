@@ -53,6 +53,15 @@ function parseArray<T>(value: string): T[] {
   }
 }
 
+function parseObject<T extends object>(value: string): T {
+  try {
+    const parsed = JSON.parse(value)
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? (parsed as T) : ({} as T)
+  } catch {
+    return {} as T
+  }
+}
+
 /** File-backed store with atomic writes (write temp, then rename). */
 class JsonStore implements Store {
   readonly persistent = true
@@ -208,6 +217,7 @@ class SqliteStore implements Store {
         updated_at   INTEGER NOT NULL,
         messages_json TEXT NOT NULL DEFAULT '[]',
         convo_json    TEXT NOT NULL DEFAULT '[]',
+        sessions_json TEXT NOT NULL DEFAULT '{}',
         FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
       );
       CREATE TABLE IF NOT EXISTS usage (
@@ -233,6 +243,9 @@ class SqliteStore implements Store {
     }
     if (!columns.some((column) => column.name === 'convo_json')) {
       this.db.exec("ALTER TABLE tasks ADD COLUMN convo_json TEXT NOT NULL DEFAULT '[]'")
+    }
+    if (!columns.some((column) => column.name === 'sessions_json')) {
+      this.db.exec("ALTER TABLE tasks ADD COLUMN sessions_json TEXT NOT NULL DEFAULT '{}'")
     }
     if (!columns.some((column) => column.name === 'deleted_at')) {
       this.db.exec('ALTER TABLE tasks ADD COLUMN deleted_at INTEGER')
@@ -310,7 +323,7 @@ class SqliteStore implements Store {
   getTask(taskId: string): TaskRecord | null {
     const row = this.db
       .prepare(
-        `SELECT id, workspace_id, title, status, updated_at, deleted_at, messages_json, convo_json
+        `SELECT id, workspace_id, title, status, updated_at, deleted_at, messages_json, convo_json, sessions_json
          FROM tasks WHERE id = ? AND deleted_at IS NULL`
       )
       .get(taskId) as
@@ -323,6 +336,7 @@ class SqliteStore implements Store {
           deleted_at: number | null
           messages_json: string
           convo_json: string
+          sessions_json: string
         }
       | undefined
     if (!row) return null
@@ -333,7 +347,8 @@ class SqliteStore implements Store {
       status: row.status,
       updatedAt: row.updated_at,
       messages: parseArray(row.messages_json),
-      convo: parseArray(row.convo_json)
+      convo: parseArray(row.convo_json),
+      sessions: parseObject(row.sessions_json)
     }
   }
 
@@ -341,15 +356,16 @@ class SqliteStore implements Store {
     this.db
       .prepare(
         `INSERT INTO tasks
-           (id, workspace_id, title, status, updated_at, messages_json, convo_json)
-         VALUES (?, ?, ?, ?, ?, ?, ?)
+           (id, workspace_id, title, status, updated_at, messages_json, convo_json, sessions_json)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
            workspace_id = excluded.workspace_id,
            title = excluded.title,
            status = excluded.status,
            updated_at = excluded.updated_at,
            messages_json = excluded.messages_json,
-           convo_json = excluded.convo_json`
+           convo_json = excluded.convo_json,
+           sessions_json = excluded.sessions_json`
       )
       .run(
         task.id,
@@ -358,7 +374,8 @@ class SqliteStore implements Store {
         task.status,
         task.updatedAt,
         JSON.stringify(task.messages),
-        JSON.stringify(task.convo)
+        JSON.stringify(task.convo),
+        JSON.stringify(task.sessions ?? {})
       )
     return taskSummary(task)
   }
