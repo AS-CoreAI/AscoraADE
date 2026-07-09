@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FocusEvent, type JSX, type MouseEvent } from 'react'
+import { Fragment, useEffect, useMemo, useState, type FocusEvent, type JSX, type MouseEvent } from 'react'
 import type { UsageEvent } from '@shared/ipc'
 import { api } from '@/lib/api'
 import { Icon } from '@/components/Icon'
@@ -163,6 +163,8 @@ function TokensPerDay({ data }: { data: Analytics }): JSX.Element {
                 <div
                   key={s.model}
                   className="an-bar-seg"
+                  title={`${d.day}: ${s.model} — ${formatTokens(s.tokens)} tokens`}
+                  aria-label={`${d.day}: ${s.model}, ${s.tokens.toLocaleString()} tokens`}
                   style={{ height: `${(s.tokens / max) * 100}%`, background: colorOf(s.model) }}
                 />
               ))}
@@ -267,6 +269,12 @@ function ModelDonut({ data }: { data: Analytics }): JSX.Element {
 }
 
 function ProjectsTable({ data }: { data: Analytics }): JSX.Element {
+  const [expandedProjects, setExpandedProjects] = useState<Record<string, boolean>>({})
+
+  const toggleProject = (workspaceId: string): void => {
+    setExpandedProjects((current) => ({ ...current, [workspaceId]: !current[workspaceId] }))
+  }
+
   return (
     <div className="an-panel">
       <div className="an-panel-head">
@@ -283,15 +291,64 @@ function ProjectsTable({ data }: { data: Analytics }): JSX.Element {
           </tr>
         </thead>
         <tbody>
-          {data.perProject.map((p) => (
-            <tr key={p.workspaceId}>
-              <td>{p.name}</td>
-              <td className="an-muted">{p.models.join(', ')}</td>
-              <td className="num">{p.sessions}</td>
-              <td className="num">{p.messages}</td>
-              <td className="num">{formatTokens(p.tokens)}</td>
-            </tr>
-          ))}
+          {data.perProject.map((p) => {
+            const expanded = !!expandedProjects[p.workspaceId]
+            return (
+              <Fragment key={p.workspaceId}>
+                <tr className="an-project-row">
+                  <td>
+                    <button
+                      className="an-project-toggle"
+                      type="button"
+                      aria-expanded={expanded}
+                      aria-controls={`project-models-${p.workspaceId}`}
+                      onClick={() => toggleProject(p.workspaceId)}
+                    >
+                      <Icon name={expanded ? 'chevronDown' : 'chevronRight'} size={14} />
+                      <span>{p.name}</span>
+                    </button>
+                  </td>
+                  <td className="an-muted">{p.models.join(', ')}</td>
+                  <td className="num">{p.sessions}</td>
+                  <td className="num">{p.messages}</td>
+                  <td className="num">{formatTokens(p.tokens)}</td>
+                </tr>
+                {expanded && (
+                  <tr className="an-project-details-row">
+                    <td colSpan={5}>
+                      <div className="an-project-models" id={`project-models-${p.workspaceId}`}>
+                        {p.modelStats.map((model) => (
+                          <div className="an-project-model" key={model.model}>
+                            <div className="an-project-model-head">
+                              <span
+                                className="an-dot"
+                                style={{ background: colorAt(data.models.indexOf(model.model)) }}
+                              />
+                              <span className="an-project-model-name">{model.model}</span>
+                              <span className="an-project-model-share">
+                                {Math.round(model.share * 100)}%
+                              </span>
+                            </div>
+                            <div className="an-project-model-metrics">
+                              <span>
+                                Tokens <strong>{formatTokens(model.tokens)}</strong>
+                              </span>
+                              <span>
+                                Sessions <strong>{model.sessions}</strong>
+                              </span>
+                              <span>
+                                Messages <strong>{model.messages}</strong>
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
+            )
+          })}
         </tbody>
       </table>
     </div>

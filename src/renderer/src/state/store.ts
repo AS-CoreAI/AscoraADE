@@ -1247,6 +1247,7 @@ interface AppState {
   loadWorkspaceData: (ws: Workspace) => Promise<void>
   openWorkspace: (ws: Workspace) => Promise<void>
   toggleWorkspaceCollapsed: (id: string) => void
+  setAllWorkspacesCollapsed: (collapsed: boolean) => void
   reorderWorkspaces: (draggedId: string, targetId: string) => void
   openTask: (ws: Workspace, taskId: string) => Promise<void>
   deleteTask: (ws: Workspace, taskId: string) => Promise<void>
@@ -1894,6 +1895,22 @@ export const useApp = create<AppState>((set, get) => {
       const next = { ...s.collapsedWorkspaces }
       if (next[id]) delete next[id]
       else next[id] = true
+      void api.settings.set('workspace.collapsed', next)
+      return { collapsedWorkspaces: next }
+    })
+  },
+
+  setAllWorkspacesCollapsed(collapsed) {
+    set((s) => {
+      // Keep SSH host collapse state intact: this control manages only the
+      // regular Workspaces section in the left rail.
+      const workspaceIds = new Set(s.workspaces.map((workspace) => workspace.id))
+      const next = Object.fromEntries(
+        Object.entries(s.collapsedWorkspaces).filter(([id]) => !workspaceIds.has(id))
+      ) as Record<string, boolean>
+      if (collapsed) {
+        for (const workspace of s.workspaces) next[workspace.id] = true
+      }
       void api.settings.set('workspace.collapsed', next)
       return { collapsedWorkspaces: next }
     })

@@ -1,4 +1,17 @@
+## Ascora ADE 1.2.3
+What's new?
+
+### Added
+- **Codex 5.6 model presets** — the Codex model picker now offers `gpt-5.6-terra` and `gpt-5.6-lunna` alongside the existing presets.
+- **Collapse or expand every workspace at once** — the Workspaces header now has a single toggle that closes all project task lists or reopens them, while leaving SSH host state untouched.
+
+### Changed
+- **Expandable project usage** — Analytics project rows now open into a per-model breakdown with token use, sessions, messages, share of the project, and consistent model colours.
+- **Model names on daily-chart segments** — hovering a coloured token segment now identifies the model and its exact usage for that day.
+- **Version bump to 1.2.3** — package metadata and the About section now report version 1.2.3.
+
 ## Ascora ADE 1.2.2
+
 What's new?
 
 ### Added

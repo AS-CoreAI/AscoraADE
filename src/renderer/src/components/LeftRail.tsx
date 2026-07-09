@@ -48,6 +48,7 @@ export function LeftRail(): JSX.Element {
   const openFolder = useApp((s) => s.openFolder)
   const openWorkspace = useApp((s) => s.openWorkspace)
   const toggleWorkspaceCollapsed = useApp((s) => s.toggleWorkspaceCollapsed)
+  const setAllWorkspacesCollapsed = useApp((s) => s.setAllWorkspacesCollapsed)
   const reorderWorkspaces = useApp((s) => s.reorderWorkspaces)
   const openTask = useApp((s) => s.openTask)
   const deleteTask = useApp((s) => s.deleteTask)
@@ -136,6 +137,7 @@ export function LeftRail(): JSX.Element {
 
   const query = search.trim().toLowerCase()
   const isSearching = query.length > 0
+  const allWorkspacesCollapsed = workspaces.length > 0 && workspaces.every((ws) => collapsedWorkspaces[ws.id])
   // While searching, keep only workspaces that match by name or hold a matching
   // task, force the group open, and narrow the task list to the matches.
   const visibleWorkspaces: VisibleWorkspace[] = workspaces.flatMap((ws) => {
@@ -171,6 +173,14 @@ export function LeftRail(): JSX.Element {
         <span className="actions">
           <button title={t('rail.addFolder')} onClick={openFolder}>
             <Icon name="plus" size={14} />
+          </button>
+          <button
+            title={t(allWorkspacesCollapsed ? 'rail.expandAll' : 'rail.collapseAll')}
+            aria-label={t(allWorkspacesCollapsed ? 'rail.expandAll' : 'rail.collapseAll')}
+            disabled={workspaces.length === 0}
+            onClick={() => setAllWorkspacesCollapsed(!allWorkspacesCollapsed)}
+          >
+            <Icon name="collapse" size={13} />
           </button>
           <button title={t('rail.filter')}>
             <Icon name="filter" size={13} />

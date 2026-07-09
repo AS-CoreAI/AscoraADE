@@ -105,7 +105,14 @@ export const GEMINI_PERMISSION_SHORT_KEY: Record<GeminiApprovalMode, Translation
  * config.toml. The list is just a convenience — any valid id can be typed in
  * connection settings.
  */
-export const CODEX_MODEL_PRESETS = ['gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini', 'gpt-5.3-codex']
+export const CODEX_MODEL_PRESETS = [
+  'gpt-5.6-terra',
+  'gpt-5.6-lunna',
+  'gpt-5.5',
+  'gpt-5.4',
+  'gpt-5.4-mini',
+  'gpt-5.3-codex'
+]
 
 export const COPILOT_MODEL_PRESETS = [
   'auto',

@@ -58,6 +58,8 @@ export interface ProjectStat {
   messages: number
   sessions: number
   models: string[]
+  /** Model-by-model usage within this project (sorted by token count). */
+  modelStats: ModelStat[]
 }
 
 export interface ProviderStat {
@@ -121,7 +123,13 @@ export function aggregate(
   const modelAgg = new Map<string, { tokens: number; messages: number; sessions: Set<string> }>()
   const projectAgg = new Map<
     string,
-    { name: string; tokens: number; messages: number; sessions: Set<string>; models: Set<string> }
+    {
+      name: string
+      tokens: number
+      messages: number
+      sessions: Set<string>
+      models: Map<string, { tokens: number; messages: number; sessions: Set<string> }>
+    }
   >()
   const providerAgg = new Map<string, { tokens: number; messages: number; sessions: Set<string> }>()
   const tokensByDay = new Map<string, number>() // for heatmap intensity
@@ -146,13 +154,21 @@ export function aggregate(
       tokens: 0,
       messages: 0,
       sessions: new Set<string>(),
-      models: new Set<string>()
+      models: new Map<string, { tokens: number; messages: number; sessions: Set<string> }>()
     }
     p.name = e.workspaceName || p.name
     p.tokens += tok
     p.messages += msg
     p.sessions.add(e.taskId)
-    p.models.add(e.model)
+    const projectModel = p.models.get(e.model) ?? {
+      tokens: 0,
+      messages: 0,
+      sessions: new Set<string>()
+    }
+    projectModel.tokens += tok
+    projectModel.messages += msg
+    projectModel.sessions.add(e.taskId)
+    p.models.set(e.model, projectModel)
     projectAgg.set(e.workspaceId, p)
 
     const pr = providerAgg.get(e.provider) ?? { tokens: 0, messages: 0, sessions: new Set<string>() }
@@ -173,14 +189,26 @@ export function aggregate(
     .sort((a, b) => b.tokens - a.tokens)
 
   const perProject: ProjectStat[] = [...projectAgg.entries()]
-    .map(([workspaceId, v]) => ({
-      workspaceId,
-      name: v.name,
-      tokens: v.tokens,
-      messages: v.messages,
-      sessions: v.sessions.size,
-      models: [...v.models]
-    }))
+    .map(([workspaceId, v]) => {
+      const modelStats = [...v.models.entries()]
+        .map(([model, modelUsage]) => ({
+          model,
+          tokens: modelUsage.tokens,
+          messages: modelUsage.messages,
+          sessions: modelUsage.sessions.size,
+          share: v.tokens > 0 ? modelUsage.tokens / v.tokens : 0
+        }))
+        .sort((a, b) => b.tokens - a.tokens)
+      return {
+        workspaceId,
+        name: v.name,
+        tokens: v.tokens,
+        messages: v.messages,
+        sessions: v.sessions.size,
+        models: modelStats.map((model) => model.model),
+        modelStats
+      }
+    })
     .sort((a, b) => b.tokens - a.tokens)
 
   const perProvider: ProviderStat[] = [...providerAgg.entries()]
