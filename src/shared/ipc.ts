@@ -61,7 +61,8 @@ export const IPC = {
     tasks: 'workspace:tasks',
     task: 'workspace:task',
     saveTask: 'workspace:saveTask',
-    deleteTask: 'workspace:deleteTask'
+    deleteTask: 'workspace:deleteTask',
+    restoreTask: 'workspace:restoreTask'
   },
   llm: {
     config: 'llm:config',
@@ -114,6 +115,14 @@ export const IPC = {
     chat: 'wprovider:chat',
     chunk: 'wprovider:chunk',
     abort: 'wprovider:abort'
+  },
+  blueprint: {
+    list: 'blueprint:list',
+    save: 'blueprint:save',
+    remove: 'blueprint:remove',
+    run: 'blueprint:run',
+    stop: 'blueprint:stop',
+    event: 'blueprint:event'
   },
   analytics: {
     record: 'analytics:record',
@@ -442,8 +451,141 @@ export interface WProviderChatParams {
    * chat website carries its own history, unlike a stateless API.
    */
   sessionKey: string
+  /** Optional per-conversation service. Blueprints use this so agents can use
+   *  different signed-in web chats without racing the global settings picker. */
+  service?: WProviderService
   /** Full agent transcript; main relays the not-yet-sent slice to the site. */
   messages: LlmMessage[]
+}
+
+// ---------- Blueprints (independent multi-agent automation scenarios) ----------
+
+export type BlueprintStepType = 'agent' | 'telegram' | 'delay' | 'webhook'
+export type BlueprintRunStatus = 'idle' | 'running' | 'completed' | 'failed' | 'stopped'
+export type BlueprintStepStatus = 'pending' | 'running' | 'completed' | 'failed' | 'skipped'
+
+/** A named WProvider participant. Every participant owns an isolated web-chat session. */
+export interface BlueprintAgent {
+  id: string
+  name: string
+  /** Human-readable responsibility shown in the editor and injected into the system prompt. */
+  role: string
+  /** Stable operating instructions for this participant. */
+  instructions: string
+  /** Web service driven by Ascora WProvider for this participant. */
+  service: WProviderService
+  enabled: boolean
+}
+
+/**
+ * One ordered action in a Blueprint. Type-specific properties are optional so
+ * the renderer can change an action's type without rebuilding the entire form.
+ */
+export interface BlueprintStep {
+  id: string
+  name: string
+  type: BlueprintStepType
+  /** Run the action this many times during one scenario pass (1 by default). */
+  repeat?: number
+  /** Continue with later actions after this one fails. */
+  continueOnError?: boolean
+
+  // agent
+  agentId?: string
+  prompt?: string
+
+  // telegram
+  telegramBotToken?: string
+  telegramChatId?: string
+  message?: string
+
+  // delay
+  delaySeconds?: number
+
+  // generic webhook
+  webhookUrl?: string
+  webhookMethod?: 'POST' | 'PUT' | 'PATCH'
+  /** JSON object serialized as request headers. */
+  webhookHeaders?: string
+  /** Text or JSON body after Blueprint variable interpolation. */
+  webhookBody?: string
+}
+
+export interface BlueprintSchedule {
+  enabled: boolean
+  /** Interval between automatic runs. Kept in minutes to make accidental tight loops unlikely. */
+  intervalMinutes: number
+  /** Input supplied to every scheduled pass. */
+  input?: string
+}
+
+export interface BlueprintStepRun {
+  id: string
+  stepId: string
+  stepName: string
+  type: BlueprintStepType
+  attempt: number
+  status: BlueprintStepStatus
+  startedAt?: number
+  finishedAt?: number
+  output?: string
+  error?: string
+}
+
+export interface BlueprintRunSummary {
+  id: string
+  blueprintId: string
+  trigger: 'manual' | 'schedule'
+  input: string
+  status: BlueprintRunStatus
+  startedAt: number
+  finishedAt?: number
+  steps: BlueprintStepRun[]
+  error?: string
+}
+
+/** Persisted, project-independent automation script. */
+export interface BlueprintDefinition {
+  id: string
+  name: string
+  description: string
+  agents: BlueprintAgent[]
+  steps: BlueprintStep[]
+  schedule: BlueprintSchedule
+  createdAt: number
+  updatedAt: number
+  lastRun?: BlueprintRunSummary
+}
+
+export interface BlueprintRunRequest {
+  blueprintId: string
+  input?: string
+}
+
+export interface BlueprintRunResult {
+  ok: boolean
+  runId?: string
+  error?: string
+}
+
+export type BlueprintEventKind =
+  | 'run-started'
+  | 'step-started'
+  | 'step-delta'
+  | 'step-completed'
+  | 'step-failed'
+  | 'run-completed'
+  | 'run-failed'
+  | 'run-stopped'
+
+/** Live execution event emitted by the main-process Blueprint engine. */
+export interface BlueprintEvent {
+  kind: BlueprintEventKind
+  blueprintId: string
+  runId: string
+  run: BlueprintRunSummary
+  stepId?: string
+  delta?: string
 }
 
 export interface LlmConfig {

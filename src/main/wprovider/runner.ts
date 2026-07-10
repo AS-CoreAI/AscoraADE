@@ -91,6 +91,8 @@ let activeOp: ActiveOp | null = null
 /** Serializes hidden-browser work — one shared window, one navigation at a time. */
 let queue: Promise<unknown> = Promise.resolve()
 const sessions = new Map<string, ChatSession>()
+/** Request ids cancelled while they are still waiting in the shared browser queue. */
+const cancelledOps = new Set<string>()
 let netListenerInstalled = false
 
 function enqueueWProviderOp<T>(run: () => Promise<T>): Promise<T> {
@@ -1571,19 +1573,36 @@ export async function loginWProvider(service: WProviderService): Promise<WProvid
   })
 }
 
-export async function logoutWProvider(service: WProviderService): Promise<WProviderCheckResult> {
+async function logoutWProviderNow(service: WProviderService): Promise<WProviderCheckResult> {
   try {
-    if (hiddenWin && !hiddenWin.isDestroyed()) hiddenWin.destroy()
-    hiddenWin = null
-    sessions.clear()
-    await wpSession().clearStorageData()
+    const origin = serviceOrigin(service)
+    if (
+      hiddenWin &&
+      !hiddenWin.isDestroyed() &&
+      hiddenWin.webContents.getURL().startsWith(origin)
+    ) {
+      hiddenWin.destroy()
+      hiddenWin = null
+    }
+    for (const key of sessions.keys()) {
+      if (key.startsWith(`${service}:`)) sessions.delete(key)
+    }
+    const ses = wpSession()
+    await ses.clearStorageData({ origin })
+    const cookies = await ses.cookies.get({ url: origin })
+    await Promise.all(cookies.map((cookie) => ses.cookies.remove(origin, cookie.name)))
     return { ok: true, service, loggedIn: false }
   } catch (err) {
     return { ok: false, service, loggedIn: false, error: err instanceof Error ? err.message : String(err) }
   }
 }
 
+export function logoutWProvider(service: WProviderService): Promise<WProviderCheckResult> {
+  return enqueueWProviderOp(() => logoutWProviderNow(service))
+}
+
 export function abortWProvider(id: string): void {
+  cancelledOps.add(id)
   const op = activeOp
   if (!op || op.id !== id) return
   op.aborted = true
@@ -1595,28 +1614,42 @@ export function abortWProvider(id: string): void {
   }
 }
 
+/** Drop an in-memory site-chat cursor once a short-lived Blueprint run ends. */
+export function forgetWProviderSession(service: WProviderService, sessionKey: string): void {
+  sessions.delete(`${service}:${sessionKey}`)
+}
+
 export function chatWProvider(
   id: string,
   service: WProviderService,
   params: WProviderChatParams,
-  sender: WebContents
+  sender?: WebContents,
+  onDelta?: (delta: string) => void
 ): Promise<ChatResult> {
   installNetListener()
-  const turn = enqueueWProviderOp(() => runChatTurn(id, service, params, sender))
-  return turn.catch((err) => ({
-    ok: false,
-    content: '',
-    error: err instanceof Error ? err.message : String(err)
-  }))
+  const turn = enqueueWProviderOp(() => {
+    if (cancelledOps.delete(id)) return Promise.resolve({ ok: true, content: '', aborted: true })
+    return runChatTurn(id, service, params, sender, onDelta)
+  })
+  return turn
+    .catch((err) => ({
+      ok: false,
+      content: '',
+      error: err instanceof Error ? err.message : String(err)
+    }))
+    .finally(() => cancelledOps.delete(id))
 }
 
 async function runChatTurn(
   id: string,
   service: WProviderService,
   params: WProviderChatParams,
-  sender: WebContents
+  sender?: WebContents,
+  onDelta?: (delta: string) => void
 ): Promise<ChatResult> {
+  if (cancelledOps.has(id)) return { ok: true, content: '', aborted: true }
   const { loggedIn } = await checkWProviderNow(service)
+  if (cancelledOps.has(id)) return { ok: true, content: '', aborted: true }
   if (!loggedIn) {
     throw new WProviderError(
       `Not signed in to ${WPROVIDER_SERVICE_INFO[service].label}. Open Agent backend settings → Ascora WProvider and sign in.`
@@ -1639,9 +1672,11 @@ async function runChatTurn(
 
   const win = ensureHiddenWindow()
   await loadChat(win, service, sess.chatUrl ?? serviceChatUrl(service))
+  if (cancelledOps.has(id)) return { ok: true, content: '', aborted: true }
 
   const renderedBefore = usesRenderedDomCapture(service) ? await readAssistantSnapshot(win, service) : null
   await typePrompt(win, prompt)
+  if (cancelledOps.has(id)) return { ok: true, content: '', aborted: true }
 
   const result = await new Promise<ChatResult>((resolve, reject) => {
     let inactivity: NodeJS.Timeout | undefined
@@ -1681,7 +1716,8 @@ async function runChatTurn(
       openStreams: 0,
       aborted: false,
       onDelta: (delta) => {
-        if (!sender.isDestroyed()) sender.send(IPC.wprovider.chunk, { id, delta })
+        if (sender && !sender.isDestroyed()) sender.send(IPC.wprovider.chunk, { id, delta })
+        onDelta?.(delta)
       },
       finish: (r) => {
         cleanup()

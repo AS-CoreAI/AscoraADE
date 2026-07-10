@@ -824,6 +824,9 @@ export function AgentChat({ full = false }: { full?: boolean }): JSX.Element {
   const messages = useApp((s) => s.messages)
   const thinking = useApp((s) => s.thinking)
   const appLanguage = useApp((s) => s.appLanguage)
+  const activeTaskId = useApp((s) => s.activeTaskId)
+  const archivedTaskId = useApp((s) => s.archivedTaskId)
+  const readOnly = !!activeTaskId && archivedTaskId === activeTaskId
   const scrollRef = useRef<HTMLDivElement>(null)
 
   useLayoutEffect(() => {
@@ -844,7 +847,9 @@ export function AgentChat({ full = false }: { full?: boolean }): JSX.Element {
         </div>
         <div className="chat-full-composer">
           <div className="chat-col">
-            <Composer showFolder={false} />
+            {readOnly
+              ? <div className="archived-task-notice"><Icon name="archive" size={13} /> Архивная задача доступна только для чтения. Восстановите её, чтобы продолжить.</div>
+              : <Composer showFolder={false} />}
           </div>
         </div>
       </div>
@@ -866,7 +871,9 @@ export function AgentChat({ full = false }: { full?: boolean }): JSX.Element {
           <ThinkingIndicator />
         </div>
         <div className="chat-composer">
-          <Composer showFolder={false} />
+          {readOnly
+            ? <div className="archived-task-notice"><Icon name="archive" size={13} /> Архивная задача доступна только для чтения. Восстановите её, чтобы продолжить.</div>
+            : <Composer showFolder={false} />}
         </div>
       </div>
     </div>

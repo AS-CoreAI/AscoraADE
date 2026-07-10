@@ -203,6 +203,8 @@ function attachmentBlock(files: AttachmentFile[], language: AppLanguage): string
 
 export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.Element {
   const active = useApp((s) => s.active)
+  const archivedTaskId = useApp((s) => s.archivedTaskId)
+  const activeTaskId = useApp((s) => s.activeTaskId)
   const activeSsh = useApp((s) => s.activeSsh)
   const provider = useApp((s) => s.provider)
   const setProvider = useApp((s) => s.setProvider)
@@ -335,8 +337,9 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
       : models.length > 0
         ? models
         : [selectedLocalModel || (provider === 'ollama' ? 'ollama' : 'local-model')]
-  const canSend = text.trim().length > 0 && !!active && !streaming
-  const canAttach = !!active && !activeSsh && !attaching
+  const readOnly = !!activeTaskId && archivedTaskId === activeTaskId
+  const canSend = text.trim().length > 0 && !!active && !streaming && !readOnly
+  const canAttach = !!active && !activeSsh && !attaching && !readOnly
 
   const grow = (): void => {
     const el = ref.current
@@ -468,6 +471,7 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
         ref={ref}
         className="composer-input"
         placeholder={t('composer.placeholder')}
+        disabled={readOnly}
         value={text}
         onChange={(e) => {
           setText(e.target.value)

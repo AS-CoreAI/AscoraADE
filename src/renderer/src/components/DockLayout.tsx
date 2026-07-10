@@ -15,8 +15,11 @@ import { TerminalPanel } from './TerminalPanel'
 import { AgentChat } from './AgentChat'
 import { LivePreview } from './LivePreview'
 import { SshTerminal } from './SshTerminal'
+import { BlueprintStudio } from './BlueprintStudio'
+import { BlueprintHub } from './BlueprintHub'
 import { Icon } from './Icon'
 import { useApp } from '@/state/store'
+import { useBlueprints } from '@/state/blueprints'
 import { tr, type TranslationKey } from '@/language'
 
 /**
@@ -34,6 +37,8 @@ const TITLE_KEYS: Record<string, TranslationKey> = {
   editor: 'dock.editor',
   terminal: 'dock.terminal',
   chat: 'dock.chat',
+  blueprint: 'dock.blueprint',
+  blueprintHub: 'dock.blueprint',
   preview: 'dock.livePreview'
 }
 
@@ -48,6 +53,8 @@ const components: Record<string, FunctionComponent<IDockviewPanelProps>> = {
   editor: () => <EditorPane />,
   terminal: () => <TerminalPanel />,
   chat: () => <AgentChat full />,
+  blueprint: () => <BlueprintStudio />,
+  blueprintHub: () => <BlueprintHub />,
   preview: () => <LivePreview />,
   ssh: (props) => <SshTerminal connId={String((props.params as { connId?: string })?.connId ?? '')} />
 }
@@ -60,16 +67,16 @@ function firstExisting(api: DockviewApi, ids: string[]): string | undefined {
 }
 
 /** Focus a panel, opening it docked (in a sensible spot) if it isn't open yet. */
-function focusOrOpen(api: DockviewApi, id: 'explorer' | 'git' | 'chat'): void {
+function focusOrOpen(api: DockviewApi, id: 'explorer' | 'git' | 'chat' | 'blueprint' | 'blueprintHub'): void {
   const existing = api.getPanel(id)
   if (existing) {
     existing.api.setActive()
     return
   }
-  if (id === 'chat') {
-    const ref = firstExisting(api, ['editor', 'explorer', 'git'])
-    if (ref) api.addPanel({ id, component: id, title: titleOf('chat'), position: { referencePanel: ref, direction: 'right' } })
-    else api.addPanel({ id, component: id, title: titleOf('chat') })
+  if (id === 'chat' || id === 'blueprint' || id === 'blueprintHub') {
+    const ref = firstExisting(api, id === 'chat' ? ['editor', 'explorer', 'git', 'blueprintHub', 'blueprint'] : ['chat', 'editor', 'explorer', 'git'])
+    if (ref) api.addPanel({ id, component: id, title: titleOf(id), position: { referencePanel: ref, direction: 'right' } })
+    else api.addPanel({ id, component: id, title: titleOf(id) })
     return
   }
   // explorer | git — share one left-hand sidebar group (tabbed together).
@@ -167,6 +174,7 @@ export function DockLayout(): JSX.Element {
   const activeSsh = useApp((s) => s.activeSsh)
   const terminalRequest = useApp((s) => s.terminalRequest)
   const setDockLayout = useApp((s) => s.setDockLayout)
+  const blueprintRequest = useBlueprints((s) => s.openRequest)
 
   const onReady = (event: DockviewReadyEvent): void => {
     const api = event.api
@@ -182,7 +190,11 @@ export function DockLayout(): JSX.Element {
         restored = false
       }
     }
-    if (!restored) api.addPanel({ id: 'chat', component: 'chat', title: titleOf('chat') })
+    if (!restored) {
+      const initial = useApp.getState().view === 'blueprint' ? 'blueprint' : 'chat'
+      api.addPanel({ id: initial, component: initial, title: titleOf(initial) })
+    }
+    if (useApp.getState().view === 'blueprint') focusOrOpen(api, 'blueprint')
 
     if (useApp.getState().openFiles.length > 0) ensureEditor(api)
     reconcilePreview(api)
@@ -242,7 +254,12 @@ export function DockLayout(): JSX.Element {
     if (apiRef.current && terminalRequest) ensureTerminal(apiRef.current)
   }, [terminalRequest])
 
-  const open = (id: 'explorer' | 'git' | 'chat'): void => {
+  // A Blueprint selected in the global rail should focus the singleton studio panel.
+  useEffect(() => {
+    if (apiRef.current && blueprintRequest > 0) focusOrOpen(apiRef.current, 'blueprint')
+  }, [blueprintRequest])
+
+  const open = (id: 'explorer' | 'git' | 'chat' | 'blueprint' | 'blueprintHub'): void => {
     if (apiRef.current) focusOrOpen(apiRef.current, id)
   }
 
@@ -269,6 +286,16 @@ export function DockLayout(): JSX.Element {
           onClick={() => open('git')}
         >
           <Icon name="gitBranch" size={19} />
+        </button>
+        <button
+          className={`activity-btn${activeId === 'blueprintHub' ? ' active' : ''}`}
+          title={tr(appLanguage, 'dock.blueprint')}
+          onClick={() => {
+            useApp.setState({ view: 'blueprint' })
+            open('blueprintHub')
+          }}
+        >
+          <Icon name="blueprint" size={19} />
         </button>
       </div>
 

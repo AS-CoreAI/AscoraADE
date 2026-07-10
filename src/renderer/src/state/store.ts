@@ -45,7 +45,7 @@ import { diffStat } from '@/lib/diff'
 import { solveZCodeCaptcha } from '@/lib/zcode-captcha'
 import { isLanguageCode, type LanguageCode } from '@/language'
 
-export type View = 'home' | 'workspace' | 'analytics'
+export type View = 'home' | 'workspace' | 'blueprint' | 'analytics'
 /** Agent permission mode — mirrors ZCode's "Ask before changes" control. */
 export type AgentMode = 'ask' | 'auto'
 export type Connection = 'unknown' | 'connecting' | 'connected' | 'error'
@@ -1100,6 +1100,8 @@ interface AppState {
   active: Workspace | null
   tasksByWorkspace: Record<string, TaskSummary[]>
   activeTaskId: string | null
+  /** Id of a soft-deleted task currently opened in read-only mode. */
+  archivedTaskId: string | null
   activeTaskTitle: string
   /** Backgrounded runs (task id → live state) for tasks not currently foreground. */
   runs: Record<string, RunState>
@@ -1249,7 +1251,8 @@ interface AppState {
   toggleWorkspaceCollapsed: (id: string) => void
   setAllWorkspacesCollapsed: (collapsed: boolean) => void
   reorderWorkspaces: (draggedId: string, targetId: string) => void
-  openTask: (ws: Workspace, taskId: string) => Promise<void>
+  openTask: (ws: Workspace, taskId: string, includeDeleted?: boolean) => Promise<void>
+  restoreTask: (ws: Workspace, taskId: string) => Promise<void>
   deleteTask: (ws: Workspace, taskId: string) => Promise<void>
   saveTaskRun: (taskId: string, status: TaskSummary['status']) => Promise<void>
   goHome: () => void
@@ -1584,6 +1587,7 @@ export const useApp = create<AppState>((set, get) => {
   active: null,
   tasksByWorkspace: {},
   activeTaskId: null,
+  archivedTaskId: null,
   activeTaskTitle: '',
   runs: {},
   treeRoots: [],
@@ -1932,12 +1936,12 @@ export const useApp = create<AppState>((set, get) => {
     })
   },
 
-  async openTask(ws, taskId) {
+  async openTask(ws, taskId, includeDeleted = false) {
     // Re-selecting the task that's already open (e.g. coming back from Analytics
     // while it's still streaming) just returns to it — never reload it from disk,
     // which would clobber the in-flight messages/convo.
     if (get().activeTaskId === taskId) {
-      set({ view: 'workspace' })
+      set({ view: 'workspace', archivedTaskId: includeDeleted ? taskId : null })
       return
     }
     // Stash whatever is streaming in the foreground so it keeps running while we
@@ -1951,11 +1955,12 @@ export const useApp = create<AppState>((set, get) => {
       set({ active: ws, activeSsh: null, view: 'workspace' })
       hydrateForeground(taskId)
     } else {
-      const task = await api.workspace.task(taskId)
+      const task = await api.workspace.task(taskId, includeDeleted)
       if (!task || task.workspaceId !== ws.id) return
       set({
         active: ws,
         activeTaskId: task.id,
+        archivedTaskId: task.deletedAt ? task.id : null,
         activeTaskTitle: task.title,
         messages: task.messages,
         convo: task.convo,
@@ -2029,6 +2034,18 @@ export const useApp = create<AppState>((set, get) => {
           }
         : { tasksByWorkspace: next, runs, taskLlm }
     })
+  },
+
+  async restoreTask(ws, taskId) {
+    const restored = await api.workspace.restoreTask(taskId)
+    if (!restored) return
+    set((state) => ({
+      tasksByWorkspace: {
+        ...state.tasksByWorkspace,
+        [ws.id]: [restored, ...(state.tasksByWorkspace[ws.id] ?? []).filter((task) => task.id !== taskId)]
+      },
+      archivedTaskId: state.archivedTaskId === taskId ? null : state.archivedTaskId
+    }))
   },
 
   async saveTaskRun(taskId, status) {
@@ -3376,13 +3393,22 @@ export const useApp = create<AppState>((set, get) => {
         // The chat request id doubles as this bubble's id so stopStreaming's
         // abort (which sends streamId) reaches the right in-flight turn.
         const result = isWProvider
-          ? await api.wprovider.chat(replyId, { sessionKey: taskId, messages }, onDelta)
+          ? await api.wprovider.chat(
+              replyId,
+              { sessionKey: taskId, service: wproviderService, messages },
+              onDelta
+            )
           : await api.llm.chat(
               crypto.randomUUID(),
               { model: isOpenRouter ? orModel : isOllama ? ollamaModel : lmModel, messages, tools: TOOLS },
               onDelta
             )
         writeRun(taskId, { streamId: null, thinking: false })
+        if (result.aborted || aborted()) {
+          const partial = readRun(taskId)?.messages.find((message) => message.id === replyId)?.text ?? ''
+          if (!partial.trim()) removeMsg(replyId)
+          break
+        }
         // The connection indicator only reflects the foreground backend.
         if (get().activeTaskId === taskId) {
           set({ connection: result.ok ? 'connected' : get().connection })

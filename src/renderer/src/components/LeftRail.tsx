@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type JSX } from 'react'
 import type { TaskSummary, Workspace } from '@shared/ipc'
 import { Icon } from './Icon'
 import { SshRail } from './SshRail'
+import { BlueprintRail } from './BlueprintRail'
 import { useApp, type AppLanguage, type ThemePreference } from '@/state/store'
 import { api } from '@/lib/api'
 import { LANGUAGE_OPTIONS, localeForLanguage, tr, type TranslationKey } from '@/language'
@@ -52,6 +53,7 @@ export function LeftRail(): JSX.Element {
   const reorderWorkspaces = useApp((s) => s.reorderWorkspaces)
   const openTask = useApp((s) => s.openTask)
   const deleteTask = useApp((s) => s.deleteTask)
+  const restoreTask = useApp((s) => s.restoreTask)
   const newTask = useApp((s) => s.newTask)
   const [dragId, setDragId] = useState<string | null>(null)
   const [dragOverId, setDragOverId] = useState<string | null>(null)
@@ -59,6 +61,8 @@ export function LeftRail(): JSX.Element {
   const [showAllTasks, setShowAllTasks] = useState<Record<string, boolean>>({})
   const [search, setSearch] = useState('')
   const [searchOpen, setSearchOpen] = useState(false)
+  const [archiveOpen, setArchiveOpen] = useState(false)
+  const [archivedTasks, setArchivedTasks] = useState<Record<string, TaskSummary[]>>({})
   const searchInputRef = useRef<HTMLInputElement>(null)
   const view = useApp((s) => s.view)
   const openAnalytics = useApp((s) => s.openAnalytics)
@@ -122,6 +126,18 @@ export function LeftRail(): JSX.Element {
     setSearch('')
   }
 
+  const toggleArchive = async (): Promise<void> => {
+    if (archiveOpen) {
+      setArchiveOpen(false)
+      return
+    }
+    const entries = await Promise.all(
+      workspaces.map(async (workspace) => [workspace.id, await api.workspace.tasks(workspace.id, true)] as const)
+    )
+    setArchivedTasks(Object.fromEntries(entries))
+    setArchiveOpen(true)
+  }
+
   // Ctrl/Cmd+K opens the workspace search and focuses the field.
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
@@ -182,9 +198,6 @@ export function LeftRail(): JSX.Element {
           >
             <Icon name="collapse" size={13} />
           </button>
-          <button title={t('rail.filter')}>
-            <Icon name="filter" size={13} />
-          </button>
           <button
             className={searchOpen ? 'active' : undefined}
             title={t('rail.searchWorkspaces')}
@@ -192,7 +205,7 @@ export function LeftRail(): JSX.Element {
           >
             <Icon name="search" size={13} />
           </button>
-          <button title={t('rail.archived')}>
+          <button className={archiveOpen ? 'active' : undefined} title={t('rail.archived')} onClick={() => void toggleArchive()}>
             <Icon name="archive" size={13} />
           </button>
         </span>
@@ -223,6 +236,30 @@ export function LeftRail(): JSX.Element {
       )}
 
       <div className="rail-scroll">
+        {archiveOpen && (
+          <div className="archive-task-list">
+            <div className="archive-task-heading"><Icon name="archive" size={13} /> {t('rail.archived')}</div>
+            {workspaces.flatMap((ws) => (archivedTasks[ws.id] ?? []).map((task) => (
+              <div className={`task-item archived${activeTaskId === task.id ? ' active' : ''}`} key={task.id} role="button" tabIndex={0} onClick={() => void openTask(ws, task.id, true)} onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); void openTask(ws, task.id, true) }
+              }} title={`${ws.name} · ${task.title}`}>
+                <Icon name="archive" size={12} />
+                <span className="name">{task.title}</span>
+                <span className="time">{formatTaskTime(task.deletedAt ?? task.updatedAt, appLanguage)}</span>
+                <button className="task-restore" title="Восстановить задачу" aria-label="Восстановить задачу" onClick={(event) => {
+                  event.stopPropagation()
+                  void restoreTask(ws, task.id).then(() => setArchivedTasks((current) => ({
+                    ...current,
+                    [ws.id]: (current[ws.id] ?? []).filter((item) => item.id !== task.id)
+                  })))
+                }}><Icon name="refresh" size={13} /></button>
+              </div>
+            )))}
+            {workspaces.every((ws) => (archivedTasks[ws.id] ?? []).length === 0) && <div className="task-empty">Архив пуст</div>}
+          </div>
+        )}
+
+        {!archiveOpen && <>
         {workspaces.length === 0 && !isSearching && (
           <button
             className="task-item"
@@ -345,7 +382,10 @@ export function LeftRail(): JSX.Element {
             </div>
           )
         })}
+        </>}
       </div>
+
+      <BlueprintRail />
 
       <SshRail />
 

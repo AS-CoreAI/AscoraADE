@@ -26,6 +26,27 @@ pinning):
   and an optional `--model`; reuses the normalized Codex event pipeline so every
   CLI backend shares one renderer code path.
 - **GLM / ZCode CLI**: the ZCode agent with `plan` / `yolo` modes.
+- **Ascora WProvider**: signed-in web chats (Qwen, DeepSeek, Alice, Mistral,
+  Claude, Grok, Gemini, and ChatGPT) driven through a hidden browser without an
+  API key.
+
+## Blueprints
+
+Blueprints are project-independent automation scenarios shown between Projects
+and SSH in the left rail and as a dockable activity in the IDE. A Blueprint can:
+
+- coordinate several named WProvider agents with separate roles, services, and
+  conversation sessions;
+- pass every completed result to the next participant in an ordered pipeline;
+- run manually or at a bounded minute interval while Ascora ADE is open;
+- repeat actions and combine agent prompts with delays, Telegram messages, and
+  HTTP webhooks;
+- interpolate `{{input}}`, `{{last}}`, `{{now}}`, `{{steps.ID}}`, and
+  `{{agents.ID}}`, with live per-step status and output in the execution log.
+
+WProvider owns one shared browser driver, so agent turns are deliberately queued
+and executed one at a time even when several Blueprint runs are active. This
+keeps provider navigation and captured replies isolated and predictable.
 
 The OpenAI-compatible client lives in the **main process** (`src/main/llm/client.ts`)
 and is exposed to the renderer over IPC:
@@ -103,4 +124,3 @@ a linear continuation of `version1.2` that carried the Gemini CLI backend and
 file-attachment work; it has been folded back into `version1.2` (and `main`) and
 removed, so there is a single 1.2 line again. Cut future releases as tags off the
 `version1.2` / `main` line rather than a standing `release` branch.
-

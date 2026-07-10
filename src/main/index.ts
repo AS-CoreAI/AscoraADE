@@ -4,6 +4,7 @@ import { registerIpc } from './ipc'
 import { getStore, closeStore } from './store'
 import { stopLiveServer } from './ipc/live'
 import { startPresence, stopPresence } from './presence'
+import { stopAllBlueprints } from './blueprint/runner'
 
 // Single-instance lock: focus the existing window instead of opening a second.
 if (!app.requestSingleInstanceLock()) {
@@ -34,6 +35,7 @@ if (!app.requestSingleInstanceLock()) {
   })
 
   app.on('before-quit', () => {
+    stopAllBlueprints()
     stopPresence()
     stopLiveServer()
     closeStore()

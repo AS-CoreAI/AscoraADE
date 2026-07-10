@@ -21,7 +21,6 @@ type IconName =
   | 'terminal'
   | 'gitBranch'
   | 'message'
-  | 'filter'
   | 'archive'
   | 'collapse'
   | 'refresh'
@@ -35,6 +34,13 @@ type IconName =
   | 'external'
   | 'info'
   | 'x'
+  | 'blueprint'
+  | 'play'
+  | 'stop'
+  | 'users'
+  | 'clock'
+  | 'telegram'
+  | 'webhook'
 
 const paths: Record<IconName, JSX.Element> = {
   plus: (
@@ -132,7 +138,6 @@ const paths: Record<IconName, JSX.Element> = {
     </>
   ),
   message: <path d="M21 11.5a8.38 8.38 0 0 1-8.5 8.5 8.5 8.5 0 0 1-3.8-.9L3 21l1.9-5.7a8.5 8.5 0 0 1-.9-3.8A8.38 8.38 0 0 1 12.5 3 8.38 8.38 0 0 1 21 11.5z" />,
-  filter: <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />,
   archive: (
     <>
       <rect x="3" y="4" width="18" height="4" rx="1" />
@@ -202,6 +207,45 @@ const paths: Record<IconName, JSX.Element> = {
       <path d="M14 4h6v6" />
       <line x1="20" y1="4" x2="11" y2="13" />
       <path d="M19 13v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h5" />
+    </>
+  ),
+  blueprint: (
+    <>
+      <rect x="3" y="3" width="6" height="6" rx="1" />
+      <rect x="15" y="3" width="6" height="6" rx="1" />
+      <rect x="9" y="15" width="6" height="6" rx="1" />
+      <path d="M6 9v2a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V9" />
+      <line x1="12" y1="13" x2="12" y2="15" />
+    </>
+  ),
+  play: <polygon points="8 5 19 12 8 19 8 5" />,
+  stop: <rect x="6" y="6" width="12" height="12" rx="1.5" />,
+  users: (
+    <>
+      <circle cx="9" cy="8" r="3" />
+      <path d="M3 20a6 6 0 0 1 12 0" />
+      <path d="M16 5.2a3 3 0 0 1 0 5.6" />
+      <path d="M17 14a5 5 0 0 1 4 5" />
+    </>
+  ),
+  clock: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <polyline points="12 7 12 12 16 14" />
+    </>
+  ),
+  telegram: (
+    <>
+      <path d="M21 4L3.8 10.6c-1.2.5-1.2 1.2-.2 1.5l4.4 1.4 1.7 5.1c.2.7.1 1 .9 1 .6 0 .9-.3 1.2-.6l2.2-2.1 4.6 3.4c.8.5 1.5.3 1.7-.8L23 5.4c.3-1.4-.5-2-2-1.4z" />
+      <path d="M8 13.5L19 7" />
+    </>
+  ),
+  webhook: (
+    <>
+      <circle cx="7" cy="6" r="3" />
+      <circle cx="17" cy="18" r="3" />
+      <path d="M7 9v2a5 5 0 0 0 5 5h2" />
+      <path d="M17 15v-2a5 5 0 0 0-5-5h-2" />
     </>
   ),
   info: (

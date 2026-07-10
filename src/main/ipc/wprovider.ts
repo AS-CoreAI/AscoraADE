@@ -39,7 +39,14 @@ export function registerWProviderHandlers(): void {
   ipcMain.handle(
     IPC.wprovider.chat,
     (e, id: string, params: WProviderChatParams): Promise<ChatResult> =>
-      chatWProvider(id, configuredService(), params, e.sender)
+      chatWProvider(
+        id,
+        params.service && WPROVIDER_SERVICES.includes(params.service)
+          ? params.service
+          : configuredService(),
+        params,
+        e.sender
+      )
   )
   ipcMain.handle(IPC.wprovider.abort, (_e, id: string): void => abortWProvider(id))
 }

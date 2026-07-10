@@ -14,16 +14,19 @@ export function registerSettingsHandlers(): void {
   ipcMain.handle(IPC.workspace.add, (_e, path: string): Workspace =>
     getStore().addWorkspace(basename(path), path)
   )
-  ipcMain.handle(IPC.workspace.tasks, (_e, workspaceId: string): TaskSummary[] =>
-    getStore().listTasks(workspaceId)
+  ipcMain.handle(IPC.workspace.tasks, (_e, workspaceId: string, deletedOnly = false): TaskSummary[] =>
+    getStore().listTasks(workspaceId, deletedOnly)
   )
-  ipcMain.handle(IPC.workspace.task, (_e, taskId: string): TaskRecord | null =>
-    getStore().getTask(taskId)
+  ipcMain.handle(IPC.workspace.task, (_e, taskId: string, includeDeleted = false): TaskRecord | null =>
+    getStore().getTask(taskId, includeDeleted)
   )
   ipcMain.handle(IPC.workspace.saveTask, (_e, task: TaskRecord): TaskSummary =>
     getStore().saveTask(task)
   )
   ipcMain.handle(IPC.workspace.deleteTask, (_e, taskId: string): TaskSummary | null =>
     getStore().deleteTask(taskId)
+  )
+  ipcMain.handle(IPC.workspace.restoreTask, (_e, taskId: string): TaskSummary | null =>
+    getStore().restoreTask(taskId)
   )
 }

@@ -16,6 +16,7 @@ import { registerAgentHandlers } from './agent'
 import { registerLiveHandlers } from './live'
 import { registerSshHandlers } from './ssh'
 import { registerUpdateHandlers } from './update'
+import { registerBlueprintHandlers } from './blueprint'
 
 /** Register every IPC handler. Called once after the app is ready. */
 export function registerIpc(): void {
@@ -30,6 +31,7 @@ export function registerIpc(): void {
   registerGeminiHandlers()
   registerGlmHandlers()
   registerWProviderHandlers()
+  registerBlueprintHandlers()
   registerAnalyticsHandlers()
   registerGitHandlers()
   registerTerminalHandlers()

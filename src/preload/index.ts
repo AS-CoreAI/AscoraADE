@@ -37,6 +37,10 @@ import {
   type WProviderCheckResult,
   type WProviderLoginResult,
   type WProviderService,
+  type BlueprintDefinition,
+  type BlueprintEvent,
+  type BlueprintRunRequest,
+  type BlueprintRunResult,
   type UsageEvent,
   type UsageEventInput,
   type GitStatusResult,
@@ -183,14 +187,16 @@ const api = {
   workspace: {
     list: (): Promise<Workspace[]> => ipcRenderer.invoke(IPC.workspace.list),
     add: (path: string): Promise<Workspace> => ipcRenderer.invoke(IPC.workspace.add, path),
-    tasks: (workspaceId: string): Promise<TaskSummary[]> =>
-      ipcRenderer.invoke(IPC.workspace.tasks, workspaceId),
-    task: (taskId: string): Promise<TaskRecord | null> =>
-      ipcRenderer.invoke(IPC.workspace.task, taskId),
+    tasks: (workspaceId: string, deletedOnly = false): Promise<TaskSummary[]> =>
+      ipcRenderer.invoke(IPC.workspace.tasks, workspaceId, deletedOnly),
+    task: (taskId: string, includeDeleted = false): Promise<TaskRecord | null> =>
+      ipcRenderer.invoke(IPC.workspace.task, taskId, includeDeleted),
     saveTask: (task: TaskRecord): Promise<TaskSummary> =>
       ipcRenderer.invoke(IPC.workspace.saveTask, task),
     deleteTask: (taskId: string): Promise<TaskSummary | null> =>
-      ipcRenderer.invoke(IPC.workspace.deleteTask, taskId)
+      ipcRenderer.invoke(IPC.workspace.deleteTask, taskId),
+    restoreTask: (taskId: string): Promise<TaskSummary | null> =>
+      ipcRenderer.invoke(IPC.workspace.restoreTask, taskId)
   },
   llm: {
     config: (): Promise<LlmConfig> => ipcRenderer.invoke(IPC.llm.config),
@@ -333,6 +339,20 @@ const api = {
         .finally(() => ipcRenderer.removeListener(IPC.wprovider.chunk, listener))
     },
     abort: (id: string): Promise<void> => ipcRenderer.invoke(IPC.wprovider.abort, id)
+  },
+  blueprint: {
+    list: (): Promise<BlueprintDefinition[]> => ipcRenderer.invoke(IPC.blueprint.list),
+    save: (blueprint: BlueprintDefinition): Promise<BlueprintDefinition> =>
+      ipcRenderer.invoke(IPC.blueprint.save, blueprint),
+    remove: (id: string): Promise<boolean> => ipcRenderer.invoke(IPC.blueprint.remove, id),
+    run: (request: BlueprintRunRequest): Promise<BlueprintRunResult> =>
+      ipcRenderer.invoke(IPC.blueprint.run, request),
+    stop: (id: string): Promise<boolean> => ipcRenderer.invoke(IPC.blueprint.stop, id),
+    onEvent: (cb: (event: BlueprintEvent) => void): (() => void) => {
+      const listener = (_event: IpcRendererEvent, payload: BlueprintEvent): void => cb(payload)
+      ipcRenderer.on(IPC.blueprint.event, listener)
+      return () => ipcRenderer.removeListener(IPC.blueprint.event, listener)
+    }
   },
   analytics: {
     record: (event: UsageEventInput): Promise<UsageEvent> =>

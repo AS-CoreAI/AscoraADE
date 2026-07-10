@@ -20,11 +20,12 @@ export interface Store {
   allSettings(): Record<string, unknown>
   listWorkspaces(): Workspace[]
   addWorkspace(name: string, path: string): Workspace
-  listTasks(workspaceId: string): TaskSummary[]
-  getTask(taskId: string): TaskRecord | null
+  listTasks(workspaceId: string, deletedOnly?: boolean): TaskSummary[]
+  getTask(taskId: string, includeDeleted?: boolean): TaskRecord | null
   saveTask(task: TaskRecord): TaskSummary
   /** Soft-delete: stamps `deletedAt` and returns the updated summary, or null if not found. */
   deleteTask(taskId: string): TaskSummary | null
+  restoreTask(taskId: string): TaskSummary | null
   addUsage(event: UsageEvent): void
   listUsage(): UsageEvent[]
   close(): void
@@ -142,15 +143,15 @@ class JsonStore implements Store {
     return ws
   }
 
-  listTasks(workspaceId: string): TaskSummary[] {
+  listTasks(workspaceId: string, deletedOnly = false): TaskSummary[] {
     return this.data.tasks
-      .filter((t) => t.workspaceId === workspaceId && !t.deletedAt)
-      .sort((a, b) => b.updatedAt - a.updatedAt)
+      .filter((t) => t.workspaceId === workspaceId && (deletedOnly ? !!t.deletedAt : !t.deletedAt))
+      .sort((a, b) => deletedOnly ? (b.deletedAt ?? 0) - (a.deletedAt ?? 0) : b.updatedAt - a.updatedAt)
       .map(taskSummary)
   }
 
-  getTask(taskId: string): TaskRecord | null {
-    const task = this.data.tasks.find((item) => item.id === taskId && !item.deletedAt)
+  getTask(taskId: string, includeDeleted = false): TaskRecord | null {
+    const task = this.data.tasks.find((item) => item.id === taskId && (includeDeleted || !item.deletedAt))
     return task ? structuredClone(task) : null
   }
 
@@ -167,6 +168,15 @@ class JsonStore implements Store {
     const task = this.data.tasks.find((item) => item.id === taskId)
     if (!task || task.deletedAt) return null
     task.deletedAt = Date.now()
+    this.scheduleFlush()
+    return taskSummary(task)
+  }
+
+  restoreTask(taskId: string): TaskSummary | null {
+    const task = this.data.tasks.find((item) => item.id === taskId)
+    if (!task?.deletedAt) return null
+    delete task.deletedAt
+    task.updatedAt = Date.now()
     this.scheduleFlush()
     return taskSummary(task)
   }
@@ -297,11 +307,11 @@ class SqliteStore implements Store {
     return { id, name, path, lastOpenedAt: now }
   }
 
-  listTasks(workspaceId: string): TaskSummary[] {
+  listTasks(workspaceId: string, deletedOnly = false): TaskSummary[] {
     const rows = this.db
       .prepare(
         `SELECT id, workspace_id, title, status, updated_at, deleted_at
-         FROM tasks WHERE workspace_id = ? AND deleted_at IS NULL ORDER BY updated_at DESC`
+         FROM tasks WHERE workspace_id = ? AND deleted_at IS ${deletedOnly ? 'NOT NULL ORDER BY deleted_at DESC' : 'NULL ORDER BY updated_at DESC'}`
       )
       .all(workspaceId) as {
       id: string
@@ -316,15 +326,16 @@ class SqliteStore implements Store {
       workspaceId: r.workspace_id,
       title: r.title,
       status: r.status,
-      updatedAt: r.updated_at
+      updatedAt: r.updated_at,
+      ...(r.deleted_at ? { deletedAt: r.deleted_at } : {})
     }))
   }
 
-  getTask(taskId: string): TaskRecord | null {
+  getTask(taskId: string, includeDeleted = false): TaskRecord | null {
     const row = this.db
       .prepare(
         `SELECT id, workspace_id, title, status, updated_at, deleted_at, messages_json, convo_json, sessions_json
-         FROM tasks WHERE id = ? AND deleted_at IS NULL`
+         FROM tasks WHERE id = ?${includeDeleted ? '' : ' AND deleted_at IS NULL'}`
       )
       .get(taskId) as
       | {
@@ -346,6 +357,7 @@ class SqliteStore implements Store {
       title: row.title,
       status: row.status,
       updatedAt: row.updated_at,
+      ...(row.deleted_at ? { deletedAt: row.deleted_at } : {}),
       messages: parseArray(row.messages_json),
       convo: parseArray(row.convo_json),
       sessions: parseObject(row.sessions_json)
@@ -404,6 +416,18 @@ class SqliteStore implements Store {
       updatedAt: row.updated_at,
       deletedAt: row.deleted_at
     }
+  }
+
+  restoreTask(taskId: string): TaskSummary | null {
+    const now = Date.now()
+    const info = this.db
+      .prepare('UPDATE tasks SET deleted_at = NULL, updated_at = ? WHERE id = ? AND deleted_at IS NOT NULL')
+      .run(now, taskId)
+    if (info.changes === 0) return null
+    const row = this.db
+      .prepare('SELECT id, workspace_id, title, status, updated_at FROM tasks WHERE id = ?')
+      .get(taskId) as { id: string; workspace_id: string; title: string; status: TaskSummary['status']; updated_at: number }
+    return { id: row.id, workspaceId: row.workspace_id, title: row.title, status: row.status, updatedAt: row.updated_at }
   }
 
   addUsage(event: UsageEvent): void {
