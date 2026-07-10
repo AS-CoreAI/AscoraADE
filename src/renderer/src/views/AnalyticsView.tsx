@@ -10,6 +10,7 @@ import {
   type Analytics,
   type DailyBucket
 } from '@/lib/analytics'
+import { formatUsd } from '@/lib/pricing'
 
 const PROVIDER_LABEL: Record<string, string> = {
   lmstudio: 'LM Studio',
@@ -239,6 +240,215 @@ function TokensPerDay({ data }: { data: Analytics }): JSX.Element {
   )
 }
 
+function ModelTrends({ data }: { data: Analytics }): JSX.Element | null {
+  const weeks = data.weekly
+  const models = data.models
+  const [hovered, setHovered] = useState<{ index: number; left: number; top: number } | null>(
+    null
+  )
+
+  if (models.length === 0 || !weeks.some((w) => w.total > 0)) return null
+
+  // Share of each model per week; empty weeks carry the nearest known mix so the
+  // 100%-stacked area stays continuous instead of collapsing to zero.
+  const raw: (number[] | null)[] = weeks.map((w) =>
+    w.total > 0 ? models.map((m) => (w.byModel[m] ?? 0) / w.total) : null
+  )
+  const shares: number[][] = new Array(weeks.length)
+  let carry: number[] | null = null
+  for (let i = 0; i < raw.length; i++) {
+    if (raw[i]) carry = raw[i]
+    shares[i] = carry as number[] // backfilled below for leading empty weeks
+  }
+  carry = null
+  for (let i = raw.length - 1; i >= 0; i--) {
+    if (raw[i]) carry = raw[i]
+    if (!shares[i]) shares[i] = carry as number[]
+  }
+
+  const n = weeks.length
+  const xOf = (i: number): number => (n > 1 ? (i / (n - 1)) * 100 : 100)
+  // Cumulative boundaries per week: model 0 (largest) on top, matching the bars.
+  const polygons = models.map((model, k) => {
+    const top = shares.map((s) => s.slice(0, k).reduce((sum, v) => sum + v, 0) * 100)
+    const bottom = shares.map((s) => s.slice(0, k + 1).reduce((sum, v) => sum + v, 0) * 100)
+    const pts = [
+      ...top.map((y, i) => `${xOf(i)},${y}`),
+      ...bottom.map((y, i) => `${xOf(i)},${y}`).reverse()
+    ].join(' ')
+    return { model, color: colorAt(k), pts }
+  })
+
+  const tickEvery = Math.max(1, Math.ceil(n / 6))
+  const handleMove = (e: MouseEvent<HTMLDivElement>): void => {
+    const rect = e.currentTarget.getBoundingClientRect()
+    const rel = Math.min(Math.max((e.clientX - rect.left) / rect.width, 0), 1)
+    const index = Math.round(rel * (n - 1))
+    const halfTooltipWidth = 105
+    const left = Math.min(
+      Math.max(rect.left + (xOf(index) / 100) * rect.width, halfTooltipWidth + 8),
+      window.innerWidth - halfTooltipWidth - 8
+    )
+    setHovered({ index, left, top: rect.top - 8 })
+  }
+
+  const active = hovered ? weeks[hovered.index] : null
+  const activeRows = active
+    ? models
+        .map((m, k) => ({ model: m, tokens: active.byModel[m] ?? 0, color: colorAt(k) }))
+        .filter((r) => r.tokens > 0)
+    : []
+
+  return (
+    <div className="an-panel">
+      <div className="an-panel-head">
+        <span>Model share over time</span>
+        <span className="an-panel-cap">weekly, last {n} weeks</span>
+      </div>
+      <div
+        className="an-trend-wrap"
+        onMouseMove={handleMove}
+        onMouseLeave={() => setHovered(null)}
+      >
+        <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="an-trend-svg">
+          {polygons.map((p) => (
+            <polygon key={p.model} points={p.pts} fill={p.color} className="an-trend-area" />
+          ))}
+          {hovered && (
+            <line
+              x1={xOf(hovered.index)}
+              x2={xOf(hovered.index)}
+              y1={0}
+              y2={100}
+              className="an-trend-guide"
+              vectorEffect="non-scaling-stroke"
+            />
+          )}
+        </svg>
+      </div>
+      <div className="an-bars-axis">
+        {weeks.map((w, i) => (
+          <span className="an-tick" key={w.week}>
+            {i % tickEvery === 0 ? dateFmt.format(w.date) : ''}
+          </span>
+        ))}
+      </div>
+      <div className="an-legend">
+        {models.map((m, k) => (
+          <span className="an-legend-item" key={m}>
+            <span className="an-dot" style={{ background: colorAt(k) }} />
+            {m}
+          </span>
+        ))}
+      </div>
+      {hovered && active && (
+        <div
+          className="an-heat-tooltip"
+          role="tooltip"
+          style={{ left: hovered.left, top: hovered.top }}
+        >
+          <span>Week of {dateFmt.format(active.date)}</span>
+          {activeRows.length > 0 ? (
+            activeRows.map((r) => (
+              <span className="an-trend-tip-row" key={r.model}>
+                <span className="an-dot" style={{ background: r.color }} />
+                {r.model}
+                <strong>{Math.round((r.tokens / active.total) * 100)}%</strong>
+              </span>
+            ))
+          ) : (
+            <strong>No activity</strong>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+const HOUR_GRID_DAY_FMT = new Intl.DateTimeFormat(undefined, { weekday: 'short' })
+// 2024-01-01 is a Monday; used only to render localized Mon..Sun labels.
+const WEEKDAY_LABELS = Array.from({ length: 7 }, (_, i) =>
+  HOUR_GRID_DAY_FMT.format(new Date(2024, 0, 1 + i))
+)
+
+function HourHeatmap({ data }: { data: Analytics }): JSX.Element {
+  const [tooltip, setTooltip] = useState<{
+    label: string
+    tokens: number
+    left: number
+    top: number
+  } | null>(null)
+
+  const showTooltip = (day: number, hour: number, target: HTMLElement): void => {
+    const rect = target.getBoundingClientRect()
+    const halfTooltipWidth = 105
+    const left = Math.min(
+      Math.max(rect.left + rect.width / 2, halfTooltipWidth + 8),
+      window.innerWidth - halfTooltipWidth - 8
+    )
+    setTooltip({
+      label: `${WEEKDAY_LABELS[day]}, ${String(hour).padStart(2, '0')}:00–${String((hour + 1) % 24).padStart(2, '0')}:00`,
+      tokens: data.hourGrid[day][hour],
+      left,
+      top: rect.top - 8
+    })
+  }
+
+  return (
+    <div className="an-panel">
+      <div className="an-panel-head">
+        <span>Activity by hour</span>
+        <span className="an-legend-scale">
+          Less
+          {[0, 1, 2, 3, 4].map((l) => (
+            <span key={l} className="an-heat-cell legend" data-level={l} />
+          ))}
+          More
+        </span>
+      </div>
+      <div className="an-hour-grid">
+        {data.hourGrid.map((row, day) => (
+          <Fragment key={day}>
+            <span className="an-hour-day">{WEEKDAY_LABELS[day]}</span>
+            {row.map((tokens, hour) => (
+              <span
+                key={hour}
+                className="an-heat-cell an-hour-cell"
+                data-level={heatLevel(tokens, data.hourLevels)}
+                role="img"
+                tabIndex={0}
+                aria-label={`${WEEKDAY_LABELS[day]} ${hour}:00: ${tokens.toLocaleString()} tokens`}
+                onMouseEnter={(e) => showTooltip(day, hour, e.currentTarget)}
+                onMouseLeave={() => setTooltip(null)}
+                onFocus={(e) => showTooltip(day, hour, e.currentTarget)}
+                onBlur={() => setTooltip(null)}
+              />
+            ))}
+          </Fragment>
+        ))}
+        <span className="an-hour-day" />
+        {Array.from({ length: 24 }, (_, h) => (
+          <span className="an-hour-tick" key={h}>
+            {h % 3 === 0 ? h : ''}
+          </span>
+        ))}
+      </div>
+      {tooltip && (
+        <div
+          className="an-heat-tooltip"
+          role="tooltip"
+          style={{ left: tooltip.left, top: tooltip.top }}
+        >
+          <span>{tooltip.label}</span>
+          <strong>
+            {tooltip.tokens > 0 ? `${tooltip.tokens.toLocaleString()} tokens` : 'No activity'}
+          </strong>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function ModelDonut({ data }: { data: Analytics }): JSX.Element {
   const r = 54
   const C = 2 * Math.PI * r
@@ -305,7 +515,10 @@ function ModelDonut({ data }: { data: Analytics }): JSX.Element {
               <span className="an-dot" style={{ background: colorAt(i) }} />
               <div className="an-model-text">
                 <span className="an-model-name">{m.model}</span>
-                <span className="an-model-tokens">{formatTokens(m.tokens)} tokens</span>
+                <span className="an-model-tokens">
+                  {formatTokens(m.tokens)} tokens
+                  {m.costUsd > 0 ? ` · ~${formatUsd(m.costUsd)}` : ''}
+                </span>
               </div>
               <span className="an-model-share">{Math.round(m.share * 100)}%</span>
             </div>
@@ -336,6 +549,7 @@ function ProjectsTable({ data }: { data: Analytics }): JSX.Element {
             <th className="num">Sessions</th>
             <th className="num">Messages</th>
             <th className="num">Tokens</th>
+            <th className="num">Est. cost</th>
           </tr>
         </thead>
         <tbody>
@@ -360,10 +574,11 @@ function ProjectsTable({ data }: { data: Analytics }): JSX.Element {
                   <td className="num">{p.sessions}</td>
                   <td className="num">{p.messages}</td>
                   <td className="num">{formatTokens(p.tokens)}</td>
+                  <td className="num">{p.costUsd > 0 ? `~${formatUsd(p.costUsd)}` : '—'}</td>
                 </tr>
                 {expanded && (
                   <tr className="an-project-details-row">
-                    <td colSpan={5}>
+                    <td colSpan={6}>
                       <div className="an-project-models" id={`project-models-${p.workspaceId}`}>
                         {p.modelStats.map((model) => (
                           <div className="an-project-model" key={model.model}>
@@ -387,6 +602,11 @@ function ProjectsTable({ data }: { data: Analytics }): JSX.Element {
                               <span>
                                 Messages <strong>{model.messages}</strong>
                               </span>
+                              {model.costUsd > 0 && (
+                                <span>
+                                  Est. cost <strong>~{formatUsd(model.costUsd)}</strong>
+                                </span>
+                              )}
                             </div>
                           </div>
                         ))}
@@ -417,6 +637,7 @@ function ProvidersTable({ data }: { data: Analytics }): JSX.Element {
             <th className="num">Sessions</th>
             <th className="num">Messages</th>
             <th className="num">Tokens</th>
+            <th className="num">Est. cost</th>
           </tr>
         </thead>
         <tbody>
@@ -427,6 +648,7 @@ function ProvidersTable({ data }: { data: Analytics }): JSX.Element {
               <td className="num">{p.sessions}</td>
               <td className="num">{p.messages}</td>
               <td className="num">{formatTokens(p.tokens)}</td>
+              <td className="num">{p.costUsd > 0 ? `~${formatUsd(p.costUsd)}` : '—'}</td>
             </tr>
           ))}
         </tbody>
@@ -501,10 +723,24 @@ export function AnalyticsView(): JSX.Element {
               value={data.favorite ? data.favorite.model : '—'}
               sub={data.favorite ? `${Math.round(data.favorite.share * 100)}% share` : undefined}
             />
+            <StatCard
+              icon="barChart"
+              label="Est. cost"
+              value={formatUsd(data.costUsd)}
+              sub={`${formatUsd(data.monthCostUsd)} this month · API rates`}
+            />
+            <StatCard
+              icon="check"
+              label="Saved (local & web)"
+              value={formatUsd(data.savedUsd)}
+              sub="API-equivalent value"
+            />
           </div>
 
           <Heatmap data={data} />
           <TokensPerDay data={data} />
+          <ModelTrends data={data} />
+          <HourHeatmap data={data} />
           <ModelDonut data={data} />
           <ProjectsTable data={data} />
           <ProvidersTable data={data} />

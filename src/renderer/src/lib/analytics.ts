@@ -1,4 +1,5 @@
 import type { UsageEvent } from '@shared/ipc'
+import { eventCostUsd, FREE_PROVIDERS } from './pricing'
 
 /** Stable colour palette for models/providers across all charts. */
 export const PALETTE = [
@@ -49,6 +50,8 @@ export interface ModelStat {
   messages: number
   sessions: number
   share: number
+  /** Estimated API spend (USD) through paid providers only. */
+  costUsd: number
 }
 
 export interface ProjectStat {
@@ -60,6 +63,8 @@ export interface ProjectStat {
   models: string[]
   /** Model-by-model usage within this project (sorted by token count). */
   modelStats: ModelStat[]
+  /** Estimated API spend (USD) through paid providers only. */
+  costUsd: number
 }
 
 export interface ProviderStat {
@@ -68,6 +73,8 @@ export interface ProviderStat {
   messages: number
   sessions: number
   share: number
+  /** Estimated API spend (USD); 0 for local/web providers. */
+  costUsd: number
 }
 
 export interface DailyBucket {
@@ -82,6 +89,14 @@ export interface HeatCell {
   day: string
   date: Date
   count: number
+}
+
+export interface WeeklyBucket {
+  /** YYYY-MM-DD of the week's Monday. */
+  week: string
+  date: Date
+  total: number
+  byModel: Record<string, number>
 }
 
 export interface Analytics {
@@ -102,25 +117,50 @@ export interface Analytics {
   heatmap: HeatCell[]
   /** Token thresholds (>=) for heatmap intensity levels 1..4. */
   heatLevels: [number, number, number, number]
+  /** Estimated API spend in USD (paid providers, all time / current calendar month). */
+  costUsd: number
+  monthCostUsd: number
+  /** API-equivalent value of tokens served by free providers (local + web). */
+  savedUsd: number
+  /** Contiguous weekly series (oldest → newest) over `weeklyWeeks` for model migration. */
+  weekly: WeeklyBucket[]
+  /** Tokens by weekday (0=Mon .. 6=Sun) × hour of day (0..23), local time. */
+  hourGrid: number[][]
+  /** Token thresholds (>=) for hour-grid intensity levels 1..4. */
+  hourLevels: [number, number, number, number]
 }
 
 const tokensOf = (e: UsageEvent): number => e.inputTokens + e.outputTokens
 const msgsOf = (e: UsageEvent): number => e.userMessages + e.assistantMessages
 
 /** Aggregate raw usage events into everything the dashboard renders. */
+function startOfWeek(d: Date): Date {
+  const s = startOfDay(d)
+  const shift = (s.getDay() + 6) % 7 // Monday-first
+  return new Date(s.getFullYear(), s.getMonth(), s.getDate() - shift)
+}
+
 export function aggregate(
   events: UsageEvent[],
-  opts: { dailyDays?: number; heatmapDays?: number } = {}
+  opts: { dailyDays?: number; heatmapDays?: number; weeklyWeeks?: number } = {}
 ): Analytics {
   const dailyDays = opts.dailyDays ?? 30
   const heatmapDays = opts.heatmapDays ?? 182 // ~26 weeks
+  const weeklyWeeks = opts.weeklyWeeks ?? 12
 
   let totalTokens = 0
   let messages = 0
+  let costUsd = 0
+  let monthCostUsd = 0
+  let savedUsd = 0
+  const now = new Date()
   const sessionIds = new Set<string>()
   const activeDayKeys = new Set<string>()
 
-  const modelAgg = new Map<string, { tokens: number; messages: number; sessions: Set<string> }>()
+  const modelAgg = new Map<
+    string,
+    { tokens: number; messages: number; sessions: Set<string>; costUsd: number }
+  >()
   const projectAgg = new Map<
     string,
     {
@@ -128,11 +168,18 @@ export function aggregate(
       tokens: number
       messages: number
       sessions: Set<string>
-      models: Map<string, { tokens: number; messages: number; sessions: Set<string> }>
+      models: Map<
+        string,
+        { tokens: number; messages: number; sessions: Set<string>; costUsd: number }
+      >
     }
   >()
-  const providerAgg = new Map<string, { tokens: number; messages: number; sessions: Set<string> }>()
+  const providerAgg = new Map<
+    string,
+    { tokens: number; messages: number; sessions: Set<string>; costUsd: number }
+  >()
   const tokensByDay = new Map<string, number>() // for heatmap intensity
+  const hourGrid: number[][] = Array.from({ length: 7 }, () => Array<number>(24).fill(0))
 
   for (const e of events) {
     const tok = tokensOf(e)
@@ -143,10 +190,33 @@ export function aggregate(
     activeDayKeys.add(dayKey(e.ts))
     tokensByDay.set(dayKey(e.ts), (tokensByDay.get(dayKey(e.ts)) ?? 0) + tok)
 
-    const m = modelAgg.get(e.model) ?? { tokens: 0, messages: 0, sessions: new Set<string>() }
+    const eventDate = new Date(e.ts)
+    hourGrid[(eventDate.getDay() + 6) % 7][eventDate.getHours()] += tok
+
+    const apiCost = eventCostUsd(e)
+    const isFree = FREE_PROVIDERS.has(e.provider)
+    if (isFree) {
+      savedUsd += apiCost
+    } else {
+      costUsd += apiCost
+      if (
+        eventDate.getFullYear() === now.getFullYear() &&
+        eventDate.getMonth() === now.getMonth()
+      ) {
+        monthCostUsd += apiCost
+      }
+    }
+
+    const m = modelAgg.get(e.model) ?? {
+      tokens: 0,
+      messages: 0,
+      sessions: new Set<string>(),
+      costUsd: 0
+    }
     m.tokens += tok
     m.messages += msg
     m.sessions.add(e.taskId)
+    if (!isFree) m.costUsd += apiCost
     modelAgg.set(e.model, m)
 
     const p = projectAgg.get(e.workspaceId) ?? {
@@ -154,7 +224,10 @@ export function aggregate(
       tokens: 0,
       messages: 0,
       sessions: new Set<string>(),
-      models: new Map<string, { tokens: number; messages: number; sessions: Set<string> }>()
+      models: new Map<
+        string,
+        { tokens: number; messages: number; sessions: Set<string>; costUsd: number }
+      >()
     }
     p.name = e.workspaceName || p.name
     p.tokens += tok
@@ -163,18 +236,26 @@ export function aggregate(
     const projectModel = p.models.get(e.model) ?? {
       tokens: 0,
       messages: 0,
-      sessions: new Set<string>()
+      sessions: new Set<string>(),
+      costUsd: 0
     }
     projectModel.tokens += tok
     projectModel.messages += msg
     projectModel.sessions.add(e.taskId)
+    if (!isFree) projectModel.costUsd += apiCost
     p.models.set(e.model, projectModel)
     projectAgg.set(e.workspaceId, p)
 
-    const pr = providerAgg.get(e.provider) ?? { tokens: 0, messages: 0, sessions: new Set<string>() }
+    const pr = providerAgg.get(e.provider) ?? {
+      tokens: 0,
+      messages: 0,
+      sessions: new Set<string>(),
+      costUsd: 0
+    }
     pr.tokens += tok
     pr.messages += msg
     pr.sessions.add(e.taskId)
+    if (!isFree) pr.costUsd += apiCost
     providerAgg.set(e.provider, pr)
   }
 
@@ -184,7 +265,8 @@ export function aggregate(
       tokens: v.tokens,
       messages: v.messages,
       sessions: v.sessions.size,
-      share: totalTokens > 0 ? v.tokens / totalTokens : 0
+      share: totalTokens > 0 ? v.tokens / totalTokens : 0,
+      costUsd: v.costUsd
     }))
     .sort((a, b) => b.tokens - a.tokens)
 
@@ -196,7 +278,8 @@ export function aggregate(
           tokens: modelUsage.tokens,
           messages: modelUsage.messages,
           sessions: modelUsage.sessions.size,
-          share: v.tokens > 0 ? modelUsage.tokens / v.tokens : 0
+          share: v.tokens > 0 ? modelUsage.tokens / v.tokens : 0,
+          costUsd: modelUsage.costUsd
         }))
         .sort((a, b) => b.tokens - a.tokens)
       return {
@@ -206,7 +289,8 @@ export function aggregate(
         messages: v.messages,
         sessions: v.sessions.size,
         models: modelStats.map((model) => model.model),
-        modelStats
+        modelStats,
+        costUsd: modelStats.reduce((s, model) => s + model.costUsd, 0)
       }
     })
     .sort((a, b) => b.tokens - a.tokens)
@@ -217,7 +301,8 @@ export function aggregate(
       tokens: v.tokens,
       messages: v.messages,
       sessions: v.sessions.size,
-      share: totalTokens > 0 ? v.tokens / totalTokens : 0
+      share: totalTokens > 0 ? v.tokens / totalTokens : 0,
+      costUsd: v.costUsd
     }))
     .sort((a, b) => b.tokens - a.tokens)
 
@@ -241,6 +326,31 @@ export function aggregate(
     const total = Object.values(byModel).reduce((s, v) => s + v, 0)
     daily.push({ day: key, date, total, byModel })
   }
+
+  // ----- weekly model-share series (stacked by model), contiguous over the window -----
+  const weeklyByWeek = new Map<string, Record<string, number>>()
+  for (const e of events) {
+    const key = dateKey(startOfWeek(new Date(e.ts)))
+    const rec = weeklyByWeek.get(key) ?? {}
+    rec[e.model] = (rec[e.model] ?? 0) + tokensOf(e)
+    weeklyByWeek.set(key, rec)
+  }
+  const thisWeek = startOfWeek(today)
+  const weekly: WeeklyBucket[] = []
+  for (let i = weeklyWeeks - 1; i >= 0; i--) {
+    const date = new Date(thisWeek.getFullYear(), thisWeek.getMonth(), thisWeek.getDate() - i * 7)
+    const key = dateKey(date)
+    const byModel = weeklyByWeek.get(key) ?? {}
+    const total = Object.values(byModel).reduce((s, v) => s + v, 0)
+    weekly.push({ week: key, date, total, byModel })
+  }
+
+  // ----- hour-of-day × weekday grid intensity levels -----
+  const maxHour = Math.max(0, ...hourGrid.flat())
+  const hourLevels: [number, number, number, number] =
+    maxHour > 0
+      ? [maxHour * 0.05, maxHour * 0.25, maxHour * 0.5, maxHour * 0.75]
+      : [1, 2, 3, 4]
 
   // ----- heatmap cells -----
   const heatmap: HeatCell[] = []
@@ -278,7 +388,13 @@ export function aggregate(
     perProvider,
     daily,
     heatmap,
-    heatLevels
+    heatLevels,
+    costUsd,
+    monthCostUsd,
+    savedUsd,
+    weekly,
+    hourGrid,
+    hourLevels
   }
 }
 
