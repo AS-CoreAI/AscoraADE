@@ -11,6 +11,8 @@ import {
   type DailyBucket
 } from '@/lib/analytics'
 import { formatUsd } from '@/lib/pricing'
+import { localeForLanguage, tr, type LanguageCode } from '@/language'
+import { useApp } from '@/state/store'
 
 const PROVIDER_LABEL: Record<string, string> = {
   lmstudio: 'LM Studio',
@@ -22,14 +24,6 @@ const PROVIDER_LABEL: Record<string, string> = {
   glm: 'GLM (ZCode)'
 }
 const providerLabel = (p: string): string => PROVIDER_LABEL[p] ?? p
-
-const dateFmt = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' })
-const heatmapDateFmt = new Intl.DateTimeFormat(undefined, {
-  weekday: 'long',
-  year: 'numeric',
-  month: 'long',
-  day: 'numeric'
-})
 
 function StatCard({
   icon,
@@ -54,8 +48,19 @@ function StatCard({
   )
 }
 
-function Heatmap({ data }: { data: Analytics }): JSX.Element {
+function Heatmap({ data, language }: { data: Analytics; language: LanguageCode }): JSX.Element {
   const cells = data.heatmap
+  const locale = localeForLanguage(language)
+  const heatmapDateFmt = useMemo(
+    () =>
+      new Intl.DateTimeFormat(locale, {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      }),
+    [locale]
+  )
   const firstWeekday = cells.length > 0 ? cells[0].date.getDay() : 0
   const placeholders = Array.from({ length: firstWeekday })
   const [tooltip, setTooltip] = useState<{
@@ -94,13 +99,13 @@ function Heatmap({ data }: { data: Analytics }): JSX.Element {
   return (
     <div className="an-panel">
       <div className="an-panel-head">
-        <span>Activity heatmap</span>
+        <span>{tr(language, 'analytics.activityHeatmap')}</span>
         <span className="an-legend-scale">
-          Less
+          {tr(language, 'analytics.less')}
           {[0, 1, 2, 3, 4].map((l) => (
             <span key={l} className="an-heat-cell legend" data-level={l} />
           ))}
-          More
+          {tr(language, 'analytics.more')}
         </span>
       </div>
       <div className="an-heatmap" style={{ gridTemplateRows: 'repeat(7, 1fr)' }}>
@@ -114,7 +119,7 @@ function Heatmap({ data }: { data: Analytics }): JSX.Element {
             data-level={heatLevel(c.count, data.heatLevels)}
             role="img"
             tabIndex={0}
-            aria-label={`${heatmapDateFmt.format(c.date)}: ${c.count.toLocaleString()} tokens`}
+            aria-label={`${heatmapDateFmt.format(c.date)}: ${c.count.toLocaleString(locale)} ${tr(language, 'analytics.tokens')}`}
             onMouseEnter={handleMouseEnter(c)}
             onMouseLeave={() => setTooltip(null)}
             onFocus={handleFocus(c)}
@@ -131,8 +136,8 @@ function Heatmap({ data }: { data: Analytics }): JSX.Element {
           <span>{tooltip.day}</span>
           <strong>
             {tooltip.tokens > 0
-              ? `${tooltip.tokens.toLocaleString()} tokens`
-              : 'No activity'}
+              ? `${tooltip.tokens.toLocaleString(locale)} ${tr(language, 'analytics.tokens')}`
+              : tr(language, 'analytics.noActivity')}
           </strong>
         </div>
       )}
@@ -140,10 +145,25 @@ function Heatmap({ data }: { data: Analytics }): JSX.Element {
   )
 }
 
-function TokensPerDay({ data }: { data: Analytics }): JSX.Element {
+function TokensPerDay({ data, language }: { data: Analytics; language: LanguageCode }): JSX.Element {
   const max = Math.max(1, ...data.daily.map((d) => d.total))
   const tickEvery = Math.max(1, Math.ceil(data.daily.length / 6))
   const colorOf = (model: string): string => colorAt(data.models.indexOf(model))
+  const locale = localeForLanguage(language)
+  const dateFmt = useMemo(
+    () => new Intl.DateTimeFormat(locale, { month: 'short', day: 'numeric' }),
+    [locale]
+  )
+  const heatmapDateFmt = useMemo(
+    () =>
+      new Intl.DateTimeFormat(locale, {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      }),
+    [locale]
+  )
   const [tooltip, setTooltip] = useState<{
     day: string
     model: string
@@ -183,7 +203,7 @@ function TokensPerDay({ data }: { data: Analytics }): JSX.Element {
   return (
     <div className="an-panel">
       <div className="an-panel-head">
-        <span>Tokens per day</span>
+        <span>{tr(language, 'analytics.tokensPerDay')}</span>
       </div>
       <div className="an-bars">
         {data.daily.map((d) => (
@@ -195,7 +215,7 @@ function TokensPerDay({ data }: { data: Analytics }): JSX.Element {
                   className="an-bar-seg"
                   role="img"
                   tabIndex={0}
-                  aria-label={`${d.day}: ${s.model}, ${s.tokens.toLocaleString()} tokens`}
+                  aria-label={`${d.day}: ${s.model}, ${s.tokens.toLocaleString(locale)} ${tr(language, 'analytics.tokens')}`}
                   style={{ height: `${(s.tokens / max) * 100}%`, background: colorOf(s.model) }}
                   onMouseEnter={(e) => showTooltip(d, s, e.currentTarget)}
                   onMouseLeave={() => setTooltip(null)}
@@ -233,16 +253,29 @@ function TokensPerDay({ data }: { data: Analytics }): JSX.Element {
             <span className="an-dot" style={{ background: tooltip.color }} />
             {tooltip.model}
           </strong>
-          <span>{tooltip.tokens.toLocaleString()} tokens</span>
+          <span>
+            {tooltip.tokens.toLocaleString(locale)} {tr(language, 'analytics.tokens')}
+          </span>
         </div>
       )}
     </div>
   )
 }
 
-function ModelTrends({ data }: { data: Analytics }): JSX.Element | null {
+function ModelTrends({
+  data,
+  language
+}: {
+  data: Analytics
+  language: LanguageCode
+}): JSX.Element | null {
   const weeks = data.weekly
   const models = data.models
+  const locale = localeForLanguage(language)
+  const dateFmt = useMemo(
+    () => new Intl.DateTimeFormat(locale, { month: 'short', day: 'numeric' }),
+    [locale]
+  )
   const [hovered, setHovered] = useState<{ index: number; left: number; top: number } | null>(
     null
   )
@@ -302,8 +335,8 @@ function ModelTrends({ data }: { data: Analytics }): JSX.Element | null {
   return (
     <div className="an-panel">
       <div className="an-panel-head">
-        <span>Model share over time</span>
-        <span className="an-panel-cap">weekly, last {n} weeks</span>
+        <span>{tr(language, 'analytics.modelShareOverTime')}</span>
+        <span className="an-panel-cap">{tr(language, 'analytics.weeklyLastWeeks', { count: n })}</span>
       </div>
       <div
         className="an-trend-wrap"
@@ -347,7 +380,7 @@ function ModelTrends({ data }: { data: Analytics }): JSX.Element | null {
           role="tooltip"
           style={{ left: hovered.left, top: hovered.top }}
         >
-          <span>Week of {dateFmt.format(active.date)}</span>
+          <span>{tr(language, 'analytics.weekOf', { date: dateFmt.format(active.date) })}</span>
           {activeRows.length > 0 ? (
             activeRows.map((r) => (
               <span className="an-trend-tip-row" key={r.model}>
@@ -357,7 +390,7 @@ function ModelTrends({ data }: { data: Analytics }): JSX.Element | null {
               </span>
             ))
           ) : (
-            <strong>No activity</strong>
+            <strong>{tr(language, 'analytics.noActivity')}</strong>
           )}
         </div>
       )}
@@ -365,13 +398,13 @@ function ModelTrends({ data }: { data: Analytics }): JSX.Element | null {
   )
 }
 
-const HOUR_GRID_DAY_FMT = new Intl.DateTimeFormat(undefined, { weekday: 'short' })
-// 2024-01-01 is a Monday; used only to render localized Mon..Sun labels.
-const WEEKDAY_LABELS = Array.from({ length: 7 }, (_, i) =>
-  HOUR_GRID_DAY_FMT.format(new Date(2024, 0, 1 + i))
-)
-
-function HourHeatmap({ data }: { data: Analytics }): JSX.Element {
+function HourHeatmap({ data, language }: { data: Analytics; language: LanguageCode }): JSX.Element {
+  const locale = localeForLanguage(language)
+  // 2024-01-01 is a Monday; used only to render localized Mon..Sun labels.
+  const weekdayLabels = useMemo(() => {
+    const formatter = new Intl.DateTimeFormat(locale, { weekday: 'short' })
+    return Array.from({ length: 7 }, (_, i) => formatter.format(new Date(2024, 0, 1 + i)))
+  }, [locale])
   const [tooltip, setTooltip] = useState<{
     label: string
     tokens: number
@@ -387,7 +420,7 @@ function HourHeatmap({ data }: { data: Analytics }): JSX.Element {
       window.innerWidth - halfTooltipWidth - 8
     )
     setTooltip({
-      label: `${WEEKDAY_LABELS[day]}, ${String(hour).padStart(2, '0')}:00–${String((hour + 1) % 24).padStart(2, '0')}:00`,
+      label: `${weekdayLabels[day]}, ${String(hour).padStart(2, '0')}:00–${String((hour + 1) % 24).padStart(2, '0')}:00`,
       tokens: data.hourGrid[day][hour],
       left,
       top: rect.top - 8
@@ -397,19 +430,19 @@ function HourHeatmap({ data }: { data: Analytics }): JSX.Element {
   return (
     <div className="an-panel">
       <div className="an-panel-head">
-        <span>Activity by hour</span>
+        <span>{tr(language, 'analytics.activityByHour')}</span>
         <span className="an-legend-scale">
-          Less
+          {tr(language, 'analytics.less')}
           {[0, 1, 2, 3, 4].map((l) => (
             <span key={l} className="an-heat-cell legend" data-level={l} />
           ))}
-          More
+          {tr(language, 'analytics.more')}
         </span>
       </div>
       <div className="an-hour-grid">
         {data.hourGrid.map((row, day) => (
           <Fragment key={day}>
-            <span className="an-hour-day">{WEEKDAY_LABELS[day]}</span>
+            <span className="an-hour-day">{weekdayLabels[day]}</span>
             {row.map((tokens, hour) => (
               <span
                 key={hour}
@@ -417,7 +450,7 @@ function HourHeatmap({ data }: { data: Analytics }): JSX.Element {
                 data-level={heatLevel(tokens, data.hourLevels)}
                 role="img"
                 tabIndex={0}
-                aria-label={`${WEEKDAY_LABELS[day]} ${hour}:00: ${tokens.toLocaleString()} tokens`}
+                aria-label={`${weekdayLabels[day]} ${hour}:00: ${tokens.toLocaleString(locale)} ${tr(language, 'analytics.tokens')}`}
                 onMouseEnter={(e) => showTooltip(day, hour, e.currentTarget)}
                 onMouseLeave={() => setTooltip(null)}
                 onFocus={(e) => showTooltip(day, hour, e.currentTarget)}
@@ -441,7 +474,9 @@ function HourHeatmap({ data }: { data: Analytics }): JSX.Element {
         >
           <span>{tooltip.label}</span>
           <strong>
-            {tooltip.tokens > 0 ? `${tooltip.tokens.toLocaleString()} tokens` : 'No activity'}
+            {tooltip.tokens > 0
+              ? `${tooltip.tokens.toLocaleString(locale)} ${tr(language, 'analytics.tokens')}`
+              : tr(language, 'analytics.noActivity')}
           </strong>
         </div>
       )}
@@ -449,7 +484,7 @@ function HourHeatmap({ data }: { data: Analytics }): JSX.Element {
   )
 }
 
-function ModelDonut({ data }: { data: Analytics }): JSX.Element {
+function ModelDonut({ data, language }: { data: Analytics; language: LanguageCode }): JSX.Element {
   const r = 54
   const C = 2 * Math.PI * r
   const [hovered, setHovered] = useState<number | null>(null)
@@ -464,7 +499,7 @@ function ModelDonut({ data }: { data: Analytics }): JSX.Element {
   return (
     <div className="an-panel">
       <div className="an-panel-head">
-        <span>Model usage</span>
+        <span>{tr(language, 'analytics.modelUsage')}</span>
       </div>
       <div className="an-donut-row">
         <div className="an-donut-wrap">
@@ -494,12 +529,14 @@ function ModelDonut({ data }: { data: Analytics }): JSX.Element {
                   {active.model}
                 </div>
                 <div className="an-donut-total">{Math.round(active.share * 100)}%</div>
-                <div className="an-donut-cap">{formatTokens(active.tokens)} tokens</div>
+                <div className="an-donut-cap">
+                  {formatTokens(active.tokens)} {tr(language, 'analytics.tokens')}
+                </div>
               </div>
             ) : (
               <div>
                 <div className="an-donut-total">{formatTokens(data.totalTokens)}</div>
-                <div className="an-donut-cap">tokens</div>
+                <div className="an-donut-cap">{tr(language, 'analytics.tokens')}</div>
               </div>
             )}
           </div>
@@ -516,7 +553,7 @@ function ModelDonut({ data }: { data: Analytics }): JSX.Element {
               <div className="an-model-text">
                 <span className="an-model-name">{m.model}</span>
                 <span className="an-model-tokens">
-                  {formatTokens(m.tokens)} tokens
+                  {formatTokens(m.tokens)} {tr(language, 'analytics.tokens')}
                   {m.costUsd > 0 ? ` · ~${formatUsd(m.costUsd)}` : ''}
                 </span>
               </div>
@@ -529,7 +566,13 @@ function ModelDonut({ data }: { data: Analytics }): JSX.Element {
   )
 }
 
-function ProjectsTable({ data }: { data: Analytics }): JSX.Element {
+function ProjectsTable({
+  data,
+  language
+}: {
+  data: Analytics
+  language: LanguageCode
+}): JSX.Element {
   const [expandedProjects, setExpandedProjects] = useState<Record<string, boolean>>({})
 
   const toggleProject = (workspaceId: string): void => {
@@ -539,17 +582,17 @@ function ProjectsTable({ data }: { data: Analytics }): JSX.Element {
   return (
     <div className="an-panel">
       <div className="an-panel-head">
-        <span>Projects</span>
+        <span>{tr(language, 'analytics.projects')}</span>
       </div>
       <table className="an-table">
         <thead>
           <tr>
-            <th>Project</th>
-            <th>Models / routers</th>
-            <th className="num">Sessions</th>
-            <th className="num">Messages</th>
-            <th className="num">Tokens</th>
-            <th className="num">Est. cost</th>
+            <th>{tr(language, 'analytics.project')}</th>
+            <th>{tr(language, 'analytics.modelsRouters')}</th>
+            <th className="num">{tr(language, 'analytics.sessions')}</th>
+            <th className="num">{tr(language, 'analytics.messages')}</th>
+            <th className="num">{tr(language, 'analytics.tokens')}</th>
+            <th className="num">{tr(language, 'analytics.estimatedCost')}</th>
           </tr>
         </thead>
         <tbody>
@@ -594,17 +637,17 @@ function ProjectsTable({ data }: { data: Analytics }): JSX.Element {
                             </div>
                             <div className="an-project-model-metrics">
                               <span>
-                                Tokens <strong>{formatTokens(model.tokens)}</strong>
+                                {tr(language, 'analytics.tokens')} <strong>{formatTokens(model.tokens)}</strong>
                               </span>
                               <span>
-                                Sessions <strong>{model.sessions}</strong>
+                                {tr(language, 'analytics.sessions')} <strong>{model.sessions}</strong>
                               </span>
                               <span>
-                                Messages <strong>{model.messages}</strong>
+                                {tr(language, 'analytics.messages')} <strong>{model.messages}</strong>
                               </span>
                               {model.costUsd > 0 && (
                                 <span>
-                                  Est. cost <strong>~{formatUsd(model.costUsd)}</strong>
+                                  {tr(language, 'analytics.estimatedCost')} <strong>~{formatUsd(model.costUsd)}</strong>
                                 </span>
                               )}
                             </div>
@@ -623,21 +666,27 @@ function ProjectsTable({ data }: { data: Analytics }): JSX.Element {
   )
 }
 
-function ProvidersTable({ data }: { data: Analytics }): JSX.Element {
+function ProvidersTable({
+  data,
+  language
+}: {
+  data: Analytics
+  language: LanguageCode
+}): JSX.Element {
   return (
     <div className="an-panel">
       <div className="an-panel-head">
-        <span>Routers</span>
+        <span>{tr(language, 'analytics.routers')}</span>
       </div>
       <table className="an-table">
         <thead>
           <tr>
-            <th>Router</th>
-            <th className="num">Share</th>
-            <th className="num">Sessions</th>
-            <th className="num">Messages</th>
-            <th className="num">Tokens</th>
-            <th className="num">Est. cost</th>
+            <th>{tr(language, 'analytics.router')}</th>
+            <th className="num">{tr(language, 'analytics.shareLabel')}</th>
+            <th className="num">{tr(language, 'analytics.sessions')}</th>
+            <th className="num">{tr(language, 'analytics.messages')}</th>
+            <th className="num">{tr(language, 'analytics.tokens')}</th>
+            <th className="num">{tr(language, 'analytics.estimatedCost')}</th>
           </tr>
         </thead>
         <tbody>
@@ -660,6 +709,7 @@ function ProvidersTable({ data }: { data: Analytics }): JSX.Element {
 export function AnalyticsView(): JSX.Element {
   const [events, setEvents] = useState<UsageEvent[] | null>(null)
   const [project, setProject] = useState<string>('all')
+  const appLanguage = useApp((s) => s.appLanguage)
 
   const load = (): void => {
     void api.analytics.list().then(setEvents)
@@ -686,64 +736,80 @@ export function AnalyticsView(): JSX.Element {
     <div className="analytics">
       <div className="an-header">
         <h1 className="an-title">
-          <Icon name="barChart" size={18} /> Analytics
+          <Icon name="barChart" size={18} /> {tr(appLanguage, 'analytics.title')}
         </h1>
         <span className="spacer" />
         <select className="an-select" value={project} onChange={(e) => setProject(e.target.value)}>
-          <option value="all">All projects</option>
+          <option value="all">{tr(appLanguage, 'analytics.allProjects')}</option>
           {projects.map((p) => (
             <option key={p.id} value={p.id}>
               {p.name}
             </option>
           ))}
         </select>
-        <button className="an-refresh" onClick={load} title="Refresh">
+        <button
+          className="an-refresh"
+          onClick={load}
+          title={tr(appLanguage, 'common.refresh')}
+          aria-label={tr(appLanguage, 'common.refresh')}
+        >
           <Icon name="refresh" size={15} />
         </button>
       </div>
 
       {events === null ? (
-        <div className="an-empty">Loading…</div>
+        <div className="an-empty">{tr(appLanguage, 'analytics.loading')}</div>
       ) : empty ? (
         <div className="an-empty">
-          No usage recorded yet. Start a task with LM Studio or Codex and your token usage,
-          sessions and model breakdown will show up here.
+          {tr(appLanguage, 'analytics.empty')}
         </div>
       ) : (
         <div className="an-scroll">
           <div className="an-cards">
-            <StatCard icon="sparkles" label="Token usage" value={formatTokens(data.totalTokens)} />
-            <StatCard icon="message" label="Sessions" value={String(data.sessions)} />
-            <StatCard icon="message" label="Messages" value={String(data.messages)} />
-            <StatCard icon="check" label="Active days" value={String(data.activeDays)} />
-            <StatCard icon="refresh" label="Current streak" value={String(data.currentStreak)} />
             <StatCard
               icon="sparkles"
-              label="Favorite model"
+              label={tr(appLanguage, 'analytics.tokenUsage')}
+              value={formatTokens(data.totalTokens)}
+            />
+            <StatCard icon="message" label={tr(appLanguage, 'analytics.sessions')} value={String(data.sessions)} />
+            <StatCard icon="message" label={tr(appLanguage, 'analytics.messages')} value={String(data.messages)} />
+            <StatCard icon="check" label={tr(appLanguage, 'analytics.activeDays')} value={String(data.activeDays)} />
+            <StatCard icon="refresh" label={tr(appLanguage, 'analytics.currentStreak')} value={String(data.currentStreak)} />
+            <StatCard
+              icon="sparkles"
+              label={tr(appLanguage, 'analytics.favoriteModel')}
               value={data.favorite ? data.favorite.model : '—'}
-              sub={data.favorite ? `${Math.round(data.favorite.share * 100)}% share` : undefined}
+              sub={
+                data.favorite
+                  ? tr(appLanguage, 'analytics.share', {
+                      count: Math.round(data.favorite.share * 100)
+                    })
+                  : undefined
+              }
             />
             <StatCard
               icon="barChart"
-              label="Est. cost"
+              label={tr(appLanguage, 'analytics.estimatedCost')}
               value={formatUsd(data.costUsd)}
-              sub={`${formatUsd(data.monthCostUsd)} this month · API rates`}
+              sub={tr(appLanguage, 'analytics.thisMonthApiRates', {
+                cost: formatUsd(data.monthCostUsd)
+              })}
             />
             <StatCard
               icon="check"
-              label="Saved (local & web)"
+              label={tr(appLanguage, 'analytics.savedLocalWeb')}
               value={formatUsd(data.savedUsd)}
-              sub="API-equivalent value"
+              sub={tr(appLanguage, 'analytics.apiEquivalentValue')}
             />
           </div>
 
-          <Heatmap data={data} />
-          <TokensPerDay data={data} />
-          <ModelTrends data={data} />
-          <HourHeatmap data={data} />
-          <ModelDonut data={data} />
-          <ProjectsTable data={data} />
-          <ProvidersTable data={data} />
+          <Heatmap data={data} language={appLanguage} />
+          <TokensPerDay data={data} language={appLanguage} />
+          <ModelTrends data={data} language={appLanguage} />
+          <HourHeatmap data={data} language={appLanguage} />
+          <ModelDonut data={data} language={appLanguage} />
+          <ProjectsTable data={data} language={appLanguage} />
+          <ProvidersTable data={data} language={appLanguage} />
         </div>
       )}
     </div>

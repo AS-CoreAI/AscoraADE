@@ -2,6 +2,7 @@
 What's new?
 
 ### Added
+- **Ukrainian language option** — Ukrainian is now available in the left-rail language menu alongside English and Russian. Core language controls and the Analytics screen have Ukrainian wording; strings without a dedicated Ukrainian translation fall back to English.
 - **Estimated cost analytics** — Analytics now estimates spend in USD from public API prices per model (Anthropic, OpenAI, Google, DeepSeek, Qwen, GLM, Grok, Mistral and a generic fallback). Two new stat cards show the total estimate with a this-month figure, and the API-equivalent value saved by free backends (LM Studio, Ollama, WProvider web chats). Est. cost columns were added to the Projects and Routers tables, the per-project model breakdown, and the model list next to the donut. All figures are estimates at API rates — subscription CLIs (Codex, Claude Code, Gemini CLI) are priced as if their tokens were bought via API.
 - **Model share over time** — a new 100%-stacked area chart shows each model's weekly share of tokens over the last 12 weeks, so model migrations (e.g. one model displacing another) are visible at a glance. Hovering shows the week's exact per-model shares in a tooltip; weeks without activity carry the previous mix so the chart stays continuous.
 - **Activity-by-hour heatmap** — a weekday × hour-of-day grid (local time, Monday-first) shows when you actually work, colored with the same intensity scale as the yearly heatmap, with tooltips and keyboard access on every cell.
@@ -9,6 +10,7 @@ What's new?
 - **Collapse or expand every workspace at once** — the Workspaces header now has a single toggle that closes all project task lists or reopens them, while leaving SSH host state untouched.
 
 ### Changed
+- **Analytics now follows the selected language** — screen labels, filters, stat cards, charts, tables, tooltips, accessibility labels, weekday/date labels, and token-number formatting are localized for English, Russian, and Ukrainian.
 - **Expandable project usage** — Analytics project rows now open into a per-model breakdown with token use, sessions, messages, share of the project, and consistent model colours.
 - **Model names on daily-chart segments** — hovering a coloured token segment now identifies the model and its exact usage for that day.
 - **Animated tooltip on the daily token chart** — bar segments now show the same custom tooltip as the activity heatmap (date, model with its colour dot, exact token count) with a light fade-in animation, instead of the delayed native browser hint. Segments use a pointer cursor with a subtle hover highlight in place of the old question-mark cursor, and the tooltip is reachable from the keyboard too.

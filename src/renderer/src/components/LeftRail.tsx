@@ -384,7 +384,7 @@ export function LeftRail(): JSX.Element {
                   setLanguageMenuOpen(false)
                 }}
               >
-                <span>{language.value === 'ru' ? t('app.language.russian') : t('app.language.english')}</span>
+                <span>{t(language.labelKey)}</span>
                 {appLanguage === language.value && <Icon name="check" size={14} />}
               </button>
             ))}
