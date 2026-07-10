@@ -36,6 +36,7 @@ export const en = {
   'rail.addFolder': 'Add folder',
   'rail.searchWorkspaces': 'Search workspaces',
   'rail.archived': 'Archived',
+  'rail.renameProject': 'Rename project',
   'rail.collapseAll': 'Collapse all workspaces',
   'rail.expandAll': 'Expand all workspaces',
   'rail.searchPlaceholder': 'Search workspaces & tasks',

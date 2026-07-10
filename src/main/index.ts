@@ -6,6 +6,12 @@ import { stopLiveServer } from './ipc/live'
 import { startPresence, stopPresence } from './presence'
 import { stopAllBlueprints } from './blueprint/runner'
 
+// WProvider sign-in pages must look like an ordinary interactive Chromium tab.
+// In particular, Cloudflare Turnstile on Grok loops indefinitely when Blink
+// advertises an automation-controlled environment even after a valid solve.
+// This does not bypass a challenge; it lets the user's successful solve stick.
+app.commandLine.appendSwitch('disable-blink-features', 'AutomationControlled')
+
 // Single-instance lock: focus the existing window instead of opening a second.
 if (!app.requestSingleInstanceLock()) {
   app.quit()

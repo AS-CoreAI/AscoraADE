@@ -58,6 +58,7 @@ export const IPC = {
   workspace: {
     list: 'workspace:list',
     add: 'workspace:add',
+    rename: 'workspace:rename',
     tasks: 'workspace:tasks',
     task: 'workspace:task',
     saveTask: 'workspace:saveTask',

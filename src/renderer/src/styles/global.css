@@ -399,6 +399,18 @@ button {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.ws-rename-input {
+  flex: 1;
+  min-width: 0;
+  height: 24px;
+  padding: 2px 6px;
+  border: 1px solid var(--focus-border);
+  border-radius: 4px;
+  outline: none;
+  background: var(--bg-input);
+  color: var(--text);
+  font: inherit;
+}
 .ws-twisty {
   display: inline-flex;
   align-items: center;

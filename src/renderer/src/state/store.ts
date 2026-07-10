@@ -1251,6 +1251,7 @@ interface AppState {
   toggleWorkspaceCollapsed: (id: string) => void
   setAllWorkspacesCollapsed: (collapsed: boolean) => void
   reorderWorkspaces: (draggedId: string, targetId: string) => void
+  renameWorkspace: (id: string, name: string) => Promise<boolean>
   openTask: (ws: Workspace, taskId: string, includeDeleted?: boolean) => Promise<void>
   restoreTask: (ws: Workspace, taskId: string) => Promise<void>
   deleteTask: (ws: Workspace, taskId: string) => Promise<void>
@@ -2034,6 +2035,18 @@ export const useApp = create<AppState>((set, get) => {
           }
         : { tasksByWorkspace: next, runs, taskLlm }
     })
+  },
+
+  async renameWorkspace(id, name) {
+    const value = name.trim()
+    if (!value) return false
+    const renamed = await api.workspace.rename(id, value)
+    if (!renamed) return false
+    set((state) => ({
+      workspaces: state.workspaces.map((workspace) => workspace.id === id ? renamed : workspace),
+      active: state.active?.id === id ? renamed : state.active
+    }))
+    return true
   },
 
   async restoreTask(ws, taskId) {

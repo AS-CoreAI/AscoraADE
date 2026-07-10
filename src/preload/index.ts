@@ -187,6 +187,8 @@ const api = {
   workspace: {
     list: (): Promise<Workspace[]> => ipcRenderer.invoke(IPC.workspace.list),
     add: (path: string): Promise<Workspace> => ipcRenderer.invoke(IPC.workspace.add, path),
+    rename: (id: string, name: string): Promise<Workspace | null> =>
+      ipcRenderer.invoke(IPC.workspace.rename, id, name),
     tasks: (workspaceId: string, deletedOnly = false): Promise<TaskSummary[]> =>
       ipcRenderer.invoke(IPC.workspace.tasks, workspaceId, deletedOnly),
     task: (taskId: string, includeDeleted = false): Promise<TaskRecord | null> =>

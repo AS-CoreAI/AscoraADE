@@ -20,6 +20,7 @@ export interface Store {
   allSettings(): Record<string, unknown>
   listWorkspaces(): Workspace[]
   addWorkspace(name: string, path: string): Workspace
+  renameWorkspace(id: string, name: string): Workspace | null
   listTasks(workspaceId: string, deletedOnly?: boolean): TaskSummary[]
   getTask(taskId: string, includeDeleted?: boolean): TaskRecord | null
   saveTask(task: TaskRecord): TaskSummary
@@ -148,6 +149,13 @@ class JsonStore implements Store {
       .filter((t) => t.workspaceId === workspaceId && (deletedOnly ? !!t.deletedAt : !t.deletedAt))
       .sort((a, b) => deletedOnly ? (b.deletedAt ?? 0) - (a.deletedAt ?? 0) : b.updatedAt - a.updatedAt)
       .map(taskSummary)
+  }
+  renameWorkspace(id: string, name: string): Workspace | null {
+    const workspace = this.data.workspaces.find((item) => item.id === id)
+    if (!workspace) return null
+    workspace.name = name.trim()
+    this.scheduleFlush()
+    return { ...workspace }
   }
 
   getTask(taskId: string, includeDeleted = false): TaskRecord | null {
@@ -305,6 +313,15 @@ class SqliteStore implements Store {
       )
       .run(id, name, path, now)
     return { id, name, path, lastOpenedAt: now }
+  }
+  renameWorkspace(id: string, name: string): Workspace | null {
+    const value = name.trim()
+    const info = this.db.prepare('UPDATE workspaces SET name = ? WHERE id = ?').run(value, id)
+    if (info.changes === 0) return null
+    const row = this.db
+      .prepare('SELECT id, name, path, last_opened_at FROM workspaces WHERE id = ?')
+      .get(id) as { id: string; name: string; path: string; last_opened_at: number }
+    return { id: row.id, name: row.name, path: row.path, lastOpenedAt: row.last_opened_at }
   }
 
   listTasks(workspaceId: string, deletedOnly = false): TaskSummary[] {

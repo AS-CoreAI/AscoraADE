@@ -38,6 +38,7 @@ const ru: Translation = {
   'rail.addFolder': 'Добавить папку',
   'rail.searchWorkspaces': 'Искать проекты',
   'rail.archived': 'Архив',
+  'rail.renameProject': 'Переименовать проект',
   'rail.collapseAll': 'Свернуть все проекты',
   'rail.expandAll': 'Развернуть все проекты',
   'rail.searchPlaceholder': 'Поиск проектов и задач',

@@ -2,6 +2,7 @@
 What's new?
 
 ### Added
+- **Workspace projects can be renamed from the rail** — right-clicking a project now opens a context menu with Rename; the name is edited inline and persisted without changing the underlying folder path.
 - **Blueprint automation studio** — a new dockable Blueprint activity, plus a Blueprint section between Projects and SSH, creates project-independent scenarios with persistent definitions, manual runs, interval scheduling, bounded repeats, delays, Telegram delivery, webhooks, and a live execution log.
 - **Multi-agent WProvider teams** — every Blueprint can define several named agents with independent roles, instructions, web services, and conversation sessions. Ordered steps automatically pass completed team results to the next agent, enabling researcher/reviewer/editor-style collaboration without a workspace or SSH context.
 - **Blueprint Hub and shared scenario chat** — the Blueprint activity button now opens a catalog where one or several scenarios can be connected to a shared prompt. Each selected Blueprint runs its own agent pipeline and streams its status and latest result into one team-chat view; connected scenarios persist between launches, while the existing scenario editor remains available from the left rail.
@@ -22,6 +23,10 @@ What's new?
 - **Model names on daily-chart segments** — hovering a coloured token segment now identifies the model and its exact usage for that day.
 - **Animated tooltip on the daily token chart** — bar segments now show the same custom tooltip as the activity heatmap (date, model with its colour dot, exact token count) with a light fade-in animation, instead of the delayed native browser hint. Segments use a pointer cursor with a subtle hover highlight in place of the old question-mark cursor, and the tooltip is reachable from the keyboard too.
 - **Version bump to 1.2.3** — package metadata and the About section now report version 1.2.3.
+
+### Fixed
+- **Grok WProvider no longer loops the Cloudflare CAPTCHA after a successful solve** — the visible sign-in window now disables Blink's automation marker, sends a Chrome-consistent User-Agent and Client Hints profile to Grok/xAI, and clears only stale transient Cloudflare challenge cookies before a new login attempt while preserving valid clearance and authentication cookies.
+- **Gemini WProvider no longer reports anonymous sessions as signed in** — Gemini exposes a usable-looking prompt while logged out, so composer presence alone produced a false positive. Sign-in checks now reject the language-independent anonymous UI markers (`mavatar-sign-in-icon-button` and `.signed-out-buttons`) instead of matching translated “Sign in” text.
 
 ## Ascora ADE 1.2.2
 

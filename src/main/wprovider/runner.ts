@@ -94,6 +94,7 @@ const sessions = new Map<string, ChatSession>()
 /** Request ids cancelled while they are still waiting in the shared browser queue. */
 const cancelledOps = new Set<string>()
 let netListenerInstalled = false
+let sessionHeadersInstalled = false
 
 function enqueueWProviderOp<T>(run: () => Promise<T>): Promise<T> {
   const next = queue.then(
@@ -142,7 +143,42 @@ function wpSession(): Session {
     .replace(/\sElectron\/[\d.]+/i, '')
     .replace(/\sascora-ade\/[\d.]+/i, '')
   if (ua !== ses.getUserAgent()) ses.setUserAgent(ua)
+  if (!sessionHeadersInstalled) {
+    sessionHeadersInstalled = true
+    const chromeMajor = /Chrome\/(\d+)/i.exec(ua)?.[1] ?? '132'
+    ses.webRequest.onBeforeSendHeaders(
+      { urls: ['https://grok.com/*', 'https://*.grok.com/*', 'https://*.x.ai/*'] },
+      (details, callback) => {
+        // Chromium's default client hints can still reveal the Electron shell
+        // after the classic User-Agent has been cleaned. Keep both views of the
+        // browser consistent so Cloudflare can persist its challenge result.
+        const headers = { ...details.requestHeaders }
+        const setHeader = (name: string, value: string): void => {
+          for (const existing of Object.keys(headers)) {
+            if (existing.toLowerCase() === name.toLowerCase()) delete headers[existing]
+          }
+          headers[name] = value
+        }
+        setHeader('User-Agent', ua)
+        setHeader('Sec-CH-UA', `"Google Chrome";v="${chromeMajor}", "Chromium";v="${chromeMajor}", "Not_A Brand";v="24"`)
+        setHeader('Sec-CH-UA-Mobile', '?0')
+        setHeader('Sec-CH-UA-Platform', process.platform === 'win32' ? '"Windows"' : process.platform === 'darwin' ? '"macOS"' : '"Linux"')
+        callback({ requestHeaders: headers })
+      }
+    )
+  }
   return ses
+}
+
+async function clearStaleGrokChallengeCookies(): Promise<void> {
+  const ses = wpSession()
+  const cookies = await ses.cookies.get({ domain: '.grok.com' })
+  const stale = cookies.filter((cookie) => /^cf_chl_/i.test(cookie.name))
+  await Promise.all(
+    stale.map((cookie) =>
+      ses.cookies.remove(`https://${cookie.domain?.replace(/^\./, '') || 'grok.com'}${cookie.path || '/'}`, cookie.name)
+    )
+  )
 }
 
 /**
@@ -884,7 +920,11 @@ async function checkDeepSeekLoggedIn(): Promise<boolean> {
  * login screen carries a stray textarea that composerLookupJs picks up. For
  * these, composer presence alone must never count as "signed in".
  */
-const COMPOSER_NOT_ENOUGH_SERVICES: ReadonlySet<WProviderService> = new Set(['mistral', 'chatgpt'])
+const COMPOSER_NOT_ENOUGH_SERVICES: ReadonlySet<WProviderService> = new Set([
+  'mistral',
+  'gemini',
+  'chatgpt'
+])
 
 /**
  * Structural (language-independent) proof of a signed-in session, keyed by
@@ -895,6 +935,11 @@ const COMPOSER_NOT_ENOUGH_SERVICES: ReadonlySet<WProviderService> = new Set(['mi
  */
 const SIGNED_IN_MARKER_SELECTORS: Partial<Record<WProviderService, string>> = {
   mistral: '[data-sidebar="menu-button"]'
+}
+
+/** Structural UI that Gemini renders only for anonymous visitors. */
+const SIGNED_OUT_MARKER_SELECTORS: Partial<Record<WProviderService, string>> = {
+  gemini: '[data-test-id="mavatar-sign-in-icon-button"], .signed-out-buttons'
 }
 
 function isAuthPageUrl(url: string): boolean {
@@ -951,6 +996,24 @@ async function serviceComposerSignedIn(win: BrowserWindow, service: WProviderSer
   if (win.isDestroyed() || !windowOnService(win, service)) return false
   if (!(await hasComposer(win))) return false
   if (!COMPOSER_NOT_ENOUGH_SERVICES.has(service)) return true
+
+  const signedOutMarker = SIGNED_OUT_MARKER_SELECTORS[service]
+  if (signedOutMarker) {
+    // The selector targets component identity rather than translated button
+    // text, so it works for every Gemini locale. Probe failures deliberately
+    // count as signed out to avoid closing the login window prematurely.
+    const isSignedOut = await runJs<boolean>(
+      win,
+      `!!document.querySelector(${JSON.stringify(signedOutMarker)})`
+    ).catch((err) => {
+      console.log(`[wprovider debug] ${service}: signed-out marker probe failed: ${String(err)}`)
+      return true
+    })
+    if (isSignedOut) {
+      console.log(`[wprovider debug] ${service}: signed-out marker (${signedOutMarker}) found`)
+      return false
+    }
+  }
 
   const marker = SIGNED_IN_MARKER_SELECTORS[service]
   if (marker) {
@@ -1119,7 +1182,7 @@ async function checkGrokLoggedIn(): Promise<boolean> {
 async function checkGeminiLoggedIn(): Promise<boolean> {
   for (const win of [authWin, hiddenWin]) {
     if (!win || !windowOnService(win, 'gemini')) continue
-    if (await hasComposer(win)) return true
+    if (await serviceComposerSignedIn(win, 'gemini')) return true
   }
 
   // Do not navigate the hidden driver out from under an in-flight generation.
@@ -1515,6 +1578,10 @@ export async function loginWProvider(service: WProviderService): Promise<WProvid
     authWin.focus()
     return { ok: true, loggedIn: (await checkWProvider(service)).loggedIn }
   }
+  // A cancelled/expired Turnstile attempt can leave cf_chl_* cookies that make
+  // the next Grok login immediately re-enter the same challenge. Preserve the
+  // valid cf_clearance/auth cookies, but discard only those transient attempts.
+  if (service === 'grok') await clearStaleGrokChallengeCookies()
   authWin = createWindow(true, false)
   const win = authWin
   win.on('closed', () => {

@@ -40,6 +40,7 @@ const it: Translation = {
   'rail.addFolder': 'Aggiungi cartella',
   'rail.searchWorkspaces': 'Cerca aree di lavoro',
   'rail.archived': 'Archiviati',
+  'rail.renameProject': 'Rinomina progetto',
   'rail.collapseAll': 'Comprimi tutte le aree di lavoro',
   'rail.expandAll': 'Espandi tutte le aree di lavoro',
   'rail.searchPlaceholder': 'Cerca aree di lavoro e attività',

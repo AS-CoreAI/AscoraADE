@@ -40,6 +40,7 @@ const de: Translation = {
   'rail.addFolder': 'Ordner hinzufügen',
   'rail.searchWorkspaces': 'Arbeitsbereiche durchsuchen',
   'rail.archived': 'Archiviert',
+  'rail.renameProject': 'Projekt umbenennen',
   'rail.collapseAll': 'Alle Arbeitsbereiche einklappen',
   'rail.expandAll': 'Alle Arbeitsbereiche ausklappen',
   'rail.searchPlaceholder': 'Arbeitsbereiche und Aufgaben durchsuchen',

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type JSX } from 'react'
+import { createPortal } from 'react-dom'
 import type { TaskSummary, Workspace } from '@shared/ipc'
 import { Icon } from './Icon'
 import { SshRail } from './SshRail'
@@ -51,12 +52,16 @@ export function LeftRail(): JSX.Element {
   const toggleWorkspaceCollapsed = useApp((s) => s.toggleWorkspaceCollapsed)
   const setAllWorkspacesCollapsed = useApp((s) => s.setAllWorkspacesCollapsed)
   const reorderWorkspaces = useApp((s) => s.reorderWorkspaces)
+  const renameWorkspace = useApp((s) => s.renameWorkspace)
   const openTask = useApp((s) => s.openTask)
   const deleteTask = useApp((s) => s.deleteTask)
   const restoreTask = useApp((s) => s.restoreTask)
   const newTask = useApp((s) => s.newTask)
   const [dragId, setDragId] = useState<string | null>(null)
   const [dragOverId, setDragOverId] = useState<string | null>(null)
+  const [workspaceMenu, setWorkspaceMenu] = useState<{ x: number; y: number; ws: Workspace } | null>(null)
+  const [renamingWorkspace, setRenamingWorkspace] = useState<{ id: string; name: string } | null>(null)
+  const renameInputRef = useRef<HTMLInputElement>(null)
   // Folders whose full task list is revealed via "Show more" (session-only).
   const [showAllTasks, setShowAllTasks] = useState<Record<string, boolean>>({})
   const [search, setSearch] = useState('')
@@ -101,6 +106,26 @@ export function LeftRail(): JSX.Element {
   }, [languageMenuOpen, themeMenuOpen])
 
   useEffect(() => {
+    if (!workspaceMenu) return
+    const close = (): void => setWorkspaceMenu(null)
+    const onKey = (event: KeyboardEvent): void => { if (event.key === 'Escape') close() }
+    document.addEventListener('mousedown', close)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', close)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [workspaceMenu])
+
+  useEffect(() => {
+    if (!renamingWorkspace) return
+    requestAnimationFrame(() => {
+      renameInputRef.current?.focus()
+      renameInputRef.current?.select()
+    })
+  }, [renamingWorkspace?.id])
+
+  useEffect(() => {
     if (!aboutOpen) return
     const closeOnEscape = (event: KeyboardEvent): void => {
       if (event.key === 'Escape') setAboutOpen(false)
@@ -136,6 +161,16 @@ export function LeftRail(): JSX.Element {
     )
     setArchivedTasks(Object.fromEntries(entries))
     setArchiveOpen(true)
+  }
+
+  const saveWorkspaceName = async (): Promise<void> => {
+    if (!renamingWorkspace) return
+    const value = renamingWorkspace.name.trim()
+    if (!value) {
+      renameInputRef.current?.focus()
+      return
+    }
+    if (await renameWorkspace(renamingWorkspace.id, value)) setRenamingWorkspace(null)
   }
 
   // Ctrl/Cmd+K opens the workspace search and focuses the field.
@@ -290,7 +325,16 @@ export function LeftRail(): JSX.Element {
                 className={`ws-item${active?.id === ws.id && !activeSsh ? ' active' : ''}${
                   dragId === ws.id ? ' dragging' : ''
                 }${dragOverId === ws.id && dragId !== ws.id ? ' drag-over' : ''}`}
-                draggable
+                draggable={renamingWorkspace?.id !== ws.id}
+                onContextMenu={(event) => {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  setWorkspaceMenu({
+                    x: Math.min(event.clientX, window.innerWidth - 180),
+                    y: Math.min(event.clientY, window.innerHeight - 44),
+                    ws
+                  })
+                }}
                 onDragStart={(e) => {
                   setDragId(ws.id)
                   e.dataTransfer.effectAllowed = 'move'
@@ -326,7 +370,22 @@ export function LeftRail(): JSX.Element {
                   <Icon name={collapsed ? 'chevronRight' : 'chevronDown'} size={12} />
                 </span>
                 <Icon name="folder" size={15} />
-                <span className="name">{ws.name}</span>
+                {renamingWorkspace?.id === ws.id ? (
+                  <input
+                    ref={renameInputRef}
+                    className="ws-rename-input"
+                    value={renamingWorkspace.name}
+                    aria-label={t('rail.renameProject')}
+                    onClick={(event) => event.stopPropagation()}
+                    onChange={(event) => setRenamingWorkspace({ id: ws.id, name: event.target.value })}
+                    onKeyDown={(event) => {
+                      event.stopPropagation()
+                      if (event.key === 'Enter') void saveWorkspaceName()
+                      if (event.key === 'Escape') setRenamingWorkspace(null)
+                    }}
+                    onBlur={() => void saveWorkspaceName()}
+                  />
+                ) : <span className="name">{ws.name}</span>}
               </div>
               {!collapsed &&
                 visibleTasks.map((task) => (
@@ -384,6 +443,21 @@ export function LeftRail(): JSX.Element {
         })}
         </>}
       </div>
+
+      {workspaceMenu && createPortal(
+        <div
+          className="context-menu"
+          style={{ left: workspaceMenu.x, top: workspaceMenu.y }}
+          role="menu"
+          onMouseDown={(event) => event.stopPropagation()}
+        >
+          <button className="context-item" role="menuitem" onClick={() => {
+            setRenamingWorkspace({ id: workspaceMenu.ws.id, name: workspaceMenu.ws.name })
+            setWorkspaceMenu(null)
+          }}>{t('rail.renameProject')}</button>
+        </div>,
+        document.body
+      )}
 
       <BlueprintRail />
 

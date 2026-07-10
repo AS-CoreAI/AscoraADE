@@ -27,6 +27,7 @@ const uk: Translation = {
   'rail.search': 'Пошук',
   'rail.skills': 'Навички',
   'rail.workspaces': 'Робочі простори',
+  'rail.renameProject': 'Перейменувати проєкт',
   'rail.analytics': 'Аналітика',
   'rail.agentBackendSettings': 'Налаштування бекенду агента',
   'rail.appearanceSettings': 'Налаштування вигляду',

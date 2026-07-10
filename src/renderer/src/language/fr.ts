@@ -39,6 +39,7 @@ const fr: Translation = {
   'rail.addFolder': 'Ajouter un dossier',
   'rail.searchWorkspaces': 'Rechercher des espaces de travail',
   'rail.archived': 'Archivés',
+  'rail.renameProject': 'Renommer le projet',
   'rail.collapseAll': 'Réduire tous les espaces de travail',
   'rail.expandAll': 'Développer tous les espaces de travail',
   'rail.searchPlaceholder': 'Rechercher des espaces de travail et des tâches',
