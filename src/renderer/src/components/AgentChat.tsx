@@ -14,19 +14,23 @@ const TOOL_LABEL_KEY: Record<string, TranslationKey> = {
   write_file: 'chat.tool.writeFile',
   edit_file: 'chat.tool.editFile',
   run_command: 'chat.tool.runCommand',
-  apply_patch: 'chat.tool.editFiles'
+  apply_patch: 'chat.tool.editFiles',
+  web_fetch: 'chat.tool.webFetch',
+  web_search: 'chat.tool.webSearch'
 }
 
-function toolIcon(tool?: string): 'terminal' | 'folder' | 'file' | 'search' {
+function toolIcon(tool?: string): 'terminal' | 'folder' | 'file' | 'search' | 'globe' {
   if (tool === 'run_command') return 'terminal'
   if (tool === 'list_dir') return 'folder'
-  if (tool === 'search_files') return 'search'
+  if (tool === 'search_files' || tool === 'web_search') return 'search'
+  if (tool === 'web_fetch') return 'globe'
   return 'file'
 }
 
 function toolSummary(m: ChatMessage): string {
   if (m.tool === 'run_command') return String(m.args?.command ?? '')
-  if (m.tool === 'search_files') return String(m.args?.query ?? '')
+  if (m.tool === 'search_files' || m.tool === 'web_search') return String(m.args?.query ?? '')
+  if (m.tool === 'web_fetch') return String(m.args?.url ?? '')
   return String(m.args?.path ?? '')
 }
 
@@ -94,9 +98,9 @@ function ToolCard({ m }: { m: ChatMessage }): JSX.Element {
         </pre>
       )}
 
-      {m.tool === 'search_files' && status === 'done' && m.output && (
-        <pre className="tool-output">{m.output}</pre>
-      )}
+      {(m.tool === 'search_files' || m.tool === 'web_search' || m.tool === 'web_fetch') &&
+        status === 'done' &&
+        m.output && <pre className="tool-output">{m.output}</pre>}
 
       {(m.tool === 'list_dir' || m.tool === 'read_file') && m.output && status === 'done' && (
         <div className="tool-note">{m.output}</div>

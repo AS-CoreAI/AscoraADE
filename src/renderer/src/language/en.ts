@@ -290,6 +290,8 @@ export const en = {
   'chat.tool.editFile': 'Edit file',
   'chat.tool.runCommand': 'Run command',
   'chat.tool.editFiles': 'Edit files',
+  'chat.tool.webFetch': 'Fetch URL',
+  'chat.tool.webSearch': 'Web search',
   'chat.status.awaiting': 'needs review',
   'chat.status.running': 'running…',
   'chat.status.done': 'done',

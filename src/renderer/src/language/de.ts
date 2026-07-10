@@ -294,6 +294,8 @@ const de: Translation = {
   'chat.tool.editFile': 'Datei bearbeiten',
   'chat.tool.runCommand': 'Befehl ausführen',
   'chat.tool.editFiles': 'Dateien bearbeiten',
+  'chat.tool.webFetch': 'URL abrufen',
+  'chat.tool.webSearch': 'Websuche',
   'chat.status.awaiting': 'muss überprüft werden',
   'chat.status.running': 'wird ausgeführt…',
   'chat.status.done': 'fertig',

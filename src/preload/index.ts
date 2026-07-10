@@ -60,8 +60,11 @@ import {
   type AgentReadResult,
   type AgentWriteResult,
   type AgentEditResult,
+  type AgentSearchOptions,
   type AgentSearchResult,
   type AgentRunResult,
+  type WebFetchResult,
+  type WebSearchResult,
   type UpdateInfo,
   type ChangelogInfo
 } from '@shared/ipc'
@@ -423,10 +426,15 @@ const api = {
       replaceAll: boolean
     ): Promise<AgentEditResult> =>
       ipcRenderer.invoke(IPC.agent.editFile, root, path, oldString, newString, replaceAll),
-    search: (root: string, query: string, path?: string): Promise<AgentSearchResult> =>
-      ipcRenderer.invoke(IPC.agent.search, root, query, path),
+    search: (root: string, query: string, options?: AgentSearchOptions): Promise<AgentSearchResult> =>
+      ipcRenderer.invoke(IPC.agent.search, root, query, options),
     runCommand: (root: string, command: string): Promise<AgentRunResult> =>
       ipcRenderer.invoke(IPC.agent.runCommand, root, command)
+  },
+  web: {
+    fetch: (url: string, maxChars?: number): Promise<WebFetchResult> =>
+      ipcRenderer.invoke(IPC.web.fetch, url, maxChars),
+    search: (query: string): Promise<WebSearchResult> => ipcRenderer.invoke(IPC.web.search, query)
   },
   update: {
     /** Probe release feeds for a newer build. */

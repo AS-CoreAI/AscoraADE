@@ -291,6 +291,8 @@ const it: Translation = {
   'chat.tool.editFile': 'Modifica file',
   'chat.tool.runCommand': 'Esegui comando',
   'chat.tool.editFiles': 'Modifica file',
+  'chat.tool.webFetch': 'Recupera URL',
+  'chat.tool.webSearch': 'Ricerca web',
   'chat.status.awaiting': 'richiede revisione',
   'chat.status.running': 'in esecuzione…',
   'chat.status.done': 'completato',

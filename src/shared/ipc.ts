@@ -160,6 +160,10 @@ export const IPC = {
     search: 'agent:search',
     runCommand: 'agent:runCommand'
   },
+  web: {
+    fetch: 'web:fetch',
+    search: 'web:search'
+  },
   update: {
     check: 'update:check',
     changelog: 'update:changelog',
@@ -1205,6 +1209,27 @@ export interface AgentSearchMatch {
   line: number
   /** The matching line, trimmed and length-capped for token budgets. */
   text: string
+  /** Context lines immediately before the match (when `context` > 0). */
+  before?: string[]
+  /** Context lines immediately after the match (when `context` > 0). */
+  after?: string[]
+}
+
+/**
+ * ripgrep-style options for `agent.search`. Defaults preserve the original
+ * behavior: a literal, case-insensitive substring scan of the whole workspace.
+ */
+export interface AgentSearchOptions {
+  /** Restrict the scan to this workspace-relative subdirectory. */
+  path?: string
+  /** Interpret `query` as a JavaScript regular expression instead of a literal. */
+  regex?: boolean
+  /** Only search files whose repo-relative path matches this glob (e.g. `**\/*.ts`). */
+  glob?: string
+  /** Include this many lines of context before and after each match (0 = none). */
+  context?: number
+  /** Match case-sensitively (default false = case-insensitive). */
+  caseSensitive?: boolean
 }
 
 export interface AgentSearchResult {
@@ -1213,6 +1238,36 @@ export interface AgentSearchResult {
   matches?: AgentSearchMatch[]
   /** True when the match list hit the cap and more results exist. */
   truncated?: boolean
+  error?: string
+}
+
+// ---------- Web tools (outbound HTTP for the agent loop) ----------
+
+export interface WebFetchResult {
+  ok: boolean
+  /** Final URL after redirects. */
+  url?: string
+  /** Page <title>, when the response was HTML. */
+  title?: string
+  /** Extracted plain text (HTML stripped) or the raw body for text responses. */
+  content?: string
+  /** Reported/served content type, e.g. "text/html". */
+  contentType?: string
+  /** True when the body was longer than the cap and `content` was truncated. */
+  truncated?: boolean
+  error?: string
+}
+
+export interface WebSearchItem {
+  title: string
+  url: string
+  snippet: string
+}
+
+export interface WebSearchResult {
+  ok: boolean
+  query?: string
+  results?: WebSearchItem[]
   error?: string
 }
 

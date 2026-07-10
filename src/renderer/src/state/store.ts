@@ -28,6 +28,7 @@ import type {
   AgentWriteResult,
   AgentEditResult,
   AgentSearchResult,
+  AgentSearchOptions,
   AgentDirEntry,
   AgentSearchMatch,
   WProviderCheckResult,
@@ -226,7 +227,9 @@ const TOOL_NAMES = [
   'search_files',
   'write_file',
   'edit_file',
-  'run_command'
+  'run_command',
+  'web_fetch',
+  'web_search'
 ] as const
 type ToolName = (typeof TOOL_NAMES)[number]
 
@@ -266,13 +269,31 @@ const TOOLS: ToolDef[] = [
     function: {
       name: 'search_files',
       description:
-        'Search the workspace for a literal, case-insensitive text and return matching ' +
-        'file:line locations. Use this to find code instead of reading files one by one.',
+        'Search the workspace and return matching file:line locations (ripgrep-style). ' +
+        'By default the query is a case-insensitive literal substring; set regex to treat it ' +
+        'as a regular expression, glob to limit which files are scanned, and context to include ' +
+        'surrounding lines. Use this to find code instead of reading files one by one.',
       parameters: {
         type: 'object',
         properties: {
-          query: { type: 'string', description: 'Text to search for (case-insensitive substring).' },
-          path: { type: 'string', description: 'Optional subdirectory to scope the search to.' }
+          query: { type: 'string', description: 'Text or regular expression to search for.' },
+          path: { type: 'string', description: 'Optional subdirectory to scope the search to.' },
+          regex: {
+            type: 'boolean',
+            description: 'Interpret query as a regular expression instead of a literal. Default false.'
+          },
+          glob: {
+            type: 'string',
+            description: 'Only search files whose path matches this glob, e.g. "**/*.ts" or "src/**".'
+          },
+          context: {
+            type: 'integer',
+            description: 'Lines of context to include before and after each match (0–10). Default 0.'
+          },
+          case_sensitive: {
+            type: 'boolean',
+            description: 'Match case-sensitively. Default false.'
+          }
         },
         required: ['query']
       }
@@ -329,6 +350,40 @@ const TOOLS: ToolDef[] = [
         required: ['command']
       }
     }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'web_fetch',
+      description:
+        'Fetch a URL over HTTP(S) and return its readable text (HTML is stripped to plain text). ' +
+        'Use it to read documentation pages, issues, or raw files by URL.',
+      parameters: {
+        type: 'object',
+        properties: {
+          url: { type: 'string', description: 'Absolute http(s) URL to fetch.' },
+          max_chars: {
+            type: 'integer',
+            description: 'Optional cap on returned characters (default ~40000).'
+          }
+        },
+        required: ['url']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'web_search',
+      description:
+        'Search the web (DuckDuckGo) and return a short ranked list of {title, url, snippet}. ' +
+        'Use it to find current information, then web_fetch a result URL to read it in full.',
+      parameters: {
+        type: 'object',
+        properties: { query: { type: 'string', description: 'The search query.' } },
+        required: ['query']
+      }
+    }
   }
 ]
 
@@ -353,10 +408,14 @@ function buildSystemPrompt(sshHost?: string, sshRoot?: string): string {
     'You can use tools to inspect and change the project:',
     '- list_dir(path): list a directory ("." is the project root)',
     '- read_file(path, [start_line], [end_line]): read a whole file or just a line range',
-    '- search_files(query, [path]): find where text appears across the project',
+    '- search_files(query, [path], [regex], [glob], [context], [case_sensitive]): ripgrep-style ' +
+      'search — literal by default, set regex for a pattern, glob (e.g. "**/*.ts") to scope files, ' +
+      'context for surrounding lines',
     '- write_file(path, content): create or fully overwrite a file',
     '- edit_file(path, old_string, new_string, [replace_all]): change part of a file in place',
     '- run_command(command): run a shell command in the project root and read its output',
+    '- web_search(query): search the web for a ranked list of results',
+    '- web_fetch(url, [max_chars]): fetch a URL and read its text (HTML stripped)',
     '',
     'All paths are relative to the project root. Work step by step: call one tool at a time,',
     'wait for its result, then decide the next step. Prefer search_files to locate code and',
@@ -408,6 +467,39 @@ const asStr = (v: unknown): string => (typeof v === 'string' ? v : '')
 function asLine(v: unknown): number | undefined {
   const n = typeof v === 'number' ? v : typeof v === 'string' ? Number(v) : NaN
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : undefined
+}
+
+/** Coerce a tool arg to a boolean, tolerating "true"/"false" strings. */
+function asBool(v: unknown): boolean {
+  return v === true || v === 'true'
+}
+
+/** Coerce a tool arg to a non-negative integer, or undefined. */
+function asCount(v: unknown): number | undefined {
+  const n = typeof v === 'number' ? v : typeof v === 'string' ? Number(v) : NaN
+  return Number.isFinite(n) && n >= 0 ? Math.floor(n) : undefined
+}
+
+/** Build the ripgrep-style options object for search_files from raw tool args. */
+function searchOptionsFromArgs(args: Record<string, unknown>): AgentSearchOptions {
+  return {
+    path: asStr(args.path) || undefined,
+    regex: asBool(args.regex),
+    glob: asStr(args.glob) || undefined,
+    context: asCount(args.context),
+    caseSensitive: asBool(args.case_sensitive)
+  }
+}
+
+/** Render one search hit, inlining context lines (`>` marks the match). */
+function formatMatch(mt: AgentSearchMatch): string {
+  if (!mt.before?.length && !mt.after?.length) return `${mt.path}:${mt.line}: ${mt.text}`
+  const out: string[] = []
+  const firstBefore = mt.line - (mt.before?.length ?? 0)
+  mt.before?.forEach((l, i) => out.push(`${mt.path}:${firstBefore + i}- ${l}`))
+  out.push(`${mt.path}:${mt.line}:> ${mt.text}`)
+  mt.after?.forEach((l, i) => out.push(`${mt.path}:${mt.line + 1 + i}- ${l}`))
+  return out.join('\n')
 }
 
 /**
@@ -501,19 +593,34 @@ async function sshReadFile(
     : { ok: true, path: p, content, totalLines }
 }
 
-async function sshSearch(id: string, query: string, path?: string, root = '.'): Promise<AgentSearchResult> {
+async function sshSearch(
+  id: string,
+  query: string,
+  options?: AgentSearchOptions,
+  root = '.'
+): Promise<AgentSearchResult> {
   if (!query) return { ok: false, error: 'query is required.' }
-  const where = shq(remoteResolve(root, path && path.trim() ? path : '.'))
+  const opts = options ?? {}
+  const where = shq(remoteResolve(root, opts.path && opts.path.trim() ? opts.path : '.'))
   const cap = 200
-  // -r recursive, -n line numbers, -I skip binary, -F literal, -i case-insensitive.
+  const flags = ['-rnI']
+  if (!opts.caseSensitive) flags.push('-i')
+  // -F literal (default) vs -E extended regex when the model asks for a pattern.
+  flags.push(opts.regex ? '-E' : '-F')
+  const context = Math.min(10, Math.max(0, Math.floor(opts.context ?? 0)))
+  if (context > 0) flags.push(`-C ${context}`)
+  const include = opts.glob && opts.glob.trim() ? ` --include=${shq(opts.glob.trim())}` : ''
   const r = await api.ssh.exec(
     id,
-    `grep -rnI -F -i -e ${shq(query)} -- ${where} 2>/dev/null | head -n ${cap + 1}`
+    `grep ${flags.join(' ')}${include} -e ${shq(query)} -- ${where} 2>/dev/null | head -n ${cap + 1}`
   )
   if (!r.ok) return { ok: false, error: r.error }
   const lines = sshLines(r.stdout)
   const truncated = lines.length > cap
-  const matches: AgentSearchMatch[] = lines.slice(0, cap).map((line) => {
+  // With context, grep prints `path-line-text` for context and `path:line:text`
+  // for matches; keep only the match lines (the `:` separator) for parity.
+  const matchLines = context > 0 ? lines.filter((l) => /^.*?:\d+:/.test(l)) : lines
+  const matches: AgentSearchMatch[] = matchLines.slice(0, cap).map((line) => {
     const m = line.match(/^(.*?):(\d+):(.*)$/)
     return m
       ? { path: m[1], line: parseInt(m[2], 10), text: m[3].trim().slice(0, 400) }
@@ -3624,19 +3731,16 @@ export const useApp = create<AppState>((set, get) => {
                 : `Error: ${r.error}`
             )
           } else if (call.name === 'search_files') {
+            const opts = searchOptionsFromArgs(call.args)
             const r = sshId
-              ? await sshSearch(sshId, asStr(call.args.query), asStr(call.args.path) || undefined, root)
-              : await api.agent.search(
-                  root,
-                  asStr(call.args.query),
-                  asStr(call.args.path) || undefined
-                )
+              ? await sshSearch(sshId, asStr(call.args.query), opts, root)
+              : await api.agent.search(root, asStr(call.args.query), opts)
             const hits = r.matches ?? []
             patch(cardId, {
               status: r.ok ? 'done' : 'error',
               output: r.ok
                 ? hits.length
-                  ? hits.map((mt) => `${mt.path}:${mt.line}: ${mt.text}`).join('\n')
+                  ? hits.map(formatMatch).join('\n')
                   : 'No matches.'
                 : undefined,
               error: r.error
@@ -3646,7 +3750,7 @@ export const useApp = create<AppState>((set, get) => {
               r.ok
                 ? hits.length
                   ? `${hits.length}${r.truncated ? '+' : ''} match(es) for "${asStr(call.args.query)}":\n` +
-                    hits.map((mt) => `${mt.path}:${mt.line}: ${mt.text}`).join('\n') +
+                    hits.map(formatMatch).join('\n') +
                     (r.truncated ? '\n…(more matches truncated)' : '')
                   : `No matches for "${asStr(call.args.query)}".`
                 : `Error: ${r.error}`
@@ -3716,6 +3820,47 @@ export const useApp = create<AppState>((set, get) => {
             appendResult(
               call,
               r.ok ? `${r.created ? 'Created' : 'Updated'} ${r.path} (${r.bytes} bytes).` : `Error: ${r.error}`
+            )
+          } else if (call.name === 'web_fetch') {
+            const url = asStr(call.args.url)
+            const r = await api.web.fetch(url, asCount(call.args.max_chars))
+            patch(cardId, {
+              status: r.ok ? 'done' : 'error',
+              output: r.ok
+                ? `${r.title ? `${r.title} — ` : ''}${(r.content ?? '').length} chars${r.truncated ? ' (truncated)' : ''}`
+                : undefined,
+              error: r.error
+            })
+            appendResult(
+              call,
+              r.ok
+                ? `Fetched ${r.url}${r.title ? `\nTitle: ${r.title}` : ''}\n\n${r.content ?? ''}` +
+                  (r.truncated ? '\n…(content truncated)' : '')
+                : `Error: ${r.error}`
+            )
+          } else if (call.name === 'web_search') {
+            const query = asStr(call.args.query)
+            const r = await api.web.search(query)
+            const items = r.results ?? []
+            patch(cardId, {
+              status: r.ok ? 'done' : 'error',
+              output: r.ok
+                ? items.length
+                  ? items.map((it) => `${it.title}\n${it.url}`).join('\n\n')
+                  : 'No results.'
+                : undefined,
+              error: r.error
+            })
+            appendResult(
+              call,
+              r.ok
+                ? items.length
+                  ? `Web results for "${query}":\n` +
+                    items
+                      .map((it, i) => `${i + 1}. ${it.title}\n   ${it.url}${it.snippet ? `\n   ${it.snippet}` : ''}`)
+                      .join('\n')
+                  : `No web results for "${query}".`
+                : `Error: ${r.error}`
             )
           } else {
             const command = asStr(call.args.command)

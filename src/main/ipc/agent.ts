@@ -13,6 +13,7 @@ import {
   type AgentReadResult,
   type AgentRunResult,
   type AgentSearchMatch,
+  type AgentSearchOptions,
   type AgentSearchResult,
   type AgentWriteResult
 } from '@shared/ipc'
@@ -31,8 +32,70 @@ const RUN_MAX_BUFFER = 8 * 1024 * 1024
 const SEARCH_MAX_MATCHES = 200
 const SEARCH_MAX_FILE_BYTES = 1024 * 1024
 const SEARCH_LINE_CAP = 240
+const SEARCH_MAX_CONTEXT = 10 // cap context lines so output stays token-bounded
 
 class AgentError extends Error {}
+
+/**
+ * Compile a glob (as used by ripgrep's `--glob`) into a RegExp matched against a
+ * file's forward-slashed, repo-relative path. Supports `**` (any depth, incl.
+ * path separators), `*` (within a segment), `?` (one non-separator char) and
+ * `{a,b}` alternations. A pattern with no `/` matches the file's basename too,
+ * so `*.ts` behaves like ripgrep (matches at any depth).
+ */
+function globToRegExp(glob: string): RegExp {
+  let re = ''
+  for (let i = 0; i < glob.length; i += 1) {
+    const ch = glob[i]
+    if (ch === '*') {
+      if (glob[i + 1] === '*') {
+        // `**` spans directories; swallow an immediately following slash.
+        re += '.*'
+        i += 1
+        if (glob[i + 1] === '/') i += 1
+      } else {
+        re += '[^/]*'
+      }
+    } else if (ch === '?') {
+      re += '[^/]'
+    } else if (ch === '{') {
+      re += '(?:'
+    } else if (ch === '}') {
+      re += ')'
+    } else if (ch === ',') {
+      re += '|'
+    } else if ('.+^$()|[]\\'.includes(ch)) {
+      re += '\\' + ch
+    } else {
+      re += ch
+    }
+  }
+  return new RegExp('^' + re + '$')
+}
+
+/** A compiled matcher decides whether a repo-relative path is in scope. */
+function makeGlobFilter(glob?: string): (relPath: string) => boolean {
+  if (!glob || !glob.trim()) return () => true
+  const rooted = globToRegExp(glob.trim())
+  // A bare pattern (no slash) should also match by basename, like ripgrep.
+  const bare = !glob.includes('/') ? globToRegExp(glob.trim()) : null
+  return (relPath: string) => rooted.test(relPath) || (bare != null && bare.test(relPath.split('/').pop() ?? ''))
+}
+
+/** A compiled line matcher (literal substring or user-supplied regex). */
+interface LineMatcher {
+  test: (line: string) => boolean
+}
+
+function makeLineMatcher(query: string, regex: boolean, caseSensitive: boolean): LineMatcher {
+  if (regex) {
+    const rx = new RegExp(query, caseSensitive ? '' : 'i')
+    return { test: (line) => rx.test(line) }
+  }
+  if (caseSensitive) return { test: (line) => line.includes(query) }
+  const needle = query.toLowerCase()
+  return { test: (line) => line.toLowerCase().includes(needle) }
+}
 
 /** Resolve `rel` under `root`, refusing escapes (`..`, absolute, NUL). */
 function resolveInside(root: string, rel: string): string {
@@ -172,13 +235,16 @@ async function editFileTool(
   }
 }
 
-/** Recursively collect content matches for `needle` (case-insensitive). */
-async function walkSearch(
-  root: string,
-  dir: string,
-  needle: string,
+interface SearchCtx {
+  root: string
+  matcher: LineMatcher
+  inScope: (relPath: string) => boolean
+  context: number
   matches: AgentSearchMatch[]
-): Promise<boolean> {
+}
+
+/** Recursively collect content matches under `dir`. Returns true when capped. */
+async function walkSearch(ctx: SearchCtx, dir: string): Promise<boolean> {
   let dirents
   try {
     dirents = await readdir(dir, { withFileTypes: true })
@@ -188,15 +254,17 @@ async function walkSearch(
   // Stable, shallow-first ordering keeps results readable and deterministic.
   dirents.sort((a, b) => a.name.localeCompare(b.name))
   for (const d of dirents) {
-    if (matches.length >= SEARCH_MAX_MATCHES) return true
+    if (ctx.matches.length >= SEARCH_MAX_MATCHES) return true
     if (d.isDirectory()) {
       if (EXCLUDED_DIRS.has(d.name)) continue
-      const more = await walkSearch(root, join(dir, d.name), needle, matches)
+      const more = await walkSearch(ctx, join(dir, d.name))
       if (more) return true
       continue
     }
     if (!d.isFile()) continue
     const full = join(dir, d.name)
+    const rel = toRel(ctx.root, full)
+    if (!ctx.inScope(rel)) continue
     let buf: Buffer
     try {
       const info = await stat(full)
@@ -208,26 +276,53 @@ async function walkSearch(
     if (buf.subarray(0, 8192).includes(0)) continue // skip binaries
     const lines = buf.toString('utf8').split('\n')
     for (let i = 0; i < lines.length; i += 1) {
-      if (lines[i].toLowerCase().includes(needle)) {
-        matches.push({
-          path: toRel(root, full),
+      if (ctx.matcher.test(lines[i])) {
+        const match: AgentSearchMatch = {
+          path: rel,
           line: i + 1,
           text: lines[i].trim().slice(0, SEARCH_LINE_CAP)
-        })
-        if (matches.length >= SEARCH_MAX_MATCHES) return true
+        }
+        if (ctx.context > 0) {
+          match.before = lines
+            .slice(Math.max(0, i - ctx.context), i)
+            .map((l) => l.slice(0, SEARCH_LINE_CAP))
+          match.after = lines
+            .slice(i + 1, i + 1 + ctx.context)
+            .map((l) => l.slice(0, SEARCH_LINE_CAP))
+        }
+        ctx.matches.push(match)
+        if (ctx.matches.length >= SEARCH_MAX_MATCHES) return true
       }
     }
   }
   return false
 }
 
-async function searchFiles(root: string, query: string, rel?: string): Promise<AgentSearchResult> {
+async function searchFiles(
+  root: string,
+  query: string,
+  options?: AgentSearchOptions
+): Promise<AgentSearchResult> {
   try {
     if (!query || !query.trim()) throw new AgentError('A non-empty search query is required.')
-    const base = resolveInside(root, rel || '.')
-    const matches: AgentSearchMatch[] = []
-    const truncated = await walkSearch(root, base, query.toLowerCase(), matches)
-    return { ok: true, query, matches, truncated }
+    const opts = options ?? {}
+    let matcher: LineMatcher
+    try {
+      matcher = makeLineMatcher(query, opts.regex === true, opts.caseSensitive === true)
+    } catch (err) {
+      throw new AgentError(`Invalid regular expression: ${err instanceof Error ? err.message : String(err)}`)
+    }
+    let inScope: (relPath: string) => boolean
+    try {
+      inScope = makeGlobFilter(opts.glob)
+    } catch (err) {
+      throw new AgentError(`Invalid glob: ${err instanceof Error ? err.message : String(err)}`)
+    }
+    const base = resolveInside(root, opts.path || '.')
+    const context = Math.min(SEARCH_MAX_CONTEXT, Math.max(0, Math.floor(opts.context ?? 0)))
+    const ctx: SearchCtx = { root, matcher, inScope, context, matches: [] }
+    const truncated = await walkSearch(ctx, base)
+    return { ok: true, query, matches: ctx.matches, truncated }
   } catch (err) {
     return { ok: false, ...errResult(err) }
   }
@@ -399,8 +494,8 @@ export function registerAgentHandlers(): void {
   )
   ipcMain.handle(
     IPC.agent.search,
-    (_e, root: string, query: string, path?: string): Promise<AgentSearchResult> =>
-      searchFiles(root, query, path)
+    (_e, root: string, query: string, options?: AgentSearchOptions): Promise<AgentSearchResult> =>
+      searchFiles(root, query, options)
   )
   ipcMain.handle(
     IPC.agent.runCommand,

@@ -293,6 +293,8 @@ const fr: Translation = {
   'chat.tool.editFile': 'Modifier le fichier',
   'chat.tool.runCommand': 'Exécuter la commande',
   'chat.tool.editFiles': 'Modifier les fichiers',
+  'chat.tool.webFetch': 'Récupérer URL',
+  'chat.tool.webSearch': 'Recherche web',
   'chat.status.awaiting': 'à vérifier',
   'chat.status.running': 'en cours…',
   'chat.status.done': 'terminé',

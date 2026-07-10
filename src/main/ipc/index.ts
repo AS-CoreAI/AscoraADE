@@ -13,6 +13,7 @@ import { registerAnalyticsHandlers } from './analytics'
 import { registerGitHandlers } from './git'
 import { registerTerminalHandlers } from './terminal'
 import { registerAgentHandlers } from './agent'
+import { registerWebHandlers } from './web'
 import { registerLiveHandlers } from './live'
 import { registerSshHandlers } from './ssh'
 import { registerUpdateHandlers } from './update'
@@ -36,6 +37,7 @@ export function registerIpc(): void {
   registerGitHandlers()
   registerTerminalHandlers()
   registerAgentHandlers()
+  registerWebHandlers()
   registerLiveHandlers()
   registerSshHandlers()
   registerUpdateHandlers()

@@ -292,6 +292,8 @@ const ru: Translation = {
   'chat.tool.editFile': 'Правка файла',
   'chat.tool.runCommand': 'Запуск команды',
   'chat.tool.editFiles': 'Правка файлов',
+  'chat.tool.webFetch': 'Загрузка URL',
+  'chat.tool.webSearch': 'Веб-поиск',
   'chat.status.awaiting': 'ждёт проверки',
   'chat.status.running': 'выполняется…',
   'chat.status.done': 'готово',
