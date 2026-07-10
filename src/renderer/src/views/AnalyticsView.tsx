@@ -143,6 +143,35 @@ function TokensPerDay({ data }: { data: Analytics }): JSX.Element {
   const max = Math.max(1, ...data.daily.map((d) => d.total))
   const tickEvery = Math.max(1, Math.ceil(data.daily.length / 6))
   const colorOf = (model: string): string => colorAt(data.models.indexOf(model))
+  const [tooltip, setTooltip] = useState<{
+    day: string
+    model: string
+    color: string
+    tokens: number
+    left: number
+    top: number
+  } | null>(null)
+
+  const showTooltip = (
+    d: DailyBucket,
+    s: { model: string; tokens: number },
+    target: HTMLElement
+  ): void => {
+    const rect = target.getBoundingClientRect()
+    const halfTooltipWidth = 105
+    const left = Math.min(
+      Math.max(rect.left + rect.width / 2, halfTooltipWidth + 8),
+      window.innerWidth - halfTooltipWidth - 8
+    )
+    setTooltip({
+      day: heatmapDateFmt.format(d.date),
+      model: s.model,
+      color: colorOf(s.model),
+      tokens: s.tokens,
+      left,
+      top: rect.top - 8
+    })
+  }
 
   // Stack order: by global model ranking so colours are consistent across days.
   const stackFor = (d: DailyBucket): { model: string; tokens: number }[] =>
@@ -157,15 +186,20 @@ function TokensPerDay({ data }: { data: Analytics }): JSX.Element {
       </div>
       <div className="an-bars">
         {data.daily.map((d) => (
-          <div className="an-bar-col" key={d.day} title={`${d.day}: ${formatTokens(d.total)} tokens`}>
+          <div className="an-bar-col" key={d.day}>
             <div className="an-bar-stack">
               {stackFor(d).map((s) => (
                 <div
                   key={s.model}
                   className="an-bar-seg"
-                  title={`${d.day}: ${s.model} — ${formatTokens(s.tokens)} tokens`}
+                  role="img"
+                  tabIndex={0}
                   aria-label={`${d.day}: ${s.model}, ${s.tokens.toLocaleString()} tokens`}
                   style={{ height: `${(s.tokens / max) * 100}%`, background: colorOf(s.model) }}
+                  onMouseEnter={(e) => showTooltip(d, s, e.currentTarget)}
+                  onMouseLeave={() => setTooltip(null)}
+                  onFocus={(e) => showTooltip(d, s, e.currentTarget)}
+                  onBlur={() => setTooltip(null)}
                 />
               ))}
             </div>
@@ -187,6 +221,20 @@ function TokensPerDay({ data }: { data: Analytics }): JSX.Element {
           </span>
         ))}
       </div>
+      {tooltip && (
+        <div
+          className="an-heat-tooltip"
+          role="tooltip"
+          style={{ left: tooltip.left, top: tooltip.top }}
+        >
+          <span>{tooltip.day}</span>
+          <strong className="an-bar-tooltip-model">
+            <span className="an-dot" style={{ background: tooltip.color }} />
+            {tooltip.model}
+          </strong>
+          <span>{tooltip.tokens.toLocaleString()} tokens</span>
+        </div>
+      )}
     </div>
   )
 }
