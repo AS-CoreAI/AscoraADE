@@ -16,6 +16,11 @@ const SEARCH_MAX_RESULTS = 8
 const UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36'
 
+function requestSignal(signal: AbortSignal | undefined, timeoutMs: number): AbortSignal {
+  const timeout = AbortSignal.timeout(timeoutMs)
+  return signal ? AbortSignal.any([signal, timeout]) : timeout
+}
+
 function errMsg(err: unknown): string {
   if (err instanceof Error) {
     if (err.name === 'TimeoutError' || err.name === 'AbortError') return 'Request timed out.'
@@ -64,7 +69,11 @@ function htmlToText(html: string): { title?: string; text: string } {
   return { title, text }
 }
 
-async function fetchUrl(rawUrl: string, maxChars?: number): Promise<WebFetchResult> {
+async function fetchUrl(
+  rawUrl: string,
+  maxChars?: number,
+  signal?: AbortSignal
+): Promise<WebFetchResult> {
   let target: URL
   try {
     target = new URL(rawUrl.trim())
@@ -78,7 +87,7 @@ async function fetchUrl(rawUrl: string, maxChars?: number): Promise<WebFetchResu
     const res = await fetch(target, {
       redirect: 'follow',
       headers: { 'User-Agent': UA, Accept: 'text/html,application/xhtml+xml,text/plain,*/*' },
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS)
+      signal: requestSignal(signal, FETCH_TIMEOUT_MS)
     })
     const contentType = res.headers.get('content-type') ?? ''
     if (!res.ok) {
@@ -157,27 +166,27 @@ function parseLiteResults(html: string): WebSearchItem[] {
   return results
 }
 
-async function ddgGet(url: string): Promise<string | null> {
+async function ddgGet(url: string, signal?: AbortSignal): Promise<string | null> {
   const res = await fetch(url, {
     headers: { 'User-Agent': UA, Accept: 'text/html' },
-    signal: AbortSignal.timeout(SEARCH_TIMEOUT_MS)
+    signal: requestSignal(signal, SEARCH_TIMEOUT_MS)
   })
   // DuckDuckGo answers a bot-challenged request with 202 and a stub page; only
   // a real 200 carries results, so treat anything else as a miss to fall back.
   return res.status === 200 ? res.text() : null
 }
 
-async function searchWeb(query: string): Promise<WebSearchResult> {
+async function searchWeb(query: string, signal?: AbortSignal): Promise<WebSearchResult> {
   const q = (query ?? '').trim()
   if (!q) return { ok: false, error: 'A non-empty search query is required.' }
   const enc = encodeURIComponent(q)
   try {
     // Primary: the full HTML endpoint over GET (POST gets a 202 bot challenge).
-    const html = await ddgGet(`https://html.duckduckgo.com/html/?q=${enc}`)
+    const html = await ddgGet(`https://html.duckduckgo.com/html/?q=${enc}`, signal)
     let results = html ? parseHtmlResults(html) : []
     if (results.length === 0) {
       // Fallback: the lite endpoint, which survives when the full page is blocked.
-      const lite = await ddgGet(`https://lite.duckduckgo.com/lite/?q=${enc}`)
+      const lite = await ddgGet(`https://lite.duckduckgo.com/lite/?q=${enc}`, signal)
       if (lite) results = parseLiteResults(lite)
     }
     return { ok: true, query: q, results }
@@ -185,6 +194,10 @@ async function searchWeb(query: string): Promise<WebSearchResult> {
     return { ok: false, query: q, error: errMsg(err) }
   }
 }
+
+// Reused by the background Blueprint agent loop; renderer chats call the same
+// functions through the IPC handlers below.
+export { fetchUrl as fetchWebUrl, searchWeb }
 
 export function registerWebHandlers(): void {
   ipcMain.handle(IPC.web.fetch, (_e, url: string, maxChars?: number): Promise<WebFetchResult> =>

@@ -1,13 +1,17 @@
 import { useEffect, useMemo, useState, type JSX } from 'react'
 import {
+  BLUEPRINT_START_NODE_ID,
   WPROVIDER_SERVICES,
   WPROVIDER_SERVICE_INFO,
   type BlueprintAgent,
   type BlueprintDefinition,
+  type BlueprintGraph,
   type BlueprintStep,
-  type BlueprintStepType
+  type BlueprintStepType,
+  type BlueprintToolRunStatus
 } from '@shared/ipc'
 import { Icon } from './Icon'
+import { BlueprintGraphEditor } from './BlueprintGraphEditor'
 import { useBlueprints, type BlueprintTemplate } from '@/state/blueprints'
 import { useApp } from '@/state/store'
 import { localeForLanguage, tr } from '@/language'
@@ -35,7 +39,8 @@ function newStep(type: BlueprintStepType, agents: BlueprintAgent[]): BlueprintSt
       ...base,
       name: 'Agent task',
       agentId: agents.find((agent) => agent.enabled)?.id ?? agents[0]?.id ?? '',
-      prompt: '{{input}}'
+      prompt: '{{input}}',
+      agentMode: false
     }
   }
   if (type === 'telegram') {
@@ -58,6 +63,94 @@ function newStep(type: BlueprintStepType, agents: BlueprintAgent[]): BlueprintSt
   }
 }
 
+function appendStepToGraph(
+  graph: BlueprintGraph,
+  steps: BlueprintStep[],
+  stepId: string
+): BlueprintGraph {
+  const entryTargets = new Set(
+    graph.connections
+      .filter((connection) => connection.from === BLUEPRINT_START_NODE_ID)
+      .map((connection) => connection.to)
+  )
+  const predecessors = new Map<string, string[]>()
+  for (const connection of graph.connections) {
+    if (
+      connection.from === BLUEPRINT_START_NODE_ID ||
+      connection.toPort === 'repeat'
+    ) continue
+    const sources = predecessors.get(connection.to) ?? []
+    sources.push(connection.from)
+    predecessors.set(connection.to, sources)
+  }
+  const reachable = new Set<string>()
+  let changed = true
+  while (changed) {
+    changed = false
+    for (const step of steps) {
+      if (reachable.has(step.id)) continue
+      const sources = predecessors.get(step.id) ?? []
+      if (
+        (entryTargets.has(step.id) || sources.length > 0) &&
+        sources.every((source) => reachable.has(source))
+      ) {
+        reachable.add(step.id)
+        changed = true
+      }
+    }
+  }
+  const sourcesWithOutgoing = new Set(
+    graph.connections
+      .filter(
+        (connection) =>
+          connection.from !== BLUEPRINT_START_NODE_ID && connection.toPort !== 'repeat'
+      )
+      .map((connection) => connection.from)
+  )
+  const terminalIds = steps
+    .map((step) => step.id)
+    .filter((id) => reachable.has(id) && !sourcesWithOutgoing.has(id))
+  const sources = terminalIds.length > 0 ? terminalIds : [BLUEPRINT_START_NODE_ID]
+  const positionedSteps = steps.flatMap((step) => graph.positions[step.id] ?? [])
+  const x = positionedSteps.length > 0
+    ? Math.max(...positionedSteps.map((position) => position.x)) + 280
+    : 260
+  return {
+    positions: { ...graph.positions, [stepId]: { x, y: 120 } },
+    connections: [
+      ...graph.connections,
+      ...sources.map((from) => ({ id: crypto.randomUUID(), from, to: stepId }))
+    ]
+  }
+}
+
+function removeStepFromGraph(graph: BlueprintGraph, stepId: string): BlueprintGraph {
+  const positions = { ...graph.positions }
+  delete positions[stepId]
+  return {
+    positions,
+    connections: graph.connections.filter(
+      (connection) => connection.from !== stepId && connection.to !== stepId
+    )
+  }
+}
+
+function linearGraph(steps: BlueprintStep[]): BlueprintGraph {
+  const positions: BlueprintGraph['positions'] = {
+    [BLUEPRINT_START_NODE_ID]: { x: 72, y: 170 }
+  }
+  steps.forEach((step, index) => {
+    positions[step.id] = { x: 356 + index * 344, y: 112 + (index % 2) * 116 }
+  })
+  return {
+    positions,
+    connections: steps.map((step, index) => {
+      const from = index === 0 ? BLUEPRINT_START_NODE_ID : steps[index - 1].id
+      return { id: `${from}::${step.id}`, from, to: step.id }
+    })
+  }
+}
+
 export function BlueprintStudio(): JSX.Element {
   const items = useBlueprints((state) => state.items)
   const activeId = useBlueprints((state) => state.activeId)
@@ -73,8 +166,13 @@ export function BlueprintStudio(): JSX.Element {
   const clearError = useBlueprints((state) => state.clearError)
   const appLanguage = useApp((state) => state.appLanguage)
   const defaultService = useApp((state) => state.wproviderService)
+  const workspaces = useApp((state) => state.workspaces)
   const t = (key: Parameters<typeof tr>[1], values?: Record<string, string | number>): string =>
     tr(appLanguage, key, values)
+  const toolStatusLabel = (status: BlueprintToolRunStatus): string =>
+    status === 'stopped'
+      ? t('blueprint.status.stopped')
+      : t(`blueprint.stepStatus.${status}`)
 
   const selected = useMemo(
     () => items.find((blueprint) => blueprint.id === activeId) ?? null,
@@ -84,6 +182,7 @@ export function BlueprintStudio(): JSX.Element {
   const [dirty, setDirty] = useState(false)
   const [runInput, setRunInput] = useState('')
   const [saving, setSaving] = useState(false)
+  const [pipelineMode, setPipelineMode] = useState<'graph' | 'list'>('graph')
 
   useEffect(() => {
     void init()
@@ -148,7 +247,11 @@ export function BlueprintStudio(): JSX.Element {
   }
 
   const removeStep = (id: string): void => {
-    update((current) => ({ ...current, steps: current.steps.filter((step) => step.id !== id) }))
+    update((current) => ({
+      ...current,
+      steps: current.steps.filter((step) => step.id !== id),
+      graph: current.graph ? removeStepFromGraph(current.graph, id) : undefined
+    }))
   }
 
   const moveStep = (index: number, direction: -1 | 1): void => {
@@ -163,7 +266,14 @@ export function BlueprintStudio(): JSX.Element {
   }
 
   const addStep = (type: BlueprintStepType): void => {
-    update((current) => ({ ...current, steps: [...current.steps, newStep(type, current.agents)] }))
+    update((current) => {
+      const step = newStep(type, current.agents)
+      return {
+        ...current,
+        steps: [...current.steps, step],
+        graph: current.graph ? appendStepToGraph(current.graph, current.steps, step.id) : undefined
+      }
+    })
   }
 
   const save = async (): Promise<BlueprintDefinition | null> => {
@@ -214,6 +324,14 @@ export function BlueprintStudio(): JSX.Element {
   const runState = runs[draft.id] ?? draft.lastRun
   const running = runState?.status === 'running'
   const statusLabel = runState ? t(`blueprint.status.${runState.status}`) : t('blueprint.status.idle')
+  const agentModeHintId = `blueprint-agent-mode-hint-${draft.id}`
+  const editorGraph = draft.graph ?? linearGraph(draft.steps)
+  const usesAgentMode =
+    draft.agentMode ||
+    draft.steps.some((step) => step.type === 'agent' && step.agentMode === true)
+  const savedWorkspaceId = workspaces.some((workspace) => workspace.id === draft.workspaceId)
+    ? draft.workspaceId ?? ''
+    : ''
 
   return (
     <div className="blueprint-studio">
@@ -316,6 +434,47 @@ export function BlueprintStudio(): JSX.Element {
             />
             <div className="blueprint-hint">{t('blueprint.scheduleHint')}</div>
           </div>
+          <div className="blueprint-card blueprint-agent-mode-card">
+            <div className="blueprint-card-title"><Icon name="terminal" size={15} /> {t('blueprint.agentMode')}</div>
+            <label className="blueprint-toggle-row">
+              <input
+                type="checkbox"
+                checked={draft.agentMode}
+                aria-describedby={agentModeHintId}
+                onChange={(event) =>
+                  update((current) => ({ ...current, agentMode: event.target.checked }))
+                }
+              />
+              <span>{t('blueprint.agentModeEnabled')}</span>
+            </label>
+            <div className="blueprint-hint" id={agentModeHintId}>
+              <strong className="blueprint-agent-mode-scope">
+                {t('blueprint.agentModeAllAgents')}
+              </strong>
+              <span>{t('blueprint.agentModeHint')}</span>
+            </div>
+            {usesAgentMode && (
+              <label className="blueprint-agent-workspace">
+                <span>{t('blueprint.agentWorkspace')}</span>
+                <select
+                  value={savedWorkspaceId}
+                  onChange={(event) =>
+                    update((current) => ({
+                      ...current,
+                      workspaceId: event.target.value || undefined
+                    }))
+                  }
+                >
+                  <option value="">{t('blueprint.webToolsOnly')}</option>
+                  {workspaces.map((workspace) => (
+                    <option key={workspace.id} value={workspace.id}>
+                      {workspace.name} — {workspace.path}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+          </div>
         </section>
 
         <section className="blueprint-section">
@@ -379,10 +538,73 @@ export function BlueprintStudio(): JSX.Element {
           <div className="blueprint-section-heading">
             <div>
               <h3><Icon name="blueprint" size={16} /> {t('blueprint.pipeline')}</h3>
-              <p>{t('blueprint.pipelineHint')}</p>
+              <p>{t(pipelineMode === 'graph' ? 'blueprint.graphHint' : 'blueprint.pipelineHint')}</p>
+            </div>
+            <div className="blueprint-pipeline-modes" role="group" aria-label={t('blueprint.pipeline')}>
+              <button
+                className={pipelineMode === 'graph' ? 'active' : ''}
+                aria-pressed={pipelineMode === 'graph'}
+                onClick={() => setPipelineMode('graph')}
+              >
+                <Icon name="blueprint" size={13} /> {t('blueprint.pipelineGraph')}
+              </button>
+              <button
+                className={pipelineMode === 'list' ? 'active' : ''}
+                aria-pressed={pipelineMode === 'list'}
+                onClick={() => setPipelineMode('list')}
+              >
+                <Icon name="list" size={13} /> {t('blueprint.pipelineList')}
+              </button>
             </div>
           </div>
-          <div className="blueprint-step-list">
+          {pipelineMode === 'graph' ? (
+            <BlueprintGraphEditor
+              steps={draft.steps}
+              agents={draft.agents}
+              graph={editorGraph}
+              readOnly={running}
+              onStepChange={updateStep}
+              onRemoveStep={removeStep}
+              onAddStep={addStep}
+              onGraphChange={(graph) => update((current) => ({ ...current, graph }))}
+              labels={{
+                ariaLabel: t('blueprint.graphAria'),
+                graphTools: t('blueprint.graphTools'),
+                start: t('blueprint.graphStart'),
+                startHint: t('blueprint.graphStartHint'),
+                input: t('blueprint.graphInput'),
+                repeatInput: t('blueprint.graphRepeatInput'),
+                output: t('blueprint.graphOutput'),
+                addAgent: t('blueprint.step.agent'),
+                addTelegram: 'Telegram',
+                addDelay: t('blueprint.step.delay'),
+                addWebhook: 'Webhook',
+                fitView: t('blueprint.graphFit'),
+                zoomIn: t('blueprint.graphZoomIn'),
+                zoomOut: t('blueprint.graphZoomOut'),
+                deleteNode: t('blueprint.graphDeleteNode'),
+                moveNode: t('blueprint.graphMoveNode'),
+                nodeName: t('blueprint.graphNodeName'),
+                nodeType: t('blueprint.graphNodeType'),
+                agent: t('blueprint.agent'),
+                prompt: t('blueprint.prompt'),
+                message: t('blueprint.message'),
+                botToken: t('blueprint.telegramToken'),
+                chatId: t('blueprint.telegramChat'),
+                delaySeconds: t('blueprint.delaySeconds'),
+                method: t('blueprint.method'),
+                headers: t('blueprint.headersJson'),
+                body: t('blueprint.body'),
+                repeat: t('blueprint.repeat'),
+                iterations: t('blueprint.graphIterations'),
+                agentMode: t('blueprint.stepAgentMode'),
+                continueOnError: t('blueprint.continueOnError'),
+                empty: t('blueprint.graphEmpty')
+              }}
+            />
+          ) : (
+            <>
+              <div className="blueprint-step-list">
             {draft.steps.map((step, index) => (
               <article className={`blueprint-step-card type-${step.type}`} key={step.id}>
                 <div className="blueprint-step-rail">
@@ -485,6 +707,9 @@ export function BlueprintStudio(): JSX.Element {
 
                   <div className="blueprint-step-options">
                     <label>{t('blueprint.repeat')} <input type="number" min={1} max={20} value={step.repeat ?? 1} onChange={(event) => updateStep(step.id, { repeat: Math.max(1, Math.min(20, Number(event.target.value) || 1)) })} /></label>
+                    {step.type === 'agent' && (
+                      <label><input type="checkbox" checked={step.agentMode === true} onChange={(event) => updateStep(step.id, { agentMode: event.target.checked })} /> {t('blueprint.stepAgentMode')}</label>
+                    )}
                     <label><input type="checkbox" checked={step.continueOnError === true} onChange={(event) => updateStep(step.id, { continueOnError: event.target.checked })} /> {t('blueprint.continueOnError')}</label>
                   </div>
                 </div>
@@ -498,6 +723,8 @@ export function BlueprintStudio(): JSX.Element {
             <button onClick={() => addStep('delay')}><Icon name="clock" size={13} /> {t('blueprint.step.delay')}</button>
             <button onClick={() => addStep('webhook')}><Icon name="webhook" size={13} /> Webhook</button>
           </div>
+            </>
+          )}
         </section>
 
         <section className="blueprint-section blueprint-run-log">
@@ -525,6 +752,39 @@ export function BlueprintStudio(): JSX.Element {
                     </div>
                     {(stepRun.output || stepRun.error || (stepRun.status === 'running' && delta)) && (
                       <pre>{stepRun.error || stepRun.output || delta}</pre>
+                    )}
+                    {stepRun.tools && stepRun.tools.length > 0 && (
+                      <div className="blueprint-tool-audit">
+                        <div className="blueprint-tool-audit-title">
+                          {t('blueprint.tools')} · {stepRun.tools.length}
+                        </div>
+                        {stepRun.tools.map((toolRun) => {
+                          const details = [
+                            Object.keys(toolRun.args).length > 0
+                              ? `${t('blueprint.toolArguments')}:\n${JSON.stringify(toolRun.args, null, 2)}`
+                              : '',
+                            toolRun.error
+                              ? `${t('blueprint.toolError')}:\n${toolRun.error}`
+                              : toolRun.output
+                                ? `${t('blueprint.toolResult')}:\n${toolRun.output}`
+                                : ''
+                          ].filter(Boolean).join('\n\n')
+                          return (
+                            <details
+                              className={`blueprint-tool-audit-item ${toolRun.status}`}
+                              open={toolRun.status !== 'completed'}
+                              key={toolRun.id}
+                            >
+                              <summary>
+                                <span className="status-dot" />
+                                <code>{toolRun.tool}</code>
+                                <span>{toolStatusLabel(toolRun.status)}</span>
+                              </summary>
+                              {details && <pre>{details}</pre>}
+                            </details>
+                          )
+                        })}
+                      </div>
                     )}
                   </div>
                 )

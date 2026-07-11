@@ -41,6 +41,7 @@ type IconName =
   | 'clock'
   | 'telegram'
   | 'webhook'
+  | 'list'
 
 const paths: Record<IconName, JSX.Element> = {
   plus: (
@@ -246,6 +247,16 @@ const paths: Record<IconName, JSX.Element> = {
       <circle cx="17" cy="18" r="3" />
       <path d="M7 9v2a5 5 0 0 0 5 5h2" />
       <path d="M17 15v-2a5 5 0 0 0-5-5h-2" />
+    </>
+  ),
+  list: (
+    <>
+      <line x1="9" y1="6" x2="21" y2="6" />
+      <line x1="9" y1="12" x2="21" y2="12" />
+      <line x1="9" y1="18" x2="21" y2="18" />
+      <circle cx="4" cy="6" r="1" />
+      <circle cx="4" cy="12" r="1" />
+      <circle cx="4" cy="18" r="1" />
     </>
   ),
   info: (

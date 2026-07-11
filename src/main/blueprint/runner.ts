@@ -1,5 +1,6 @@
 import { BrowserWindow, type WebContents } from 'electron'
 import { randomUUID } from 'node:crypto'
+import { stat } from 'node:fs/promises'
 import {
   IPC,
   WPROVIDER_SERVICES,
@@ -12,11 +13,20 @@ import {
   type BlueprintRunSummary,
   type BlueprintStep,
   type BlueprintStepRun,
+  type BlueprintToolRun,
   type LlmMessage,
   type WProviderService
 } from '@shared/ipc'
 import { getStore } from '../store'
 import { abortWProvider, chatWProvider, forgetWProviderSession } from '../wprovider/runner'
+import { compileBlueprint, normalizeBlueprintGraph, type CompiledBlueprint } from './graph'
+import {
+  blueprintAgentModePrompt,
+  executeBlueprintTool,
+  hasBlueprintToolCallIntent,
+  parseBlueprintToolCall,
+  type BlueprintToolCall
+} from './tools'
 
 const STORE_KEY = 'blueprints'
 const MIN_INTERVAL_MINUTES = 1
@@ -25,9 +35,15 @@ const MAX_REPEAT = 20
 const MAX_SHARED_CONTEXT = 24_000
 const MAX_WEBHOOK_OUTPUT = 8_000
 const REQUEST_TIMEOUT_MS = 30_000
+const MAX_AGENT_TURNS = 16
+const MAX_TOOL_AUDIT_ARG = 2_000
+const MAX_TOOL_AUDIT_OUTPUT = 8_000
 
 interface ActiveBlueprintRun {
   blueprint: BlueprintDefinition
+  executionSteps: BlueprintStep[]
+  graphAncestors: Map<string, Set<string>> | null
+  graphPredecessors: Map<string, string[]> | null
   run: BlueprintRunSummary
   sender?: WebContents
   stopped: boolean
@@ -52,6 +68,40 @@ function text(value: unknown, fallback = ''): string {
 function numberInRange(value: unknown, fallback: number, min: number, max: number): number {
   const parsed = typeof value === 'number' ? value : Number(value)
   return Number.isFinite(parsed) ? Math.min(max, Math.max(min, parsed)) : fallback
+}
+
+function cappedText(value: string, max: number): string {
+  return value.length > max
+    ? `${value.slice(0, max)}\n…(${value.length - max} more chars truncated)`
+    : value
+}
+
+function toolAuditArgs(args: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(args).map(([key, value]) => {
+      if (typeof value === 'string') return [key, cappedText(value, MAX_TOOL_AUDIT_ARG)]
+      if (value == null || typeof value === 'number' || typeof value === 'boolean') return [key, value]
+      try {
+        return [key, cappedText(JSON.stringify(value), MAX_TOOL_AUDIT_ARG)]
+      } catch {
+        return [key, '[unserializable value]']
+      }
+    })
+  )
+}
+
+function startToolAudit(stepRun: BlueprintStepRun, call: BlueprintToolCall): BlueprintToolRun {
+  const audit: BlueprintToolRun = {
+    id: randomUUID(),
+    tool: call.name,
+    args: toolAuditArgs(call.args),
+    status: 'running',
+    startedAt: Date.now()
+  }
+  const tools = stepRun.tools ?? []
+  tools.push(audit)
+  stepRun.tools = tools
+  return audit
 }
 
 function isService(value: unknown): value is WProviderService {
@@ -84,6 +134,7 @@ function normalizeStep(value: Partial<BlueprintStep>, index: number): BlueprintS
     continueOnError: value.continueOnError === true,
     agentId: text(value.agentId),
     prompt: text(value.prompt),
+    agentMode: value.agentMode === true,
     telegramBotToken: text(value.telegramBotToken),
     telegramChatId: text(value.telegramChatId),
     message: text(value.message),
@@ -107,12 +158,16 @@ function normalizeBlueprint(
   const steps = Array.isArray(value.steps)
     ? value.steps.map((step, index) => normalizeStep(step, index))
     : []
+  const graph = normalizeBlueprintGraph(value.graph, steps)
   return {
     id: text(value.id) || existing?.id || randomUUID(),
     name: text(value.name).trim() || 'Untitled Blueprint',
     description: text(value.description),
+    agentMode: value.agentMode === true,
+    workspaceId: text(value.workspaceId).trim() || undefined,
     agents,
     steps,
+    graph,
     schedule: {
       enabled: value.schedule?.enabled === true,
       intervalMinutes: numberInRange(
@@ -189,9 +244,15 @@ function assertRunning(active: ActiveBlueprintRun): void {
   if (active.stopped) throw new BlueprintStoppedError('Blueprint run stopped.')
 }
 
-function sharedContext(active: ActiveBlueprintRun): string {
+function sharedContext(active: ActiveBlueprintRun, stepId: string): string {
+  const ancestors = active.graphAncestors?.get(stepId)
   const completed = active.run.steps
-    .filter((step) => step.status === 'completed' && step.output)
+    .filter(
+      (step) =>
+        step.status === 'completed' &&
+        step.output &&
+        (!active.graphAncestors || step.stepId === stepId || ancestors?.has(step.stepId))
+    )
     .map((step) => `### ${step.stepName}\n${step.output}`)
     .join('\n\n')
   if (!completed) return ''
@@ -200,11 +261,21 @@ function sharedContext(active: ActiveBlueprintRun): string {
     : completed
 }
 
-function interpolate(template: string, active: ActiveBlueprintRun): string {
+function lastOutputForStep(active: ActiveBlueprintRun, stepId: string | undefined): string {
+  if (!active.graphPredecessors || !stepId) return active.lastOutput
+  const candidates = new Set([stepId, ...(active.graphPredecessors.get(stepId) ?? [])])
+  return (
+    active.run.steps.findLast(
+      (step) => step.status === 'completed' && !!step.output && candidates.has(step.stepId)
+    )?.output ?? ''
+  )
+}
+
+function interpolate(template: string, active: ActiveBlueprintRun, stepId?: string): string {
   return template.replace(/\{\{\s*([^{}]+?)\s*\}\}/g, (_match, rawKey: string) => {
     const key = rawKey.trim()
     if (key === 'input') return active.run.input
-    if (key === 'last') return active.lastOutput
+    if (key === 'last') return lastOutputForStep(active, stepId)
     if (key === 'now') return new Date().toISOString()
     if (key.startsWith('steps.')) return active.stepOutputs.get(key.slice(6)) ?? ''
     if (key.startsWith('agents.')) return active.agentOutputs.get(key.slice(7)) ?? ''
@@ -224,47 +295,152 @@ async function runAgentStep(
   stepRun: BlueprintStepRun
 ): Promise<string> {
   const agent = agentById(active, step.agentId)
-  const history = active.agentMessages.get(agent.id) ?? [
+  const agentMode = active.blueprint.agentMode || step.agentMode === true
+  const workspace = active.blueprint.workspaceId
+    ? getStore().listWorkspaces().find((candidate) => candidate.id === active.blueprint.workspaceId)
+    : undefined
+  if (agentMode && active.blueprint.workspaceId && !workspace) {
+    throw new Error(
+      'The project selected for Agent mode is no longer available. ' +
+      'Choose another project or Web tools only, then save the Blueprint.'
+    )
+  }
+  if (agentMode && workspace) {
+    const workspaceInfo = await stat(workspace.path).catch(() => null)
+    if (!workspaceInfo?.isDirectory()) {
+      throw new Error(
+        `The Agent mode project folder for "${workspace.name}" is unavailable. ` +
+        'Restore the folder or choose another project.'
+      )
+    }
+  }
+  const conversationKey = `${agent.id}:${agentMode ? 'agent' : 'plain'}`
+  const history = active.agentMessages.get(conversationKey) ?? [
     {
       role: 'system',
       content: [
         `You are ${agent.name}, the ${agent.role}, working inside an Ascora Blueprint team.`,
         'Collaborate through the shared results supplied by the orchestrator. Produce a concrete result that another team member can continue from.',
-        agent.instructions.trim()
+        agent.instructions.trim(),
+        agentMode ? blueprintAgentModePrompt(workspace) : ''
       ]
         .filter(Boolean)
         .join('\n\n')
     }
   ]
-  active.agentMessages.set(agent.id, history)
+  active.agentMessages.set(conversationKey, history)
 
-  const requested = interpolate(step.prompt?.trim() || '{{input}}', active)
-  const context = sharedContext(active)
+  const requested = interpolate(step.prompt?.trim() || '{{input}}', active, step.id)
+  const context = sharedContext(active, step.id)
   const prompt = context
     ? `${requested}\n\nResults already produced by the Blueprint team:\n\n${context}`
     : requested
   history.push({ role: 'user', content: prompt || 'Continue the Blueprint scenario.' })
 
-  const requestId = `blueprint:${active.run.id}:${stepRun.id}`
-  active.currentRequestId = requestId
-  const result = await chatWProvider(
-    requestId,
-    agent.service,
-    { sessionKey: `${active.blueprint.id}:${active.run.id}:${agent.id}`, service: agent.service, messages: history },
-    active.sender,
-    (delta) => {
-      if (!active.stopped) emit(active, 'step-delta', step.id, delta)
+  const sessionKey = `${active.blueprint.id}:${active.run.id}:${conversationKey}`
+  const turnLimit = agentMode ? MAX_AGENT_TURNS : 1
+
+  for (let turn = 0; turn < turnLimit; turn += 1) {
+    assertRunning(active)
+    const requestId = `blueprint:${active.run.id}:${stepRun.id}:${turn}`
+    active.currentRequestId = requestId
+    const result = await chatWProvider(
+      requestId,
+      agent.service,
+      { sessionKey, service: agent.service, messages: history },
+      active.sender,
+      (delta) => {
+        // In agent mode buffer each model turn until we know whether it is a
+        // tool request, so raw fenced JSON never leaks into the execution log.
+        if (!active.stopped && !agentMode) {
+          emit(active, 'step-delta', step.id, delta)
+        }
+      }
+    ).finally(() => {
+      if (active.currentRequestId === requestId) active.currentRequestId = null
+    })
+    assertRunning(active)
+    if (result.aborted) throw new BlueprintStoppedError('Blueprint run stopped.')
+    if (!result.ok) throw new Error(result.error || `${agent.name} failed to answer.`)
+
+    const output = result.content.trim()
+    if (!output) throw new Error(`${agent.name} returned an empty answer.`)
+    history.push({ role: 'assistant', content: output })
+
+    const parsed = agentMode ? parseBlueprintToolCall(output) : null
+    if (!parsed) {
+      if (agentMode && hasBlueprintToolCallIntent(output)) {
+        const now = Date.now()
+        const tools = stepRun.tools ?? []
+        tools.push({
+          id: randomUUID(),
+          tool: 'invalid tool_call',
+          args: { response: cappedText(output, MAX_TOOL_AUDIT_ARG) },
+          status: 'failed',
+          startedAt: now,
+          finishedAt: now,
+          error: 'Unsupported tool name or malformed JSON.'
+        })
+        stepRun.tools = tools
+        persistRun(active)
+        emit(active, 'step-delta', step.id, '[invalid tool_call]\n')
+        history.push({
+          role: 'user',
+          content:
+            'Tool request error: the tool name is unsupported or its JSON is malformed. ' +
+            'Retry with exactly one valid fenced ```tool_call block and no surrounding prose.'
+        })
+        continue
+      }
+      if (agentMode) emit(active, 'step-delta', step.id, output)
+      active.agentOutputs.set(agent.id, output)
+      return output
     }
-  )
-  active.currentRequestId = null
-  assertRunning(active)
-  if (result.aborted) throw new BlueprintStoppedError('Blueprint run stopped.')
-  if (!result.ok) throw new Error(result.error || `${agent.name} failed to answer.`)
-  const output = result.content.trim()
-  if (!output) throw new Error(`${agent.name} returned an empty answer.`)
-  history.push({ role: 'assistant', content: output })
-  active.agentOutputs.set(agent.id, output)
-  return output
+
+    if (turn === turnLimit - 1) {
+      const error = `${agent.name} reached the ${MAX_AGENT_TURNS}-turn agent limit before the requested tool could run.`
+      const audit = startToolAudit(stepRun, parsed.call)
+      audit.status = 'failed'
+      audit.finishedAt = Date.now()
+      audit.error = error
+      persistRun(active)
+      throw new Error(error)
+    }
+
+    const audit = startToolAudit(stepRun, parsed.call)
+    persistRun(active)
+    emit(active, 'step-delta', step.id, `[${parsed.call.name}]\n`)
+    try {
+      const toolController = new AbortController()
+      active.requestAbort = toolController
+      const toolResult = await executeBlueprintTool(
+        parsed.call,
+        workspace?.path,
+        toolController.signal
+      ).finally(() => {
+        if (active.requestAbort === toolController) active.requestAbort = null
+      })
+      assertRunning(active)
+      audit.status = toolResult.startsWith('Error:') ? 'failed' : 'completed'
+      audit.finishedAt = Date.now()
+      if (audit.status === 'failed') audit.error = cappedText(toolResult, MAX_TOOL_AUDIT_OUTPUT)
+      else audit.output = cappedText(toolResult, MAX_TOOL_AUDIT_OUTPUT)
+      persistRun(active)
+      emit(active, 'step-delta', step.id, `[${parsed.call.name}: ${audit.status}]\n`)
+      history.push({
+        role: 'user',
+        content: `Tool result (${parsed.call.name}):\n${toolResult}`
+      })
+    } catch (error) {
+      audit.status = active.stopped ? 'stopped' : 'failed'
+      audit.finishedAt = Date.now()
+      audit.error = cappedText(error instanceof Error ? error.message : String(error), MAX_TOOL_AUDIT_OUTPUT)
+      persistRun(active)
+      throw error
+    }
+  }
+
+  throw new Error(`${agent.name} reached the ${MAX_AGENT_TURNS}-turn agent limit without a final answer.`)
 }
 
 async function cancellableDelay(active: ActiveBlueprintRun, seconds: number): Promise<string> {
@@ -288,8 +464,8 @@ function telegramChunks(message: string): string[] {
 
 async function runTelegramStep(active: ActiveBlueprintRun, step: BlueprintStep): Promise<string> {
   const token = step.telegramBotToken?.trim() ?? ''
-  const chatId = interpolate(step.telegramChatId?.trim() ?? '', active)
-  const message = interpolate(step.message?.trim() || '{{last}}', active)
+  const chatId = interpolate(step.telegramChatId?.trim() ?? '', active, step.id)
+  const message = interpolate(step.message?.trim() || '{{last}}', active, step.id)
   if (!/^\d+:[A-Za-z0-9_-]+$/.test(token)) throw new Error('Telegram bot token is missing or invalid.')
   if (!chatId) throw new Error('Telegram chat id is missing.')
   const chunks = telegramChunks(message)
@@ -344,7 +520,7 @@ function webhookHeaders(raw: string | undefined): Record<string, string> {
 }
 
 async function runWebhookStep(active: ActiveBlueprintRun, step: BlueprintStep): Promise<string> {
-  const renderedUrl = interpolate(step.webhookUrl?.trim() ?? '', active)
+  const renderedUrl = interpolate(step.webhookUrl?.trim() ?? '', active, step.id)
   let url: URL
   try {
     url = new URL(renderedUrl)
@@ -360,8 +536,8 @@ async function runWebhookStep(active: ActiveBlueprintRun, step: BlueprintStep): 
   try {
     const response = await fetch(url, {
       method: step.webhookMethod ?? 'POST',
-      headers: webhookHeaders(interpolate(step.webhookHeaders ?? '', active)),
-      body: interpolate(step.webhookBody?.trim() || '{{last}}', active),
+      headers: webhookHeaders(interpolate(step.webhookHeaders ?? '', active, step.id)),
+      body: interpolate(step.webhookBody?.trim() || '{{last}}', active, step.id),
       signal: controller.signal
     })
     const body = (await response.text()).slice(0, MAX_WEBHOOK_OUTPUT)
@@ -389,10 +565,13 @@ async function executeStep(
 async function executeBlueprint(active: ActiveBlueprintRun): Promise<void> {
   try {
     emit(active, 'run-started')
-    for (const step of active.blueprint.steps) {
+    const attemptsByStep = new Map<string, number>()
+    for (const step of active.executionSteps) {
       const repeat = Math.round(numberInRange(step.repeat, 1, 1, MAX_REPEAT))
-      for (let attempt = 1; attempt <= repeat; attempt += 1) {
+      for (let localAttempt = 1; localAttempt <= repeat; localAttempt += 1) {
         assertRunning(active)
+        const attempt = (attemptsByStep.get(step.id) ?? 0) + 1
+        attemptsByStep.set(step.id, attempt)
         const stepRun: BlueprintStepRun = {
           id: randomUUID(),
           stepId: step.id,
@@ -452,10 +631,12 @@ async function executeBlueprint(active: ActiveBlueprintRun): Promise<void> {
     active.currentRequestId = null
     active.requestAbort = null
     for (const agent of active.blueprint.agents) {
-      forgetWProviderSession(
-        agent.service,
-        `${active.blueprint.id}:${active.run.id}:${agent.id}`
-      )
+      for (const mode of ['agent', 'plain']) {
+        forgetWProviderSession(
+          agent.service,
+          `${active.blueprint.id}:${active.run.id}:${agent.id}:${mode}`
+        )
+      }
     }
     activeRuns.delete(active.blueprint.id)
   }
@@ -463,6 +644,38 @@ async function executeBlueprint(active: ActiveBlueprintRun): Promise<void> {
 
 function findBlueprint(id: string): BlueprintDefinition | undefined {
   return readBlueprints().find((blueprint) => blueprint.id === id)
+}
+
+function recordRejectedScheduledRun(
+  blueprint: BlueprintDefinition,
+  input: string,
+  error: string,
+  sender?: WebContents
+): BlueprintRunResult {
+  const now = Date.now()
+  const run: BlueprintRunSummary = {
+    id: randomUUID(),
+    blueprintId: blueprint.id,
+    trigger: 'schedule',
+    input,
+    status: 'failed',
+    startedAt: now,
+    finishedAt: now,
+    steps: [],
+    error
+  }
+  replaceBlueprint({ ...blueprint, updatedAt: now, lastRun: snapshot(run) })
+  const target = sender && !sender.isDestroyed() ? sender : ascoraRendererWebContents()
+  if (target && !target.isDestroyed()) {
+    const event: BlueprintEvent = {
+      kind: 'run-failed',
+      blueprintId: blueprint.id,
+      runId: run.id,
+      run: snapshot(run)
+    }
+    target.send(IPC.blueprint.event, event)
+  }
+  return { ok: false, error }
 }
 
 function runBlueprint(
@@ -473,7 +686,21 @@ function runBlueprint(
   const blueprint = findBlueprint(request.blueprintId)
   if (!blueprint) return { ok: false, error: 'Blueprint not found.' }
   if (activeRuns.has(blueprint.id)) return { ok: false, error: 'This Blueprint is already running.' }
-  if (blueprint.steps.length === 0) return { ok: false, error: 'Add at least one step before running.' }
+  let compiled: CompiledBlueprint
+  try {
+    compiled = compileBlueprint(blueprint)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    return trigger === 'schedule'
+      ? recordRejectedScheduledRun(blueprint, text(request.input), message, sender)
+      : { ok: false, error: message }
+  }
+  if (compiled.steps.length === 0) {
+    const message = 'Add at least one step before running.'
+    return trigger === 'schedule'
+      ? recordRejectedScheduledRun(blueprint, text(request.input), message, sender)
+      : { ok: false, error: message }
+  }
 
   const run: BlueprintRunSummary = {
     id: randomUUID(),
@@ -486,6 +713,9 @@ function runBlueprint(
   }
   const active: ActiveBlueprintRun = {
     blueprint,
+    executionSteps: compiled.steps,
+    graphAncestors: compiled.ancestors,
+    graphPredecessors: compiled.predecessors,
     run,
     sender,
     stopped: false,

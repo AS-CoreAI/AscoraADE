@@ -469,6 +469,30 @@ export type BlueprintStepType = 'agent' | 'telegram' | 'delay' | 'webhook'
 export type BlueprintRunStatus = 'idle' | 'running' | 'completed' | 'failed' | 'stopped'
 export type BlueprintStepStatus = 'pending' | 'running' | 'completed' | 'failed' | 'skipped'
 
+/** Stable source node used by the visual Blueprint graph. */
+export const BLUEPRINT_START_NODE_ID = '__blueprint_start__'
+
+export interface BlueprintNodePosition {
+  x: number
+  y: number
+}
+
+export interface BlueprintConnection {
+  id: string
+  from: string
+  to: string
+  /** Destination port. Missing means a regular dependency for older saved graphs. */
+  toPort?: 'input' | 'repeat'
+  /** Total bounded passes through a repeat connection, including the first pass. */
+  iterations?: number
+}
+
+/** Optional visual execution graph. Older definitions continue to use step order. */
+export interface BlueprintGraph {
+  positions: Record<string, BlueprintNodePosition>
+  connections: BlueprintConnection[]
+}
+
 /** A named WProvider participant. Every participant owns an isolated web-chat session. */
 export interface BlueprintAgent {
   id: string
@@ -498,6 +522,8 @@ export interface BlueprintStep {
   // agent
   agentId?: string
   prompt?: string
+  /** Enable the multi-turn tool loop only for this agent step. */
+  agentMode?: boolean
 
   // telegram
   telegramBotToken?: string
@@ -535,6 +561,22 @@ export interface BlueprintStepRun {
   finishedAt?: number
   output?: string
   error?: string
+  /** Persistent audit trail for tools executed by an agent-mode step. */
+  tools?: BlueprintToolRun[]
+}
+
+export type BlueprintToolRunStatus = 'running' | 'completed' | 'failed' | 'stopped'
+
+export interface BlueprintToolRun {
+  id: string
+  tool: string
+  args: Record<string, unknown>
+  status: BlueprintToolRunStatus
+  startedAt: number
+  finishedAt?: number
+  /** Size-capped result kept for the execution log. */
+  output?: string
+  error?: string
 }
 
 export interface BlueprintRunSummary {
@@ -554,8 +596,13 @@ export interface BlueprintDefinition {
   id: string
   name: string
   description: string
+  /** Run WProvider participants through the built-in multi-turn tool loop. */
+  agentMode: boolean
+  /** Optional local workspace used by file and shell tools in agent mode. */
+  workspaceId?: string
   agents: BlueprintAgent[]
   steps: BlueprintStep[]
+  graph?: BlueprintGraph
   schedule: BlueprintSchedule
   createdAt: number
   updatedAt: number

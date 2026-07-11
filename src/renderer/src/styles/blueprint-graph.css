@@ -1,0 +1,483 @@
+.blueprint-graph-editor {
+  position: relative;
+  min-height: 520px;
+  height: min(720px, calc(100vh - 180px));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  outline: none;
+  background: #141417;
+  color: var(--text);
+}
+
+:root[data-theme='light'] .blueprint-graph-editor { background: #e9e9ec; }
+
+.blueprint-graph-editor:focus-visible {
+  border-color: #7463db;
+  box-shadow: 0 0 0 2px rgba(116, 99, 219, 0.14);
+}
+
+.blueprint-graph-toolbar {
+  position: relative;
+  z-index: 20;
+  min-height: 43px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 8px;
+  flex-shrink: 0;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg-elevated) 92%, transparent);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.12);
+}
+
+.blueprint-graph-add-group,
+.blueprint-graph-view-group {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+}
+
+.blueprint-graph-toolbar button {
+  min-height: 29px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 4px 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.blueprint-graph-toolbar button:hover:not(:disabled) {
+  border-color: #7463db;
+  color: var(--text);
+  background: color-mix(in srgb, #7463db 10%, var(--bg));
+}
+
+.blueprint-graph-toolbar button:disabled { opacity: 0.38; cursor: default; }
+.blueprint-graph-toolbar button.icon-only { width: 29px; padding: 0; font-size: 17px; }
+.blueprint-graph-view-group > span {
+  width: 44px;
+  color: var(--text-faint);
+  font: 10px var(--font-mono);
+  text-align: center;
+}
+
+.blueprint-graph-canvas {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  cursor: grab;
+  touch-action: none;
+  background-color: #151518;
+  background-image: radial-gradient(circle, rgba(126, 126, 140, 0.3) 1px, transparent 1.25px);
+  background-position: var(--blueprint-graph-grid-x) var(--blueprint-graph-grid-y);
+  background-size: var(--blueprint-graph-grid-size) var(--blueprint-graph-grid-size);
+}
+
+:root[data-theme='light'] .blueprint-graph-canvas {
+  background-color: #ededf0;
+  background-image: radial-gradient(circle, rgba(80, 80, 94, 0.26) 1px, transparent 1.25px);
+}
+
+.blueprint-graph-canvas.is-panning { cursor: grabbing; }
+
+.blueprint-graph-world {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1px;
+  height: 1px;
+  transform-origin: 0 0;
+  will-change: transform;
+}
+
+.blueprint-graph-connections {
+  position: absolute;
+  z-index: 1;
+  left: 0;
+  top: 0;
+  width: 1px;
+  height: 1px;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.blueprint-graph-connection { pointer-events: none; }
+.blueprint-graph-wire,
+.blueprint-graph-wire-shadow,
+.blueprint-graph-wire-hit {
+  fill: none;
+  vector-effect: non-scaling-stroke;
+}
+.blueprint-graph-wire-shadow {
+  stroke: rgba(0, 0, 0, 0.72);
+  stroke-width: 5px;
+}
+.blueprint-graph-wire {
+  stroke: #8b7bea;
+  stroke-width: 2px;
+  filter: drop-shadow(0 0 3px rgba(139, 123, 234, 0.22));
+}
+.blueprint-graph-wire-hit {
+  stroke: transparent;
+  stroke-width: 14px;
+  pointer-events: stroke;
+  cursor: pointer;
+}
+.blueprint-graph-connection:hover .blueprint-graph-wire,
+.blueprint-graph-connection.selected .blueprint-graph-wire {
+  stroke: #d1c9ff;
+  stroke-width: 3px;
+}
+.blueprint-graph-connection.selected .blueprint-graph-wire-shadow { stroke-width: 7px; }
+.blueprint-graph-connection.repeat .blueprint-graph-wire {
+  stroke: #d79a4b;
+  stroke-dasharray: 7 5;
+  filter: drop-shadow(0 0 3px rgba(215, 154, 75, 0.24));
+}
+.blueprint-graph-connection.repeat:hover .blueprint-graph-wire,
+.blueprint-graph-connection.repeat.selected .blueprint-graph-wire { stroke: #ffd39a; }
+.blueprint-graph-connection.disconnected .blueprint-graph-wire {
+  opacity: 0.38;
+  stroke-dasharray: 7 6;
+}
+.blueprint-graph-wire-preview {
+  stroke: #b9adff;
+  stroke-dasharray: 6 5;
+  animation: blueprint-graph-dash 0.65s linear infinite;
+  pointer-events: none;
+}
+@keyframes blueprint-graph-dash { to { stroke-dashoffset: -11; } }
+
+.blueprint-graph-node {
+  --node-color: #7463db;
+  position: absolute;
+  z-index: 3;
+  width: 286px;
+  overflow: visible;
+  border: 1px solid color-mix(in srgb, var(--node-color) 44%, var(--border-strong));
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--bg-elevated) 88%, #111114);
+  box-shadow: 0 9px 26px rgba(0, 0, 0, 0.33), 0 1px 0 rgba(255, 255, 255, 0.025) inset;
+  color: var(--text);
+}
+
+:root[data-theme='light'] .blueprint-graph-node {
+  background: color-mix(in srgb, var(--bg-elevated) 94%, var(--node-color));
+  box-shadow: 0 7px 20px rgba(30, 30, 38, 0.16);
+}
+
+.blueprint-graph-node.type-agent { --node-color: #7463db; }
+.blueprint-graph-node.type-telegram { --node-color: #38a5e4; }
+.blueprint-graph-node.type-delay { --node-color: #d39a45; }
+.blueprint-graph-node.type-webhook { --node-color: #3fcf8e; }
+.blueprint-graph-node.selected {
+  border-color: color-mix(in srgb, var(--node-color) 86%, white);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--node-color) 25%, transparent),
+    0 10px 30px rgba(0, 0, 0, 0.4);
+}
+.blueprint-graph-node.disconnected { opacity: 0.58; }
+.blueprint-graph-node.disconnected.selected { opacity: 0.86; }
+
+.blueprint-graph-start { --node-color: #c34a55; width: 214px; }
+
+.blueprint-graph-node-head {
+  height: 42px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 7px;
+  border-bottom: 1px solid color-mix(in srgb, var(--node-color) 26%, var(--border));
+  border-radius: 6px 6px 0 0;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--node-color) 20%, var(--bg-elevated)), var(--bg-elevated));
+}
+
+.blueprint-graph-node-drag {
+  width: 22px;
+  height: 26px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: grab;
+  touch-action: none;
+}
+.blueprint-graph-node-drag:hover:not(:disabled) { color: var(--text); background: var(--bg-hover); }
+.blueprint-graph-node-drag:active { cursor: grabbing; }
+.blueprint-graph-node-drag:disabled { cursor: default; opacity: 0.35; }
+
+.blueprint-graph-node-icon {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--node-color) 40%, transparent);
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--node-color) 13%, transparent);
+  color: color-mix(in srgb, var(--node-color) 76%, white);
+}
+
+.blueprint-graph-node-head strong {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.blueprint-graph-editor .blueprint-graph-node-head > input,
+.blueprint-graph-editor .blueprint-graph-node-head > select,
+.blueprint-graph-editor .blueprint-graph-node-body input,
+.blueprint-graph-editor .blueprint-graph-node-body textarea,
+.blueprint-graph-editor .blueprint-graph-node-body select,
+.blueprint-graph-editor .blueprint-graph-node-foot input {
+  min-height: 27px;
+  padding: 4px 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  outline: none;
+  background: color-mix(in srgb, var(--bg-input) 88%, transparent);
+  color: var(--text);
+  font: 10.5px var(--font-ui);
+  user-select: text;
+}
+
+.blueprint-graph-editor .blueprint-graph-node-head > input:focus,
+.blueprint-graph-editor .blueprint-graph-node-head > select:focus,
+.blueprint-graph-editor .blueprint-graph-node-body input:focus,
+.blueprint-graph-editor .blueprint-graph-node-body textarea:focus,
+.blueprint-graph-editor .blueprint-graph-node-body select:focus {
+  border-color: color-mix(in srgb, var(--node-color) 72%, var(--border-strong));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--node-color) 13%, transparent);
+}
+
+.blueprint-graph-editor .blueprint-graph-node-head > input {
+  min-width: 0;
+  flex: 1;
+  font-weight: 650;
+}
+.blueprint-graph-editor .blueprint-graph-node-head > select {
+  width: 78px;
+  flex-shrink: 0;
+  padding-left: 4px;
+  color: var(--text-muted);
+}
+
+.blueprint-graph-exec-row {
+  position: relative;
+  height: 46px;
+  display: grid;
+  grid-template-columns: auto auto 1fr auto auto;
+  align-items: center;
+  gap: 7px;
+  padding: 0 9px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg) 66%, transparent);
+  color: var(--text-faint);
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.blueprint-graph-exec-row i { height: 1px; background: var(--border); }
+.blueprint-graph-exec-row.has-repeat-input {
+  height: 58px;
+  grid-template-columns: minmax(72px, auto) 1fr auto;
+  gap: 8px;
+}
+.blueprint-graph-input-labels {
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+}
+.blueprint-graph-input-labels > span,
+.blueprint-graph-input-labels label > span {
+  line-height: 1;
+}
+.blueprint-graph-input-labels label {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  color: #d9a15a;
+}
+.blueprint-graph-input-labels label b { font-size: 9px; font-weight: 600; }
+.blueprint-graph-editor .blueprint-graph-input-labels input[type='number'] {
+  width: 32px;
+  min-height: 18px;
+  padding: 1px 2px;
+  border: 1px solid color-mix(in srgb, #d79a4b 52%, var(--border-strong));
+  border-radius: 3px;
+  background: var(--bg-input);
+  color: var(--text);
+  font: 9px var(--font-mono);
+}
+.blueprint-graph-exec-row.single-output {
+  grid-template-columns: 1fr auto;
+  border-bottom: 0;
+  border-radius: 0 0 6px 6px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.blueprint-graph-port {
+  position: absolute;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: 2px solid #b8afe9;
+  border-radius: 50%;
+  background: #25242c;
+  transform: translateY(-50%);
+  cursor: crosshair;
+  transition: transform 100ms ease, background 100ms ease, box-shadow 100ms ease;
+}
+.blueprint-graph-port::after {
+  content: '';
+  position: absolute;
+  inset: -7px;
+}
+.blueprint-graph-port.input { left: -8px; }
+.blueprint-graph-port.output { right: -8px; }
+.blueprint-graph-port.flow-input { top: 18px; }
+.blueprint-graph-port.repeat-input {
+  top: 42px;
+  border-color: #d79a4b;
+}
+.blueprint-graph-port.repeat-input:hover,
+.blueprint-graph-port.repeat-input.connected {
+  background: #d79a4b;
+  box-shadow: 0 0 0 4px rgba(215, 154, 75, 0.14);
+}
+.blueprint-graph-port:hover {
+  background: #b8afe9;
+  box-shadow: 0 0 0 4px rgba(184, 175, 233, 0.16);
+  transform: translateY(-50%) scale(1.14);
+}
+.blueprint-graph-port:disabled { opacity: 0.42; cursor: default; }
+.blueprint-graph-port:disabled:hover {
+  background: #25242c;
+  box-shadow: none;
+  transform: translateY(-50%);
+}
+
+.blueprint-graph-node-body {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 9px;
+}
+.blueprint-graph-node-body label {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.blueprint-graph-node-body label > span {
+  color: var(--text-faint);
+  font-size: 9.5px;
+}
+.blueprint-graph-editor .blueprint-graph-node-body input,
+.blueprint-graph-editor .blueprint-graph-node-body select,
+.blueprint-graph-editor .blueprint-graph-node-body textarea { width: 100%; }
+.blueprint-graph-editor .blueprint-graph-node-body textarea {
+  min-height: 54px;
+  max-height: 116px;
+  resize: vertical;
+  line-height: 1.35;
+  font-family: var(--font-mono);
+}
+.blueprint-graph-field-pair {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 0.72fr);
+  gap: 6px;
+}
+.blueprint-graph-field-pair.webhook { grid-template-columns: minmax(0, 1fr) 66px; }
+
+.blueprint-graph-node-foot {
+  min-height: 37px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 5px 7px;
+  border-top: 1px solid var(--border);
+  color: var(--text-faint);
+  font-size: 9.5px;
+}
+.blueprint-graph-node-foot label { display: flex; align-items: center; gap: 4px; white-space: nowrap; }
+.blueprint-graph-editor .blueprint-graph-node-foot input[type='number'] {
+  width: 39px;
+  min-height: 24px;
+  padding: 2px 3px;
+}
+.blueprint-graph-editor .blueprint-graph-node-foot input[type='checkbox'] {
+  width: 12px;
+  height: 12px;
+  min-height: 0;
+  padding: 0;
+  accent-color: var(--node-color);
+}
+.blueprint-graph-node-foot .continue-option {
+  min-width: 112px;
+  flex: 1 1 112px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.blueprint-graph-node-foot .agent-mode-option { color: color-mix(in srgb, var(--node-color) 72%, var(--text)); }
+.blueprint-graph-delete {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  margin-left: auto;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--text-faint);
+}
+.blueprint-graph-delete:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--danger) 35%, transparent);
+  background: color-mix(in srgb, var(--danger) 9%, transparent);
+  color: var(--danger);
+}
+.blueprint-graph-delete:disabled { opacity: 0.3; cursor: default; }
+
+.blueprint-graph-empty {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-faint);
+  font-size: 11px;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+.blueprint-graph-empty svg { color: #7463db; opacity: 0.7; }
+
+@media (max-width: 760px) {
+  .blueprint-graph-editor { min-height: 460px; }
+  .blueprint-graph-add-group button { width: 30px; padding: 0; font-size: 0; }
+  .blueprint-graph-add-group button svg { width: 14px; height: 14px; }
+}

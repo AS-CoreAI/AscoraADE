@@ -41,6 +41,13 @@ and SSH in the left rail and as a dockable activity in the IDE. A Blueprint can:
 - run manually or at a bounded minute interval while Ascora ADE is open;
 - repeat actions and combine agent prompts with delays, Telegram messages, and
   HTTP webhooks;
+- optionally run every agent, or selected agent steps, in a bounded multi-turn
+  tool mode. Web tools work project-independently; binding a local project also
+  enables file, search, edit, write, and shell tools for manual and scheduled runs;
+- configure execution visually on a draggable node canvas: Start/action wires
+  define dependencies with fan-out and fan-in, while a dedicated bounded Repeat
+  input supports one structured feedback loop with 2–20 passes; pan, zoom, and
+  the original ordered list remain available for detailed editing;
 - interpolate `{{input}}`, `{{last}}`, `{{now}}`, `{{steps.ID}}`, and
   `{{agents.ID}}`, with live per-step status and output in the execution log.
 

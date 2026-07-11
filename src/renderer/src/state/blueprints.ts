@@ -52,6 +52,7 @@ function agentStep(name: string, agentId: string, prompt: string): BlueprintStep
     type: 'agent',
     agentId,
     prompt,
+    agentMode: false,
     repeat: 1,
     continueOnError: false
   }
@@ -113,6 +114,7 @@ function blueprintTemplate(
       template === 'telegram'
         ? 'A team researches, reviews and sends the final digest to Telegram.'
         : 'Three WProvider agents research, review and synthesize one result.',
+    agentMode: false,
     agents: [researcher, reviewer, editor],
     steps,
     schedule: { enabled: false, intervalMinutes: 60, input: '' },
@@ -139,7 +141,11 @@ export const useBlueprints = create<BlueprintState>((set, get) => {
             : item
         )
         let deltas = state.deltas
-        if (event.kind === 'step-delta' && event.delta) {
+        if (event.kind === 'step-started') {
+          deltas = Object.fromEntries(
+            Object.entries(state.deltas).filter(([key]) => key !== eventDeltaKey(event))
+          )
+        } else if (event.kind === 'step-delta' && event.delta) {
           deltas = {
             ...state.deltas,
             [eventDeltaKey(event)]: `${state.deltas[eventDeltaKey(event)] ?? ''}${event.delta}`

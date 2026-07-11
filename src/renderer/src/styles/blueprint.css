@@ -168,7 +168,7 @@
 /* Cards and fields */
 .blueprint-overview-grid {
   display: grid;
-  grid-template-columns: minmax(260px, 1fr) minmax(300px, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(min(250px, 100%), 1fr));
   gap: 12px;
   max-width: 1220px;
   margin: 0 auto 14px;
@@ -209,6 +209,18 @@
 .blueprint-studio textarea { width: 100%; min-height: 68px; resize: vertical; padding: 7px 9px; line-height: 1.45; }
 .blueprint-run-card textarea { min-height: 76px; }
 .blueprint-hint { margin-top: 6px; color: var(--text-faint); font-size: 10.5px; line-height: 1.35; }
+.blueprint-agent-mode-card .blueprint-hint {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.blueprint-agent-mode-scope {
+  color: var(--text);
+  font-size: 10.5px;
+  font-weight: 750;
+  letter-spacing: 0.045em;
+  text-transform: uppercase;
+}
 .blueprint-toggle-row,
 .blueprint-field-inline {
   display: flex;
@@ -228,6 +240,15 @@
 }
 .blueprint-field-inline input { width: 78px; }
 .blueprint-schedule-card > input { width: 100%; }
+.blueprint-agent-workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 12px;
+  color: var(--text-faint);
+  font-size: 10.5px;
+}
+.blueprint-agent-workspace select { width: 100%; }
 .blueprint-section { max-width: 1220px; margin: 0 auto 14px; padding: 16px; }
 .blueprint-section-heading {
   display: flex;
@@ -239,6 +260,10 @@
 .blueprint-section-heading h3 { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 650; }
 .blueprint-section-heading h3 svg { color: #9686ef; }
 .blueprint-section-heading p { margin-top: 4px; max-width: 780px; color: var(--text-faint); font-size: 11px; line-height: 1.4; }
+.blueprint-pipeline-modes { display: inline-flex; flex-shrink: 0; padding: 2px; border: 1px solid var(--border); border-radius: 7px; background: var(--bg); }
+.blueprint-pipeline-modes button { min-height: 25px; display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; border: 0; border-radius: 5px; color: var(--text-faint); background: transparent; font-size: 10.5px; }
+.blueprint-pipeline-modes button.active { color: var(--text); background: var(--bg-hover); box-shadow: 0 0 0 1px var(--border); }
+.blueprint-pipeline-modes button.active svg { color: #9686ef; }
 
 /* Agent cards */
 .blueprint-agent-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 10px; }
@@ -381,6 +406,18 @@
   user-select: text;
 }
 .blueprint-log-item.failed pre { color: var(--danger); }
+.blueprint-tool-audit { border-top: 1px solid var(--border); background: color-mix(in srgb, var(--terminal-bg) 72%, var(--bg)); }
+.blueprint-tool-audit-title { padding: 7px 10px 4px; color: var(--text-faint); font-size: 9.5px; font-weight: 650; text-transform: uppercase; letter-spacing: .04em; }
+.blueprint-tool-audit-item { border-top: 1px solid color-mix(in srgb, var(--border) 72%, transparent); }
+.blueprint-tool-audit-item summary { min-height: 29px; display: flex; align-items: center; gap: 7px; padding: 5px 10px; color: var(--text-muted); cursor: pointer; font-size: 10px; }
+.blueprint-tool-audit-item summary::marker { color: var(--text-faint); }
+.blueprint-tool-audit-item summary code { flex: 1; color: var(--text); font: 10.5px var(--font-mono); }
+.blueprint-tool-audit-item summary .status-dot { width: 6px; height: 6px; background: var(--text-faint); }
+.blueprint-tool-audit-item.running summary .status-dot { background: var(--blue); animation: blueprint-pulse 1.2s ease-in-out infinite; }
+.blueprint-tool-audit-item.completed summary .status-dot { background: var(--accent); }
+.blueprint-tool-audit-item.failed summary .status-dot,
+.blueprint-tool-audit-item.stopped summary .status-dot { background: var(--danger); }
+.blueprint-log-item .blueprint-tool-audit-item pre { max-height: 220px; margin: 0; border-top: 1px solid var(--border); color: var(--text-muted); }
 .blueprint-log-empty { display: grid; place-items: center; min-height: 82px; color: var(--text-faint); font-size: 11.5px; }
 .blueprint-empty {
   height: 100%;

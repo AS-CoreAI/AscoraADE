@@ -241,10 +241,12 @@ interface SearchCtx {
   inScope: (relPath: string) => boolean
   context: number
   matches: AgentSearchMatch[]
+  signal?: AbortSignal
 }
 
 /** Recursively collect content matches under `dir`. Returns true when capped. */
 async function walkSearch(ctx: SearchCtx, dir: string): Promise<boolean> {
+  if (ctx.signal?.aborted) throw new AgentError('Search aborted.')
   let dirents
   try {
     dirents = await readdir(dir, { withFileTypes: true })
@@ -254,6 +256,7 @@ async function walkSearch(ctx: SearchCtx, dir: string): Promise<boolean> {
   // Stable, shallow-first ordering keeps results readable and deterministic.
   dirents.sort((a, b) => a.name.localeCompare(b.name))
   for (const d of dirents) {
+    if (ctx.signal?.aborted) throw new AgentError('Search aborted.')
     if (ctx.matches.length >= SEARCH_MAX_MATCHES) return true
     if (d.isDirectory()) {
       if (EXCLUDED_DIRS.has(d.name)) continue
@@ -301,7 +304,8 @@ async function walkSearch(ctx: SearchCtx, dir: string): Promise<boolean> {
 async function searchFiles(
   root: string,
   query: string,
-  options?: AgentSearchOptions
+  options?: AgentSearchOptions,
+  signal?: AbortSignal
 ): Promise<AgentSearchResult> {
   try {
     if (!query || !query.trim()) throw new AgentError('A non-empty search query is required.')
@@ -320,7 +324,7 @@ async function searchFiles(
     }
     const base = resolveInside(root, opts.path || '.')
     const context = Math.min(SEARCH_MAX_CONTEXT, Math.max(0, Math.floor(opts.context ?? 0)))
-    const ctx: SearchCtx = { root, matcher, inScope, context, matches: [] }
+    const ctx: SearchCtx = { root, matcher, inScope, context, matches: [], signal }
     const truncated = await walkSearch(ctx, base)
     return { ok: true, query, matches: ctx.matches, truncated }
   } catch (err) {
@@ -419,7 +423,7 @@ function rewritePowerShellChains(command: string): string {
   return result
 }
 
-function runCommand(root: string, command: string): Promise<AgentRunResult> {
+function runCommand(root: string, command: string, signal?: AbortSignal): Promise<AgentRunResult> {
   return new Promise((resolvePromise) => {
     if (!command || !command.trim()) {
       resolvePromise({ ok: false, error: 'No command provided.' })
@@ -441,7 +445,8 @@ function runCommand(root: string, command: string): Promise<AgentRunResult> {
         timeout: RUN_TIMEOUT_MS,
         maxBuffer: RUN_MAX_BUFFER,
         windowsHide: true,
-        shell
+        shell,
+        signal
       },
       (error, stdout, stderr) => {
         const out = String(stdout ?? '')
@@ -465,6 +470,18 @@ function runCommand(root: string, command: string): Promise<AgentRunResult> {
       }
     )
   })
+}
+
+// Blueprints run in the main process, so expose the same confined primitives
+// that the renderer-backed agent loop reaches through IPC. Keeping one
+// implementation prevents the two WProvider modes from drifting apart.
+export {
+  listDir as listAgentDir,
+  readFileTool as readAgentFile,
+  writeFileTool as writeAgentFile,
+  editFileTool as editAgentFile,
+  searchFiles as searchAgentFiles,
+  runCommand as runAgentCommand
 }
 
 export function registerAgentHandlers(): void {
