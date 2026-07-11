@@ -45,15 +45,22 @@ and SSH in the left rail and as a dockable activity in the IDE. A Blueprint can:
   tool mode. Web tools work project-independently; binding a local project also
   enables file, search, edit, write, and shell tools for manual and scheduled runs;
 - configure execution visually on a draggable node canvas: Start/action wires
-  define dependencies with fan-out and fan-in, while a dedicated bounded Repeat
-  input supports one structured feedback loop with 2–20 passes; pan, zoom, and
-  the original ordered list remain available for detailed editing;
+  define dependencies with fan-out and fan-in; selecting a wire adds an `always`,
+  `otherwise`, success/failure, contains, or equality condition. Every matching
+  route runs, so one result can trigger several agents, Telegram messages, or
+  webhooks. A dedicated Repeat input supports one bounded conditional feedback
+  loop with 2–20 passes. The same collapsible route editor is available on every
+  card in both Graph and List modes; pan and zoom remain available on the canvas;
 - interpolate `{{input}}`, `{{last}}`, `{{now}}`, `{{steps.ID}}`, and
   `{{agents.ID}}`, with live per-step status and output in the execution log.
 
 WProvider owns one shared browser driver, so agent turns are deliberately queued
 and executed one at a time even when several Blueprint runs are active. This
 keeps provider navigation and captured replies isolated and predictable.
+
+For reliable agent routing, ask the deciding agent to return an exact marker such
+as `RESULT=PASS` or `RESULT=FAIL`, then compare that marker on its outgoing wires.
+Semantic output conditions are separate from a technical step failure.
 
 The OpenAI-compatible client lives in the **main process** (`src/main/llm/client.ts`)
 and is exposed to the renderer over IPC:

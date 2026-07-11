@@ -72,6 +72,88 @@
   text-align: center;
 }
 
+.blueprint-graph-route-editor {
+  position: absolute;
+  z-index: 30;
+  top: 51px;
+  right: 10px;
+  width: min(278px, calc(100% - 20px));
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid color-mix(in srgb, #7463db 50%, var(--border-strong));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-elevated) 96%, transparent);
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.42);
+  color: var(--text);
+}
+.blueprint-graph-route-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+.blueprint-graph-route-head > div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+.blueprint-graph-route-head strong { font-size: 11px; }
+.blueprint-graph-route-head span {
+  overflow: hidden;
+  color: var(--text-faint);
+  font: 9px var(--font-mono);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.blueprint-graph-route-head button {
+  width: 25px;
+  height: 25px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--text-faint);
+}
+.blueprint-graph-route-head button:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--danger) 38%, transparent);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  color: var(--danger);
+}
+.blueprint-graph-route-editor > label:not(.blueprint-graph-route-check) {
+  display: grid;
+  gap: 4px;
+}
+.blueprint-graph-route-editor > label > span {
+  color: var(--text-faint);
+  font-size: 9.5px;
+}
+.blueprint-graph-route-editor select,
+.blueprint-graph-route-editor input:not([type='checkbox']) {
+  width: 100%;
+  min-height: 29px;
+  padding: 4px 7px;
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+  outline: none;
+  background: var(--bg-input);
+  color: var(--text);
+  font: 10.5px var(--font-ui);
+}
+.blueprint-graph-route-editor select:focus,
+.blueprint-graph-route-editor input:focus {
+  border-color: #7463db;
+  box-shadow: 0 0 0 2px rgba(116, 99, 219, 0.14);
+}
+.blueprint-graph-route-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.blueprint-graph-route-check input { width: 13px; height: 13px; accent-color: #7463db; }
+.blueprint-graph-route-check span { color: var(--text-muted); font-size: 9.5px; }
+
 .blueprint-graph-canvas {
   position: relative;
   flex: 1;
@@ -148,6 +230,17 @@
 }
 .blueprint-graph-connection.repeat:hover .blueprint-graph-wire,
 .blueprint-graph-connection.repeat.selected .blueprint-graph-wire { stroke: #ffd39a; }
+.blueprint-graph-connection.when-succeeded .blueprint-graph-wire { stroke: #53c990; }
+.blueprint-graph-connection.when-failed .blueprint-graph-wire { stroke: #e46a76; }
+.blueprint-graph-connection.when-output .blueprint-graph-wire { stroke: #54b8d4; }
+.blueprint-graph-connection.when-otherwise .blueprint-graph-wire {
+  stroke: #a0a0ac;
+  stroke-dasharray: 4 5;
+}
+.blueprint-graph-connection.when-succeeded.selected .blueprint-graph-wire { stroke: #9ae9be; }
+.blueprint-graph-connection.when-failed.selected .blueprint-graph-wire { stroke: #ffadb5; }
+.blueprint-graph-connection.when-output.selected .blueprint-graph-wire { stroke: #a4e5f5; }
+.blueprint-graph-connection.when-otherwise.selected .blueprint-graph-wire { stroke: #dedee5; }
 .blueprint-graph-connection.disconnected .blueprint-graph-wire {
   opacity: 0.38;
   stroke-dasharray: 7 6;
@@ -411,6 +504,255 @@
   gap: 6px;
 }
 .blueprint-graph-field-pair.webhook { grid-template-columns: minmax(0, 1fr) 66px; }
+
+.blueprint-graph-routes {
+  display: grid;
+  gap: 7px;
+  margin-top: 2px;
+  padding-top: 9px;
+  border-top: 1px solid color-mix(in srgb, var(--node-color) 28%, var(--border));
+}
+.blueprint-graph-routes.collapsed > :not(.blueprint-graph-routes-toggle) { display: none; }
+.blueprint-graph-routes-toggle {
+  width: 100%;
+  min-height: 25px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-muted);
+  text-align: left;
+}
+.blueprint-graph-routes-toggle:hover { color: var(--text); }
+.blueprint-graph-routes-toggle strong {
+  flex: 1;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.045em;
+}
+.blueprint-graph-routes-toggle > span {
+  min-width: 19px;
+  padding: 1px 5px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--node-color) 16%, transparent);
+  color: color-mix(in srgb, var(--node-color) 72%, white);
+  font: 9px var(--font-mono);
+  text-align: center;
+}
+.blueprint-graph-routes-content {
+  display: grid;
+  gap: 7px;
+}
+.blueprint-graph-routes-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--text-muted);
+}
+.blueprint-graph-routes-head strong {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.045em;
+}
+.blueprint-graph-routes-head span {
+  min-width: 19px;
+  padding: 1px 5px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--node-color) 16%, transparent);
+  color: color-mix(in srgb, var(--node-color) 72%, white);
+  font: 9px var(--font-mono);
+  text-align: center;
+}
+.blueprint-graph-routes-empty {
+  padding: 7px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 5px;
+  color: var(--text-faint);
+  font-size: 9.5px;
+  text-align: center;
+}
+.blueprint-graph-route-card {
+  display: grid;
+  gap: 6px;
+  padding: 7px;
+  border: 1px solid var(--border-strong);
+  border-left: 3px solid #8b7bea;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--bg) 76%, transparent);
+}
+.blueprint-graph-route-card.when-succeeded { border-left-color: #53c990; }
+.blueprint-graph-route-card.when-failed { border-left-color: #e46a76; }
+.blueprint-graph-route-card.when-output { border-left-color: #54b8d4; }
+.blueprint-graph-route-card.when-otherwise { border-left-color: #a0a0ac; }
+.blueprint-graph-route-card-head {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.blueprint-graph-route-target {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 10px;
+  font-weight: 650;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.blueprint-graph-route-target span { color: var(--node-color); }
+.blueprint-graph-route-target:hover { color: color-mix(in srgb, var(--node-color) 70%, white); }
+.blueprint-graph-node-body .blueprint-graph-route-passes {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 3px;
+  color: #d9a15a;
+  font-size: 8.5px;
+}
+.blueprint-graph-editor .blueprint-graph-route-passes input[type='number'] {
+  width: 34px;
+  min-height: 22px;
+  padding: 1px 3px;
+  border-color: color-mix(in srgb, #d79a4b 52%, var(--border-strong));
+  font: 9px var(--font-mono);
+}
+.blueprint-graph-route-delete {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  border-radius: 4px;
+  color: var(--text-faint);
+}
+.blueprint-graph-route-delete:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  color: var(--danger);
+}
+.blueprint-graph-route-card > label { gap: 3px; }
+.blueprint-graph-route-card > label > span,
+.blueprint-graph-route-value-row label > span { font-size: 8.5px; }
+.blueprint-graph-route-value-row {
+  display: grid;
+  gap: 5px;
+}
+.blueprint-graph-node-body .blueprint-graph-route-inline-check {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 5px;
+}
+.blueprint-graph-editor .blueprint-graph-route-inline-check input[type='checkbox'] {
+  width: 12px;
+  height: 12px;
+  min-height: 0;
+  padding: 0;
+  accent-color: var(--node-color);
+}
+.blueprint-graph-route-inline-check span { color: var(--text-muted); font-size: 8.5px; }
+.blueprint-graph-route-builder {
+  display: grid;
+  grid-template-columns: 82px minmax(0, 1fr);
+  gap: 5px;
+  padding-top: 1px;
+}
+.blueprint-graph-route-builder button {
+  grid-column: 1 / -1;
+  min-height: 27px;
+  border: 1px dashed color-mix(in srgb, var(--node-color) 52%, var(--border-strong));
+  border-radius: 5px;
+  color: color-mix(in srgb, var(--node-color) 68%, var(--text));
+  font-size: 9.5px;
+}
+.blueprint-graph-route-builder button:hover:not(:disabled) {
+  border-style: solid;
+  background: color-mix(in srgb, var(--node-color) 10%, transparent);
+}
+.blueprint-graph-route-builder button:disabled { opacity: 0.38; cursor: default; }
+.blueprint-graph-routes > small {
+  color: var(--text-faint);
+  font-size: 8.5px;
+  line-height: 1.35;
+}
+.blueprint-graph-routes-content > small {
+  color: var(--text-faint);
+  font-size: 8.5px;
+  line-height: 1.35;
+}
+.blueprint-graph-route-notice {
+  padding: 6px 7px;
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--bg) 72%, transparent);
+  color: var(--text-faint);
+  font-size: 8.8px;
+  line-height: 1.35;
+}
+.blueprint-graph-route-notice.warning {
+  border-color: color-mix(in srgb, #d79a4b 42%, var(--border-strong));
+  color: #d9a15a;
+}
+
+.blueprint-step-card .blueprint-list-routes {
+  --node-color: #7463db;
+  margin: 10px 0 0;
+  padding: 8px 10px 0;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--bg) 48%, transparent);
+}
+.blueprint-step-card.type-telegram .blueprint-list-routes { --node-color: #38a5e4; }
+.blueprint-step-card.type-delay .blueprint-list-routes { --node-color: #d39a45; }
+.blueprint-step-card.type-webhook .blueprint-list-routes { --node-color: #3fcf8e; }
+.blueprint-step-card .blueprint-list-routes.collapsed { padding-bottom: 8px; }
+.blueprint-step-card .blueprint-list-routes.open { padding-bottom: 10px; }
+.blueprint-step-card .blueprint-list-routes select,
+.blueprint-step-card .blueprint-list-routes input:not([type='checkbox']) {
+  width: 100%;
+  min-height: 29px;
+  padding: 4px 7px;
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+  outline: none;
+  background: var(--bg-input);
+  color: var(--text);
+  font: 10.5px var(--font-ui);
+}
+.blueprint-step-card .blueprint-list-routes label {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.blueprint-step-card .blueprint-list-routes label > span {
+  color: var(--text-faint);
+  font-size: 9px;
+}
+.blueprint-step-card .blueprint-list-routes .blueprint-graph-route-passes,
+.blueprint-step-card .blueprint-list-routes .blueprint-graph-route-inline-check {
+  flex-direction: row;
+  align-items: center;
+}
+.blueprint-step-card .blueprint-list-routes .blueprint-graph-route-passes input[type='number'] {
+  width: 42px;
+  min-height: 23px;
+}
+.blueprint-step-card .blueprint-list-routes .blueprint-graph-route-inline-check input[type='checkbox'] {
+  width: 13px;
+  height: 13px;
+  accent-color: var(--node-color);
+}
+.blueprint-step-card .blueprint-list-routes .blueprint-graph-route-builder {
+  grid-template-columns: 120px minmax(180px, 1fr) auto;
+}
+.blueprint-step-card .blueprint-list-routes .blueprint-graph-route-builder button {
+  grid-column: auto;
+  min-width: 130px;
+  padding: 0 10px;
+}
 
 .blueprint-graph-node-foot {
   min-height: 37px;

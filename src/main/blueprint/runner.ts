@@ -2,9 +2,11 @@ import { BrowserWindow, type WebContents } from 'electron'
 import { randomUUID } from 'node:crypto'
 import { stat } from 'node:fs/promises'
 import {
+  BLUEPRINT_START_NODE_ID,
   IPC,
   WPROVIDER_SERVICES,
   type BlueprintAgent,
+  type BlueprintConnection,
   type BlueprintDefinition,
   type BlueprintEvent,
   type BlueprintEventKind,
@@ -19,7 +21,15 @@ import {
 } from '@shared/ipc'
 import { getStore } from '../store'
 import { abortWProvider, chatWProvider, forgetWProviderSession } from '../wprovider/runner'
-import { compileBlueprint, normalizeBlueprintGraph, type CompiledBlueprint } from './graph'
+import {
+  compileBlueprint,
+  matchingBlueprintConnections,
+  normalizeBlueprintGraph,
+  type BlueprintRouteResult,
+  type CompiledBlueprint,
+  type CompiledBlueprintExecution,
+  type CompiledBlueprintGraph
+} from './graph'
 import {
   blueprintAgentModePrompt,
   executeBlueprintTool,
@@ -41,7 +51,8 @@ const MAX_TOOL_AUDIT_OUTPUT = 8_000
 
 interface ActiveBlueprintRun {
   blueprint: BlueprintDefinition
-  executionSteps: BlueprintStep[]
+  executions: CompiledBlueprintExecution[]
+  executionGraph: CompiledBlueprintGraph | null
   graphAncestors: Map<string, Set<string>> | null
   graphPredecessors: Map<string, string[]> | null
   run: BlueprintRunSummary
@@ -52,6 +63,8 @@ interface ActiveBlueprintRun {
   agentMessages: Map<string, LlmMessage[]>
   stepOutputs: Map<string, string>
   agentOutputs: Map<string, string>
+  routeResults: Map<string, BlueprintRouteResult>
+  latestRouteResults: Map<string, BlueprintRouteResult>
   lastOutput: string
 }
 
@@ -249,11 +262,18 @@ function sharedContext(active: ActiveBlueprintRun, stepId: string): string {
   const completed = active.run.steps
     .filter(
       (step) =>
-        step.status === 'completed' &&
-        step.output &&
+        ((step.status === 'completed' && step.output) ||
+          (active.executionGraph &&
+            step.status === 'failed' &&
+            step.error &&
+            active.stepOutputs.get(step.stepId) === step.error)) &&
         (!active.graphAncestors || step.stepId === stepId || ancestors?.has(step.stepId))
     )
-    .map((step) => `### ${step.stepName}\n${step.output}`)
+    .map((step) =>
+      step.status === 'failed'
+        ? `### ${step.stepName} (error)\n${step.error}`
+        : `### ${step.stepName}\n${step.output}`
+    )
     .join('\n\n')
   if (!completed) return ''
   return completed.length > MAX_SHARED_CONTEXT
@@ -266,8 +286,23 @@ function lastOutputForStep(active: ActiveBlueprintRun, stepId: string | undefine
   const candidates = new Set([stepId, ...(active.graphPredecessors.get(stepId) ?? [])])
   return (
     active.run.steps.findLast(
-      (step) => step.status === 'completed' && !!step.output && candidates.has(step.stepId)
-    )?.output ?? ''
+      (step) =>
+        candidates.has(step.stepId) &&
+        ((step.status === 'completed' && !!step.output) ||
+          (active.executionGraph &&
+            step.status === 'failed' &&
+            !!step.error &&
+            active.stepOutputs.get(step.stepId) === step.error))
+    )?.output ??
+    active.run.steps.findLast(
+      (step) =>
+        !!active.executionGraph &&
+        step.status === 'failed' &&
+        !!step.error &&
+        active.stepOutputs.get(step.stepId) === step.error &&
+        candidates.has(step.stepId)
+    )?.error ??
+    ''
   )
 }
 
@@ -562,47 +597,181 @@ async function executeStep(
   return runWebhookStep(active, step)
 }
 
+function routeResultKey(stepId: string, iteration: number): string {
+  return `${iteration}\u0000${stepId}`
+}
+
+function sourceResultForConnection(
+  active: ActiveBlueprintRun,
+  connection: BlueprintConnection,
+  execution: CompiledBlueprintExecution
+): BlueprintRouteResult | undefined {
+  const graph = active.executionGraph
+  if (!graph || connection.from === BLUEPRINT_START_NODE_ID) return undefined
+  const sourceInRepeat = graph.repeatBody.has(connection.from)
+  const targetInRepeat = graph.repeatBody.has(connection.to)
+
+  if (connection.toPort === 'repeat') {
+    return execution.iteration > 1
+      ? active.routeResults.get(routeResultKey(connection.from, execution.iteration - 1))
+      : undefined
+  }
+  if (targetInRepeat) {
+    if (sourceInRepeat) {
+      return active.routeResults.get(routeResultKey(connection.from, execution.iteration))
+    }
+    return execution.iteration === 1
+      ? active.latestRouteResults.get(connection.from)
+      : undefined
+  }
+  return active.latestRouteResults.get(connection.from)
+}
+
+function connectionIsActive(
+  active: ActiveBlueprintRun,
+  connection: BlueprintConnection,
+  execution: CompiledBlueprintExecution
+): boolean {
+  const graph = active.executionGraph
+  if (!graph) return true
+  if (connection.from === BLUEPRINT_START_NODE_ID) {
+    return !graph.repeatBody.has(connection.to) || execution.iteration === 1
+  }
+  const result = sourceResultForConnection(active, connection, execution)
+  if (!result) return false
+  const outgoing = graph.connections.filter((candidate) => candidate.from === connection.from)
+  return matchingBlueprintConnections(outgoing, result).some(
+    (candidate) => candidate.id === connection.id
+  )
+}
+
+function executionIsActive(
+  active: ActiveBlueprintRun,
+  execution: CompiledBlueprintExecution
+): boolean {
+  const graph = active.executionGraph
+  if (!graph) return true
+  const incoming = graph.connections.filter((connection) => connection.to === execution.step.id)
+  if (
+    graph.repeatConnection?.to === execution.step.id &&
+    execution.iteration > 1
+  ) {
+    return incoming
+      .filter((connection) => connection.toPort === 'repeat')
+      .some((connection) => connectionIsActive(active, connection, execution))
+  }
+  const regular = incoming.filter((connection) => connection.toPort !== 'repeat')
+  return regular.length > 0 &&
+    regular.every((connection) => connectionIsActive(active, connection, execution))
+}
+
+function failureHasRoute(
+  active: ActiveBlueprintRun,
+  step: BlueprintStep,
+  result: BlueprintRouteResult
+): boolean {
+  const graph = active.executionGraph
+  if (!graph) return false
+  const outgoing = graph.connections.filter((connection) => connection.from === step.id)
+  return matchingBlueprintConnections(outgoing, result).some((connection) => {
+    const operator = connection.condition?.operator
+    return operator === 'failed' || operator === 'otherwise'
+  })
+}
+
+function recordSkippedExecution(
+  active: ActiveBlueprintRun,
+  execution: CompiledBlueprintExecution,
+  attemptsByStep: Map<string, number>
+): void {
+  const now = Date.now()
+  const attempt = (attemptsByStep.get(execution.step.id) ?? 0) + 1
+  attemptsByStep.set(execution.step.id, attempt)
+  active.run.steps.push({
+    id: randomUUID(),
+    stepId: execution.step.id,
+    stepName: execution.step.name,
+    type: execution.step.type,
+    attempt,
+    status: 'skipped',
+    startedAt: now,
+    finishedAt: now,
+    error: 'No incoming route condition matched.'
+  })
+  persistRun(active)
+  emit(active, 'step-skipped', execution.step.id)
+}
+
+async function executeScheduledAction(
+  active: ActiveBlueprintRun,
+  execution: CompiledBlueprintExecution,
+  attemptsByStep: Map<string, number>
+): Promise<BlueprintRouteResult> {
+  const step = execution.step
+  const repeat = Math.round(numberInRange(step.repeat, 1, 1, MAX_REPEAT))
+  let finalResult: BlueprintRouteResult | undefined
+
+  for (let localAttempt = 1; localAttempt <= repeat; localAttempt += 1) {
+    assertRunning(active)
+    const attempt = (attemptsByStep.get(step.id) ?? 0) + 1
+    attemptsByStep.set(step.id, attempt)
+    const stepRun: BlueprintStepRun = {
+      id: randomUUID(),
+      stepId: step.id,
+      stepName: step.name,
+      type: step.type,
+      attempt,
+      status: 'running',
+      startedAt: Date.now()
+    }
+    active.run.steps.push(stepRun)
+    emit(active, 'step-started', step.id)
+    try {
+      const output = await executeStep(active, step, stepRun)
+      assertRunning(active)
+      stepRun.status = 'completed'
+      stepRun.output = output
+      stepRun.finishedAt = Date.now()
+      active.lastOutput = output
+      active.stepOutputs.set(step.id, output)
+      finalResult = { status: 'completed', output }
+      persistRun(active)
+      emit(active, 'step-completed', step.id)
+    } catch (error) {
+      if (error instanceof BlueprintStoppedError || active.stopped) throw error
+      const message = error instanceof Error ? error.message : String(error)
+      stepRun.status = 'failed'
+      stepRun.error = message
+      stepRun.finishedAt = Date.now()
+      finalResult = { status: 'failed', error: message }
+      const routedFailure = failureHasRoute(active, step, finalResult)
+      if (routedFailure) {
+        active.lastOutput = message
+        active.stepOutputs.set(step.id, message)
+      }
+      persistRun(active)
+      emit(active, 'step-failed', step.id)
+      if (routedFailure) break
+      if (!step.continueOnError) throw error
+    }
+  }
+
+  return finalResult ?? { status: 'failed', error: 'The Blueprint action did not run.' }
+}
+
 async function executeBlueprint(active: ActiveBlueprintRun): Promise<void> {
   try {
     emit(active, 'run-started')
     const attemptsByStep = new Map<string, number>()
-    for (const step of active.executionSteps) {
-      const repeat = Math.round(numberInRange(step.repeat, 1, 1, MAX_REPEAT))
-      for (let localAttempt = 1; localAttempt <= repeat; localAttempt += 1) {
-        assertRunning(active)
-        const attempt = (attemptsByStep.get(step.id) ?? 0) + 1
-        attemptsByStep.set(step.id, attempt)
-        const stepRun: BlueprintStepRun = {
-          id: randomUUID(),
-          stepId: step.id,
-          stepName: step.name,
-          type: step.type,
-          attempt,
-          status: 'running',
-          startedAt: Date.now()
-        }
-        active.run.steps.push(stepRun)
-        emit(active, 'step-started', step.id)
-        try {
-          const output = await executeStep(active, step, stepRun)
-          assertRunning(active)
-          stepRun.status = 'completed'
-          stepRun.output = output
-          stepRun.finishedAt = Date.now()
-          active.lastOutput = output
-          active.stepOutputs.set(step.id, output)
-          persistRun(active)
-          emit(active, 'step-completed', step.id)
-        } catch (error) {
-          if (error instanceof BlueprintStoppedError || active.stopped) throw error
-          stepRun.status = 'failed'
-          stepRun.error = error instanceof Error ? error.message : String(error)
-          stepRun.finishedAt = Date.now()
-          persistRun(active)
-          emit(active, 'step-failed', step.id)
-          if (!step.continueOnError) throw error
-        }
+    for (const execution of active.executions) {
+      assertRunning(active)
+      if (!executionIsActive(active, execution)) {
+        recordSkippedExecution(active, execution, attemptsByStep)
+        continue
       }
+      const result = await executeScheduledAction(active, execution, attemptsByStep)
+      active.routeResults.set(routeResultKey(execution.step.id, execution.iteration), result)
+      active.latestRouteResults.set(execution.step.id, result)
     }
     active.run.status = 'completed'
     active.run.finishedAt = Date.now()
@@ -713,7 +882,8 @@ function runBlueprint(
   }
   const active: ActiveBlueprintRun = {
     blueprint,
-    executionSteps: compiled.steps,
+    executions: compiled.executions,
+    executionGraph: compiled.graph,
     graphAncestors: compiled.ancestors,
     graphPredecessors: compiled.predecessors,
     run,
@@ -724,6 +894,8 @@ function runBlueprint(
     agentMessages: new Map(),
     stepOutputs: new Map(),
     agentOutputs: new Map(),
+    routeResults: new Map(),
+    latestRouteResults: new Map(),
     lastOutput: ''
   }
   activeRuns.set(blueprint.id, active)

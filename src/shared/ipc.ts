@@ -477,6 +477,25 @@ export interface BlueprintNodePosition {
   y: number
 }
 
+export type BlueprintConnectionConditionOperator =
+  | 'always'
+  | 'otherwise'
+  | 'succeeded'
+  | 'failed'
+  | 'contains'
+  | 'not_contains'
+  | 'equals'
+  | 'not_equals'
+
+/** A route predicate evaluated against the result of the source action. */
+export interface BlueprintConnectionCondition {
+  operator: BlueprintConnectionConditionOperator
+  /** Comparison text used by output predicates. */
+  value?: string
+  /** Output comparisons are case-insensitive unless explicitly enabled. */
+  caseSensitive?: boolean
+}
+
 export interface BlueprintConnection {
   id: string
   from: string
@@ -485,6 +504,8 @@ export interface BlueprintConnection {
   toPort?: 'input' | 'repeat'
   /** Total bounded passes through a repeat connection, including the first pass. */
   iterations?: number
+  /** Missing means an unconditional route for older saved graphs. */
+  condition?: BlueprintConnectionCondition
 }
 
 /** Optional visual execution graph. Older definitions continue to use step order. */
@@ -626,6 +647,7 @@ export type BlueprintEventKind =
   | 'step-delta'
   | 'step-completed'
   | 'step-failed'
+  | 'step-skipped'
   | 'run-completed'
   | 'run-failed'
   | 'run-stopped'

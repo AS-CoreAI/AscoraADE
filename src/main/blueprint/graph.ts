@@ -1,15 +1,37 @@
 import {
   BLUEPRINT_START_NODE_ID,
   type BlueprintConnection,
+  type BlueprintConnectionCondition,
+  type BlueprintConnectionConditionOperator,
   type BlueprintDefinition,
   type BlueprintGraph,
   type BlueprintStep
 } from '@shared/ipc'
 
+export interface CompiledBlueprintExecution {
+  step: BlueprintStep
+  /** Zero for ordinary actions; one-based for actions inside a Repeat body. */
+  iteration: number
+}
+
+export interface CompiledBlueprintGraph {
+  connections: BlueprintConnection[]
+  repeatConnection?: BlueprintConnection
+  repeatBody: Set<string>
+}
+
 export interface CompiledBlueprint {
   steps: BlueprintStep[]
+  executions: CompiledBlueprintExecution[]
   ancestors: Map<string, Set<string>> | null
   predecessors: Map<string, string[]> | null
+  graph: CompiledBlueprintGraph | null
+}
+
+export interface BlueprintRouteResult {
+  status: 'completed' | 'failed'
+  output?: string
+  error?: string
 }
 
 const asText = (value: unknown): string => (typeof value === 'string' ? value : '')
@@ -17,6 +39,23 @@ const MIN_REPEAT_ITERATIONS = 2
 const MAX_REPEAT_ITERATIONS = 20
 const MAX_STEP_REPEAT = 20
 const MAX_ACTION_ATTEMPTS = 2_000
+const MAX_CONDITION_VALUE = 4_000
+const CONDITION_OPERATORS: BlueprintConnectionConditionOperator[] = [
+  'always',
+  'otherwise',
+  'succeeded',
+  'failed',
+  'contains',
+  'not_contains',
+  'equals',
+  'not_equals'
+]
+const OUTPUT_CONDITION_OPERATORS = new Set<BlueprintConnectionConditionOperator>([
+  'contains',
+  'not_contains',
+  'equals',
+  'not_equals'
+])
 
 const boundedInteger = (value: unknown, fallback: number, min: number, max: number): number => {
   const parsed = typeof value === 'number' ? value : Number(value)
@@ -47,6 +86,87 @@ function inclusiveClosure(start: string, adjacency: Map<string, string[]>): Set<
     }
   }
   return result
+}
+
+function normalizeConnectionCondition(value: unknown): BlueprintConnectionCondition | undefined {
+  if (value === undefined) return undefined
+  if (!value || typeof value !== 'object') {
+    return { operator: '' as BlueprintConnectionConditionOperator }
+  }
+  const candidate = value as Partial<BlueprintConnectionCondition>
+  return {
+    operator: asText(candidate.operator) as BlueprintConnectionConditionOperator,
+    value: asText(candidate.value).slice(0, MAX_CONDITION_VALUE),
+    caseSensitive: candidate.caseSensitive === true
+  }
+}
+
+function conditionOperator(connection: BlueprintConnection): BlueprintConnectionConditionOperator {
+  return connection.condition?.operator ?? 'always'
+}
+
+function validateConnectionCondition(connection: BlueprintConnection): void {
+  const operator = conditionOperator(connection)
+  if (!CONDITION_OPERATORS.includes(operator)) {
+    throw new Error(`A Blueprint connection has an invalid route condition: ${operator || '(empty)'}.`)
+  }
+  if (
+    connection.from === BLUEPRINT_START_NODE_ID &&
+    connection.condition &&
+    operator !== 'always'
+  ) {
+    throw new Error('Connections from Start must be unconditional.')
+  }
+  if (OUTPUT_CONDITION_OPERATORS.has(operator) && !connection.condition?.value?.trim()) {
+    throw new Error('Enter comparison text for every output route condition.')
+  }
+}
+
+/** Test whether an executed source action activates a graph connection. */
+export function matchesBlueprintConnection(
+  connection: BlueprintConnection,
+  result: BlueprintRouteResult
+): boolean {
+  const condition = connection.condition
+  const operator = condition?.operator ?? 'always'
+  if (operator === 'always') return true
+  if (operator === 'otherwise') return false
+  if (operator === 'succeeded') return result.status === 'completed'
+  if (operator === 'failed') return result.status === 'failed'
+  if (result.status !== 'completed') return false
+
+  const caseSensitive = condition?.caseSensitive === true
+  const normalize = (value: string): string => (caseSensitive ? value : value.toLowerCase())
+  const output = normalize(result.output ?? '')
+  const expected = normalize(condition?.value ?? '')
+  if (operator === 'contains') return output.includes(expected)
+  if (operator === 'not_contains') return !output.includes(expected)
+  if (operator === 'equals') return output.trim() === expected.trim()
+  if (operator === 'not_equals') return output.trim() !== expected.trim()
+  return false
+}
+
+/**
+ * Return every activated route. `otherwise` is a fallback group: all fallback
+ * routes activate only when no ordinary route from the same source matched.
+ */
+export function matchingBlueprintConnections(
+  connections: BlueprintConnection[],
+  result: BlueprintRouteResult
+): BlueprintConnection[] {
+  const unconditional = connections.filter(
+    (connection) => (connection.condition?.operator ?? 'always') === 'always'
+  )
+  const matched = connections.filter((connection) => {
+    const operator = connection.condition?.operator ?? 'always'
+    return operator !== 'always' &&
+      operator !== 'otherwise' &&
+      matchesBlueprintConnection(connection, result)
+  })
+  const branch = matched.length > 0
+    ? matched
+    : connections.filter((connection) => connection.condition?.operator === 'otherwise')
+  return [...unconditional, ...branch]
 }
 
 /** Preserve graph mode whenever the field exists; malformed graphs fail closed. */
@@ -81,6 +201,7 @@ export function normalizeBlueprintGraph(
       const from = asText(candidate.from)
       const to = asText(candidate.to)
       const id = asText(candidate.id) || `connection:${index}:${from}:${to}`
+      const condition = normalizeConnectionCondition(candidate.condition)
       if (candidate.toPort === 'repeat') {
         return [
           {
@@ -88,11 +209,12 @@ export function normalizeBlueprintGraph(
             from,
             to,
             toPort: 'repeat' as const,
-            iterations: repeatIterations(candidate.iterations)
+            iterations: repeatIterations(candidate.iterations),
+            ...(condition ? { condition } : {})
           }
         ]
       }
-      return [{ id, from, to }]
+      return [{ id, from, to, ...(condition ? { condition } : {}) }]
     }
   )
   return { positions, connections }
@@ -101,7 +223,13 @@ export function normalizeBlueprintGraph(
 /** Validate and compile a legacy sequence or a dependency graph with one bounded repeat path. */
 export function compileBlueprint(blueprint: BlueprintDefinition): CompiledBlueprint {
   if (!blueprint.graph) {
-    return { steps: blueprint.steps, ancestors: null, predecessors: null }
+    return {
+      steps: blueprint.steps,
+      executions: blueprint.steps.map((step) => ({ step, iteration: 0 })),
+      ancestors: null,
+      predecessors: null,
+      graph: null
+    }
   }
 
   const stepById = new Map<string, BlueprintStep>()
@@ -131,6 +259,7 @@ export function compileBlueprint(blueprint: BlueprintDefinition): CompiledBluepr
       throw new Error(`The Blueprint graph has a duplicate connection id: ${connection.id}.`)
     }
     edgeIds.add(connection.id)
+    validateConnectionCondition(connection)
     if (connection.from !== BLUEPRINT_START_NODE_ID && !stepById.has(connection.from)) {
       throw new Error(`A Blueprint connection starts at a missing step: ${connection.from}.`)
     }
@@ -248,11 +377,10 @@ export function compileBlueprint(blueprint: BlueprintDefinition): CompiledBluepr
           'A repeat body cannot have an incoming connection except at its repeat target.'
         )
       }
-      if (fromInBody && !toInBody && connection.from !== repeatSource) {
-        throw new Error(
-          'A repeat body cannot have an outgoing connection except at its repeat source.'
-        )
-      }
+      // Outgoing routes from any body action are valid. They are evaluated
+      // after the bounded feedback body finishes, against that action's most
+      // recent result. This enables Review -> Fix -> Review with success routes
+      // leaving Review for deploy/notification actions.
     }
 
     // The repeat source is the most recent predecessor when the target starts
@@ -279,22 +407,47 @@ export function compileBlueprint(blueprint: BlueprintDefinition): CompiledBluepr
     estimatedAttempts += bodyAttempts * (iterations - 1)
     assertActionAttemptLimit(estimatedAttempts)
     const expanded: BlueprintStep[] = []
+    const expandedExecutions: CompiledBlueprintExecution[] = []
     let insertedBody = false
     for (const step of compiled) {
       if (!body.has(step.id)) {
         expanded.push(step)
+        expandedExecutions.push({ step, iteration: 0 })
         continue
       }
       if (insertedBody) continue
       insertedBody = true
-      for (let iteration = 0; iteration < iterations; iteration += 1) {
+      for (let iteration = 1; iteration <= iterations; iteration += 1) {
         expanded.push(...bodySteps)
+        expandedExecutions.push(...bodySteps.map((bodyStep) => ({ step: bodyStep, iteration })))
       }
     }
     executionSteps = expanded
+    assertActionAttemptLimit(estimatedAttempts)
+    return {
+      steps: executionSteps,
+      executions: expandedExecutions,
+      ancestors,
+      predecessors,
+      graph: {
+        connections: blueprint.graph.connections,
+        repeatConnection,
+        repeatBody: body
+      }
+    }
   }
 
   assertActionAttemptLimit(estimatedAttempts)
 
-  return { steps: executionSteps, ancestors, predecessors }
+  return {
+    steps: executionSteps,
+    executions: executionSteps.map((step) => ({ step, iteration: 0 })),
+    ancestors,
+    predecessors,
+    graph: {
+      connections: blueprint.graph.connections,
+      repeatConnection,
+      repeatBody: new Set()
+    }
+  }
 }

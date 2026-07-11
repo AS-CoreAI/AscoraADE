@@ -141,7 +141,7 @@ export const useBlueprints = create<BlueprintState>((set, get) => {
             : item
         )
         let deltas = state.deltas
-        if (event.kind === 'step-started') {
+        if (event.kind === 'step-started' || event.kind === 'step-skipped') {
           deltas = Object.fromEntries(
             Object.entries(state.deltas).filter(([key]) => key !== eventDeltaKey(event))
           )

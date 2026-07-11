@@ -12,6 +12,7 @@ import {
 } from '@shared/ipc'
 import { Icon } from './Icon'
 import { BlueprintGraphEditor } from './BlueprintGraphEditor'
+import { BlueprintStepRoutes, type BlueprintRoutesLabels } from './BlueprintStepRoutes'
 import { useBlueprints, type BlueprintTemplate } from '@/state/blueprints'
 import { useApp } from '@/state/store'
 import { localeForLanguage, tr } from '@/language'
@@ -121,6 +122,24 @@ function appendStepToGraph(
       ...graph.connections,
       ...sources.map((from) => ({ id: crypto.randomUUID(), from, to: stepId }))
     ]
+  }
+}
+
+function addDetachedStepToGraph(
+  graph: BlueprintGraph,
+  steps: BlueprintStep[],
+  stepId: string
+): BlueprintGraph {
+  const positionedSteps = steps.flatMap((step) => graph.positions[step.id] ?? [])
+  const x = positionedSteps.length > 0
+    ? Math.max(...positionedSteps.map((position) => position.x)) + 320
+    : 356
+  return {
+    positions: {
+      ...graph.positions,
+      [stepId]: { x, y: 112 + (steps.length % 3) * 150 }
+    },
+    connections: graph.connections
   }
 }
 
@@ -268,10 +287,16 @@ export function BlueprintStudio(): JSX.Element {
   const addStep = (type: BlueprintStepType): void => {
     update((current) => {
       const step = newStep(type, current.agents)
+      const currentGraph = current.graph ?? linearGraph(current.steps)
       return {
         ...current,
         steps: [...current.steps, step],
-        graph: current.graph ? appendStepToGraph(current.graph, current.steps, step.id) : undefined
+        graph:
+          pipelineMode === 'graph'
+            ? addDetachedStepToGraph(currentGraph, current.steps, step.id)
+            : current.graph
+              ? appendStepToGraph(current.graph, current.steps, step.id)
+              : undefined
       }
     })
   }
@@ -326,6 +351,32 @@ export function BlueprintStudio(): JSX.Element {
   const statusLabel = runState ? t(`blueprint.status.${runState.status}`) : t('blueprint.status.idle')
   const agentModeHintId = `blueprint-agent-mode-hint-${draft.id}`
   const editorGraph = draft.graph ?? linearGraph(draft.steps)
+  const routeLabels: BlueprintRoutesLabels = {
+    routes: t('blueprint.graphRoutes'),
+    route: t('blueprint.graphRoute'),
+    routeCondition: t('blueprint.graphRouteCondition'),
+    routeAlways: t('blueprint.graphRouteAlways'),
+    routeOtherwise: t('blueprint.graphRouteOtherwise'),
+    routeSucceeded: t('blueprint.graphRouteSucceeded'),
+    routeFailed: t('blueprint.graphRouteFailed'),
+    routeContains: t('blueprint.graphRouteContains'),
+    routeNotContains: t('blueprint.graphRouteNotContains'),
+    routeEquals: t('blueprint.graphRouteEquals'),
+    routeNotEquals: t('blueprint.graphRouteNotEquals'),
+    routeValue: t('blueprint.graphRouteValue'),
+    routeCaseSensitive: t('blueprint.graphRouteCaseSensitive'),
+    deleteRoute: t('blueprint.graphDeleteRoute'),
+    addRoute: t('blueprint.graphAddRoute'),
+    routeTarget: t('blueprint.graphRouteTarget'),
+    routeKind: t('blueprint.graphRouteKind'),
+    routeFlow: t('blueprint.graphRouteFlow'),
+    routeRepeat: t('blueprint.graphRouteRepeat'),
+    routeEmpty: t('blueprint.graphRouteEmpty'),
+    routeHelp: t('blueprint.graphRouteHelp'),
+    routeRepeatOccupied: t('blueprint.graphRouteRepeatOccupied'),
+    routeRepeatNeedsPath: t('blueprint.graphRouteRepeatNeedsPath'),
+    iterations: t('blueprint.graphIterations')
+  }
   const usesAgentMode =
     draft.agentMode ||
     draft.steps.some((step) => step.type === 'agent' && step.agentMode === true)
@@ -597,6 +648,29 @@ export function BlueprintStudio(): JSX.Element {
                 body: t('blueprint.body'),
                 repeat: t('blueprint.repeat'),
                 iterations: t('blueprint.graphIterations'),
+                routes: t('blueprint.graphRoutes'),
+                route: t('blueprint.graphRoute'),
+                routeCondition: t('blueprint.graphRouteCondition'),
+                routeAlways: t('blueprint.graphRouteAlways'),
+                routeOtherwise: t('blueprint.graphRouteOtherwise'),
+                routeSucceeded: t('blueprint.graphRouteSucceeded'),
+                routeFailed: t('blueprint.graphRouteFailed'),
+                routeContains: t('blueprint.graphRouteContains'),
+                routeNotContains: t('blueprint.graphRouteNotContains'),
+                routeEquals: t('blueprint.graphRouteEquals'),
+                routeNotEquals: t('blueprint.graphRouteNotEquals'),
+                routeValue: t('blueprint.graphRouteValue'),
+                routeCaseSensitive: t('blueprint.graphRouteCaseSensitive'),
+                deleteRoute: t('blueprint.graphDeleteRoute'),
+                addRoute: t('blueprint.graphAddRoute'),
+                routeTarget: t('blueprint.graphRouteTarget'),
+                routeKind: t('blueprint.graphRouteKind'),
+                routeFlow: t('blueprint.graphRouteFlow'),
+                routeRepeat: t('blueprint.graphRouteRepeat'),
+                routeEmpty: t('blueprint.graphRouteEmpty'),
+                routeHelp: t('blueprint.graphRouteHelp'),
+                routeRepeatOccupied: t('blueprint.graphRouteRepeatOccupied'),
+                routeRepeatNeedsPath: t('blueprint.graphRouteRepeatNeedsPath'),
                 agentMode: t('blueprint.stepAgentMode'),
                 continueOnError: t('blueprint.continueOnError'),
                 empty: t('blueprint.graphEmpty')
@@ -704,6 +778,21 @@ export function BlueprintStudio(): JSX.Element {
                       </label>
                     </div>
                   )}
+
+                  <BlueprintStepRoutes
+                    className="blueprint-list-routes"
+                    step={step}
+                    steps={draft.steps}
+                    connections={editorGraph.connections}
+                    labels={routeLabels}
+                    readOnly={running}
+                    onConnectionsChange={(connections) =>
+                      update((current) => {
+                        const graph = current.graph ?? linearGraph(current.steps)
+                        return { ...current, graph: { ...graph, connections } }
+                      })
+                    }
+                  />
 
                   <div className="blueprint-step-options">
                     <label>{t('blueprint.repeat')} <input type="number" min={1} max={20} value={step.repeat ?? 1} onChange={(event) => updateStep(step.id, { repeat: Math.max(1, Math.min(20, Number(event.target.value) || 1)) })} /></label>

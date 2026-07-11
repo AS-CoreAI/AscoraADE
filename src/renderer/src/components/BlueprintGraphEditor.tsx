@@ -13,6 +13,8 @@ import {
 import {
   BLUEPRINT_START_NODE_ID,
   type BlueprintConnection,
+  type BlueprintConnectionCondition,
+  type BlueprintConnectionConditionOperator,
   type BlueprintAgent,
   type BlueprintGraph,
   type BlueprintNodePosition,
@@ -20,13 +22,14 @@ import {
   type BlueprintStepType
 } from '@shared/ipc'
 import { Icon } from './Icon'
+import type { BlueprintRoutesLabels } from './BlueprintStepRoutes'
 import '@/styles/blueprint-graph.css'
 
 export type BlueprintGraphSelection =
   | { kind: 'node'; id: string }
   | { kind: 'connection'; id: string }
 
-export interface BlueprintGraphEditorLabels {
+export interface BlueprintGraphEditorLabels extends BlueprintRoutesLabels {
   ariaLabel: string
   graphTools: string
   start: string
@@ -116,12 +119,36 @@ const DEFAULT_LABELS: BlueprintGraphEditorLabels = {
   body: 'Body',
   repeat: 'Repeat',
   iterations: 'Passes',
+  routes: 'Routes',
+  route: 'Route',
+  routeCondition: 'Condition',
+  routeAlways: 'Always',
+  routeOtherwise: 'Otherwise',
+  routeSucceeded: 'Step succeeded',
+  routeFailed: 'Step failed',
+  routeContains: 'Output contains',
+  routeNotContains: 'Output does not contain',
+  routeEquals: 'Output equals',
+  routeNotEquals: 'Output does not equal',
+  routeValue: 'Comparison text',
+  routeCaseSensitive: 'Case-sensitive',
+  deleteRoute: 'Delete route',
+  addRoute: 'Add route',
+  routeTarget: 'Target node',
+  routeKind: 'Route type',
+  routeFlow: 'Forward',
+  routeRepeat: 'Feedback loop',
+  routeEmpty: 'No outgoing routes yet',
+  routeHelp: 'Add any number of conditional targets. A feedback loop returns to an earlier node and is bounded by passes.',
+  routeRepeatOccupied: 'A feedback loop is already configured:',
+  routeRepeatNeedsPath: 'A feedback loop can only return to an earlier node on this flow path.',
   agentMode: 'Agent mode',
   continueOnError: 'Continue on error',
   empty: 'Add a node to build the workflow'
 }
 
 type Viewport = { x: number; y: number; zoom: number }
+type RouteDraft = { targetId: string; toPort: DestinationPort }
 
 type Gesture =
   | {
@@ -155,6 +182,40 @@ function stepIcon(type: BlueprintStepType): JSX.Element {
 
 type DestinationPort = 'input' | 'repeat'
 
+const OUTPUT_CONDITION_OPERATORS = new Set<BlueprintConnectionConditionOperator>([
+  'contains',
+  'not_contains',
+  'equals',
+  'not_equals'
+])
+
+function cleanCondition(
+  condition: BlueprintConnectionCondition | undefined
+): BlueprintConnectionCondition | undefined {
+  if (!condition) return undefined
+  return {
+    operator: condition.operator,
+    ...(OUTPUT_CONDITION_OPERATORS.has(condition.operator)
+      ? { value: condition.value ?? '', caseSensitive: condition.caseSensitive === true }
+      : {})
+  }
+}
+
+function conditionOptions(labels: BlueprintGraphEditorLabels): JSX.Element {
+  return (
+    <>
+      <option value="always">{labels.routeAlways}</option>
+      <option value="otherwise">{labels.routeOtherwise}</option>
+      <option value="succeeded">{labels.routeSucceeded}</option>
+      <option value="failed">{labels.routeFailed}</option>
+      <option value="contains">{labels.routeContains}</option>
+      <option value="not_contains">{labels.routeNotContains}</option>
+      <option value="equals">{labels.routeEquals}</option>
+      <option value="not_equals">{labels.routeNotEquals}</option>
+    </>
+  )
+}
+
 function destinationPort(connection: BlueprintConnection): DestinationPort {
   return connection.toPort === 'repeat' ? 'repeat' : 'input'
 }
@@ -167,6 +228,15 @@ function connectionId(
   return toPort === 'repeat'
     ? `${sourceId}::repeat::${targetId}`
     : `${sourceId}::${targetId}`
+}
+
+function connectionConditionClass(connection: BlueprintConnection): string {
+  const operator = connection.condition?.operator ?? 'always'
+  if (operator === 'failed') return ' when-failed'
+  if (operator === 'succeeded') return ' when-succeeded'
+  if (operator === 'otherwise') return ' when-otherwise'
+  if (operator !== 'always') return ' when-output'
+  return ''
 }
 
 function defaultPosition(index: number): BlueprintNodePosition {
@@ -216,6 +286,7 @@ function cleanConnections(
     }
     ids.add(connection.id)
     pairs.add(pair)
+    const condition = cleanCondition(connection.condition)
     return [
       toPort === 'repeat'
         ? {
@@ -223,9 +294,15 @@ function cleanConnections(
             from: connection.from,
             to: connection.to,
             toPort,
-            iterations: Math.max(2, Math.min(20, Number(connection.iterations) || 2))
+            iterations: Math.max(2, Math.min(20, Number(connection.iterations) || 2)),
+            ...(condition ? { condition } : {})
           }
-        : { id: connection.id, from: connection.from, to: connection.to }
+        : {
+            id: connection.id,
+            from: connection.from,
+            to: connection.to,
+            ...(condition ? { condition } : {})
+          }
     ]
   })
 }
@@ -330,6 +407,8 @@ export function BlueprintGraphEditor({
   const [viewport, setViewport] = useState<Viewport>({ x: 36, y: 28, zoom: 0.9 })
   const [cursor, setCursor] = useState<BlueprintNodePosition | null>(null)
   const [localSelection, setLocalSelection] = useState<BlueprintGraphSelection | null>(null)
+  const [routeDrafts, setRouteDrafts] = useState<Record<string, RouteDraft>>({})
+  const [openRouteEditors, setOpenRouteEditors] = useState<Record<string, boolean>>({})
   const graphPositions = useMemo(
     () => ensurePositions(steps, graph.positions),
     [graph.positions, stepIds]
@@ -378,6 +457,9 @@ export function BlueprintGraphEditor({
   }, [graphConnections, stepIds, steps])
 
   const activeSelection = selection === undefined ? localSelection : selection
+  const selectedConnection = activeSelection?.kind === 'connection'
+    ? graphConnections.find((connection) => connection.id === activeSelection.id)
+    : undefined
 
   useEffect(() => {
     if (!activeSelection) return
@@ -413,6 +495,37 @@ export function BlueprintGraphEditor({
       onGraphChange({ ...graph, connections: clean })
     },
     [graph, onGraphChange, steps]
+  )
+
+  const updateConnectionCondition = useCallback(
+    (
+      connectionIdToUpdate: string,
+      operator: BlueprintConnectionConditionOperator,
+      patch: Partial<BlueprintConnectionCondition> = {}
+    ): void => {
+      publishConnections(
+        graphConnections.map((connection) => {
+          if (connection.id !== connectionIdToUpdate) return connection
+          if (operator === 'always') {
+            return { ...connection, condition: undefined }
+          }
+          return {
+            ...connection,
+            condition: {
+              operator,
+              ...(OUTPUT_CONDITION_OPERATORS.has(operator)
+                ? {
+                    value: patch.value ?? connection.condition?.value ?? '',
+                    caseSensitive:
+                      patch.caseSensitive ?? connection.condition?.caseSensitive === true
+                  }
+                : {})
+            }
+          }
+        })
+      )
+    },
+    [graphConnections, publishConnections]
   )
 
   const clientToWorld = useCallback(
@@ -626,7 +739,13 @@ export function BlueprintGraphEditor({
         point.x + (id === BLUEPRINT_START_NODE_ID ? START_NODE_WIDTH : NODE_WIDTH)
       )
     )
-    const maxY = Math.max(...points.map((point) => point.y + 390))
+    const maxY = Math.max(
+      ...Object.entries(graphPositions).map(([id, point]) => {
+        if (id === BLUEPRINT_START_NODE_ID) return point.y + 110
+        const routeCount = graphConnections.filter((connection) => connection.from === id).length
+        return point.y + (openRouteEditors[id] ? 500 + routeCount * 118 : 420)
+      })
+    )
     const width = Math.max(1, maxX - minX)
     const height = Math.max(1, maxY - minY)
     const zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Math.min((rect.width - 88) / width, (rect.height - 88) / height)))
@@ -649,13 +768,23 @@ export function BlueprintGraphEditor({
     select(null)
   }
 
+  const removeConnection = (connectionIdToRemove: string): void => {
+    if (readOnly) return
+    publishConnections(
+      graphConnections.filter((connection) => connection.id !== connectionIdToRemove)
+    )
+    if (
+      activeSelection?.kind === 'connection' &&
+      activeSelection.id === connectionIdToRemove
+    ) {
+      select(null)
+    }
+  }
+
   const removeSelection = (): void => {
     if (readOnly || !activeSelection) return
     if (activeSelection.kind === 'connection') {
-      publishConnections(
-        graphConnections.filter((connection) => connection.id !== activeSelection.id)
-      )
-      select(null)
+      removeConnection(activeSelection.id)
       return
     }
     removeNode(activeSelection.id)
@@ -684,9 +813,10 @@ export function BlueprintGraphEditor({
   const connectingSource = gestureRef.current?.kind === 'connect'
     ? gestureRef.current.sourceId
     : null
-  const repeatConnectionExists = graphConnections.some(
+  const globalRepeatConnection = graphConnections.find(
     (connection) => destinationPort(connection) === 'repeat'
   )
+  const repeatConnectionExists = !!globalRepeatConnection
 
   return (
     <div
@@ -722,6 +852,108 @@ export function BlueprintGraphEditor({
         </div>
       </div>
 
+      {selectedConnection && (
+        <aside className="blueprint-graph-route-editor" aria-label={labels.route}>
+          <div className="blueprint-graph-route-head">
+            <div>
+              <strong>{labels.route}</strong>
+              <span>
+                {selectedConnection.from === BLUEPRINT_START_NODE_ID
+                  ? labels.start
+                  : steps.find((step) => step.id === selectedConnection.from)?.name ?? '—'}
+                {' → '}
+                {steps.find((step) => step.id === selectedConnection.to)?.name ?? '—'}
+              </span>
+            </div>
+            <button
+              title={labels.deleteRoute}
+              aria-label={labels.deleteRoute}
+              disabled={readOnly}
+              onClick={removeSelection}
+            >
+              <Icon name="trash" size={12} />
+            </button>
+          </div>
+          <label>
+            <span>{labels.routeCondition}</span>
+            <select
+              value={selectedConnection.condition?.operator ?? 'always'}
+              disabled={readOnly || selectedConnection.from === BLUEPRINT_START_NODE_ID}
+              onChange={(event) =>
+                updateConnectionCondition(
+                  selectedConnection.id,
+                  event.target.value as BlueprintConnectionConditionOperator
+                )
+              }
+            >
+              {conditionOptions(labels)}
+            </select>
+          </label>
+          {OUTPUT_CONDITION_OPERATORS.has(
+            selectedConnection.condition?.operator ?? 'always'
+          ) && (
+            <>
+              <label>
+                <span>{labels.routeValue}</span>
+                <input
+                  value={selectedConnection.condition?.value ?? ''}
+                  disabled={readOnly}
+                  onChange={(event) =>
+                    updateConnectionCondition(
+                      selectedConnection.id,
+                      selectedConnection.condition!.operator,
+                      { value: event.target.value }
+                    )
+                  }
+                />
+              </label>
+              <label className="blueprint-graph-route-check">
+                <input
+                  type="checkbox"
+                  checked={selectedConnection.condition?.caseSensitive === true}
+                  disabled={readOnly}
+                  onChange={(event) =>
+                    updateConnectionCondition(
+                      selectedConnection.id,
+                      selectedConnection.condition!.operator,
+                      { caseSensitive: event.target.checked }
+                    )
+                  }
+                />
+                <span>{labels.routeCaseSensitive}</span>
+              </label>
+            </>
+          )}
+          {destinationPort(selectedConnection) === 'repeat' && (
+            <label>
+              <span>{labels.iterations}</span>
+              <input
+                type="number"
+                min={2}
+                max={20}
+                value={selectedConnection.iterations ?? 2}
+                disabled={readOnly}
+                onChange={(event) =>
+                  publishConnections(
+                    graphConnections.map((connection) =>
+                      connection.id === selectedConnection.id
+                        ? {
+                            ...connection,
+                            iterations: Math.max(
+                              2,
+                              Math.min(20, Number(event.target.value) || 2)
+                            )
+                          }
+                        : connection
+                    )
+                  )
+                }
+              />
+            </label>
+          )}
+        </aside>
+      )}
+
       <div
         ref={viewportRef}
         className={`blueprint-graph-canvas${gestureRef.current?.kind === 'pan' ? ' is-panning' : ''}`}
@@ -747,7 +979,7 @@ export function BlueprintGraphEditor({
                 <g
                   className={`blueprint-graph-connection${
                     toPort === 'repeat' ? ' repeat' : ''
-                  }${selected ? ' selected' : ''}${
+                  }${connectionConditionClass(connection)}${selected ? ' selected' : ''}${
                     !reachableNodes.has(connection.to) ||
                     (connection.from !== BLUEPRINT_START_NODE_ID && !reachableNodes.has(connection.from))
                       ? ' disconnected'
@@ -817,6 +1049,37 @@ export function BlueprintGraphEditor({
               (connection) =>
                 connection.to === step.id && destinationPort(connection) === 'repeat'
             )
+            const outgoingConnections = graphConnections.filter(
+              (connection) => connection.from === step.id
+            )
+            const outgoingCount = outgoingConnections.length
+            const routeDraft = routeDrafts[step.id] ?? { targetId: '', toPort: 'input' }
+            const routeCandidates = steps.filter((candidate) => {
+              if (candidate.id === step.id) return false
+              if (
+                graphConnections.some(
+                  (connection) =>
+                    connection.from === step.id &&
+                    connection.to === candidate.id &&
+                    destinationPort(connection) === routeDraft.toPort
+                )
+              ) return false
+              if (routeDraft.toPort === 'repeat') {
+                return !repeatConnectionExists &&
+                  hasFlowPath(graphConnections, candidate.id, step.id)
+              }
+              return !createsCycle(graphConnections, step.id, candidate.id)
+            })
+            const repeatSourceName = repeatConnectionExists
+              ? steps.find((candidate) =>
+                  candidate.id === globalRepeatConnection?.from
+                )?.name ?? '—'
+              : ''
+            const repeatTargetName = repeatConnectionExists
+              ? steps.find((candidate) =>
+                  candidate.id === globalRepeatConnection?.to
+                )?.name ?? '—'
+              : ''
             return (
               <article
               className={`blueprint-graph-node type-${step.type}${
@@ -912,10 +1175,12 @@ export function BlueprintGraphEditor({
                   </label>
                 </div>
                 <i />
-                <span>{labels.output}</span>
+                <span>
+                  {labels.routes}{outgoingCount > 0 ? ` ×${outgoingCount}` : ''}
+                </span>
                 <button
                   className="blueprint-graph-port output"
-                  title={labels.output}
+                  title={labels.routes}
                   disabled={readOnly}
                   onPointerDown={(event) => startConnection(event, step.id)}
                 />
@@ -1055,6 +1320,201 @@ export function BlueprintGraphEditor({
                     </label>
                   </>
                 )}
+
+                <section
+                  className={`blueprint-graph-routes${openRouteEditors[step.id] ? ' open' : ' collapsed'}`}
+                  aria-label={`${labels.routes}: ${step.name}`}
+                  onPointerDown={(event) => event.stopPropagation()}
+                >
+                  <button
+                    type="button"
+                    className="blueprint-graph-routes-toggle"
+                    aria-expanded={openRouteEditors[step.id] === true}
+                    onClick={() =>
+                      setOpenRouteEditors((current) => ({
+                        ...current,
+                        [step.id]: !current[step.id]
+                      }))
+                    }
+                  >
+                    <Icon
+                      name={openRouteEditors[step.id] ? 'chevronDown' : 'chevronRight'}
+                      size={11}
+                    />
+                    <strong>{labels.routes}</strong>
+                    <span>{outgoingCount}</span>
+                  </button>
+
+                  {outgoingConnections.length === 0 && (
+                    <div className="blueprint-graph-routes-empty">{labels.routeEmpty}</div>
+                  )}
+
+                  {outgoingConnections.map((connection) => {
+                    const operator = connection.condition?.operator ?? 'always'
+                    const targetName = steps.find(
+                      (candidate) => candidate.id === connection.to
+                    )?.name ?? '—'
+                    return (
+                      <div
+                        className={`blueprint-graph-route-card${connectionConditionClass(connection)}`}
+                        key={connection.id}
+                      >
+                        <div className="blueprint-graph-route-card-head">
+                          <button
+                            className="blueprint-graph-route-target"
+                            title={`${labels.route}: ${step.name} → ${targetName}`}
+                            onClick={() => select({ kind: 'connection', id: connection.id })}
+                          >
+                            <span>→</span>{targetName}
+                          </button>
+                          {destinationPort(connection) === 'repeat' && (
+                            <label className="blueprint-graph-route-passes">
+                              {labels.routeRepeat}
+                              <input
+                                type="number"
+                                min={2}
+                                max={20}
+                                value={connection.iterations ?? 2}
+                                disabled={readOnly}
+                                aria-label={labels.iterations}
+                                onChange={(event) =>
+                                  publishConnections(
+                                    graphConnections.map((candidate) =>
+                                      candidate.id === connection.id
+                                        ? {
+                                            ...candidate,
+                                            iterations: Math.max(
+                                              2,
+                                              Math.min(20, Number(event.target.value) || 2)
+                                            )
+                                          }
+                                        : candidate
+                                    )
+                                  )
+                                }
+                              />
+                            </label>
+                          )}
+                          <button
+                            className="blueprint-graph-route-delete"
+                            title={labels.deleteRoute}
+                            aria-label={`${labels.deleteRoute}: ${targetName}`}
+                            disabled={readOnly}
+                            onClick={() => removeConnection(connection.id)}
+                          >
+                            <Icon name="trash" size={11} />
+                          </button>
+                        </div>
+
+                        <label>
+                          <span>{labels.routeCondition}</span>
+                          <select
+                            value={operator}
+                            disabled={readOnly}
+                            onChange={(event) =>
+                              updateConnectionCondition(
+                                connection.id,
+                                event.target.value as BlueprintConnectionConditionOperator
+                              )
+                            }
+                          >
+                            {conditionOptions(labels)}
+                          </select>
+                        </label>
+
+                        {OUTPUT_CONDITION_OPERATORS.has(operator) && (
+                          <div className="blueprint-graph-route-value-row">
+                            <label>
+                              <span>{labels.routeValue}</span>
+                              <input
+                                value={connection.condition?.value ?? ''}
+                                placeholder="RESULT=PASS"
+                                disabled={readOnly}
+                                onChange={(event) =>
+                                  updateConnectionCondition(connection.id, operator, {
+                                    value: event.target.value
+                                  })
+                                }
+                              />
+                            </label>
+                            <label className="blueprint-graph-route-inline-check">
+                              <input
+                                type="checkbox"
+                                checked={connection.condition?.caseSensitive === true}
+                                disabled={readOnly}
+                                onChange={(event) =>
+                                  updateConnectionCondition(connection.id, operator, {
+                                    caseSensitive: event.target.checked
+                                  })
+                                }
+                              />
+                              <span>{labels.routeCaseSensitive}</span>
+                            </label>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+
+                  <div className="blueprint-graph-route-builder">
+                    <select
+                      aria-label={labels.routeKind}
+                      value={routeDraft.toPort}
+                      disabled={readOnly}
+                      onChange={(event) =>
+                        setRouteDrafts((current) => ({
+                          ...current,
+                          [step.id]: {
+                            targetId: '',
+                            toPort: event.target.value as DestinationPort
+                          }
+                        }))
+                      }
+                    >
+                      <option value="input">{labels.routeFlow}</option>
+                      <option value="repeat">{labels.routeRepeat}</option>
+                    </select>
+                    <select
+                      aria-label={labels.routeTarget}
+                      value={routeDraft.targetId}
+                      disabled={readOnly || (routeDraft.toPort === 'repeat' && repeatConnectionExists)}
+                      onChange={(event) =>
+                        setRouteDrafts((current) => ({
+                          ...current,
+                          [step.id]: { ...routeDraft, targetId: event.target.value }
+                        }))
+                      }
+                    >
+                      <option value="">{labels.routeTarget}…</option>
+                      {routeCandidates.map((candidate) => (
+                        <option key={candidate.id} value={candidate.id}>{candidate.name}</option>
+                      ))}
+                    </select>
+                    <button
+                      disabled={readOnly || !routeDraft.targetId}
+                      onClick={() => {
+                        if (!routeDraft.targetId) return
+                        finishConnection(step.id, routeDraft.targetId, routeDraft.toPort)
+                        setRouteDrafts((current) => ({
+                          ...current,
+                          [step.id]: { ...routeDraft, targetId: '' }
+                        }))
+                      }}
+                    >
+                      + {labels.addRoute}
+                    </button>
+                  </div>
+                  {routeDraft.toPort === 'repeat' && repeatConnectionExists ? (
+                    <div className="blueprint-graph-route-notice warning">
+                      {labels.routeRepeatOccupied} {repeatSourceName} → {repeatTargetName}
+                    </div>
+                  ) : routeDraft.toPort === 'repeat' && routeCandidates.length === 0 ? (
+                    <div className="blueprint-graph-route-notice">
+                      {labels.routeRepeatNeedsPath}
+                    </div>
+                  ) : null}
+                  <small>{labels.routeHelp}</small>
+                </section>
               </div>
 
               <div className="blueprint-graph-node-foot">
