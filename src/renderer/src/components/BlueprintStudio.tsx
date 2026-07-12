@@ -25,6 +25,9 @@ function stepIcon(type: BlueprintStepType): JSX.Element {
   if (type === 'agent') return <Icon name="users" size={15} />
   if (type === 'telegram') return <Icon name="telegram" size={15} />
   if (type === 'delay') return <Icon name="clock" size={15} />
+  if (type === 'file') return <Icon name="file" size={15} />
+  if (type === 'shell') return <Icon name="terminal" size={15} />
+  if (type === 'http') return <Icon name="globe" size={15} />
   return <Icon name="webhook" size={15} />
 }
 
@@ -54,6 +57,26 @@ function newStep(type: BlueprintStepType, agents: BlueprintAgent[]): BlueprintSt
     }
   }
   if (type === 'delay') return { ...base, name: 'Wait', delaySeconds: 60 }
+  if (type === 'file') {
+    return {
+      ...base,
+      name: 'File',
+      fileMode: 'read',
+      filePath: '',
+      fileContent: '{{last}}'
+    }
+  }
+  if (type === 'shell') return { ...base, name: 'Run command', command: '' }
+  if (type === 'http') {
+    return {
+      ...base,
+      name: 'HTTP request',
+      httpUrl: '',
+      httpMethod: 'GET',
+      httpHeaders: '',
+      httpBody: ''
+    }
+  }
   return {
     ...base,
     name: 'Call webhook',
@@ -117,6 +140,7 @@ function appendStepToGraph(
     ? Math.max(...positionedSteps.map((position) => position.x)) + 280
     : 260
   return {
+    ...graph,
     positions: { ...graph.positions, [stepId]: { x, y: 120 } },
     connections: [
       ...graph.connections,
@@ -135,11 +159,11 @@ function addDetachedStepToGraph(
     ? Math.max(...positionedSteps.map((position) => position.x)) + 320
     : 356
   return {
+    ...graph,
     positions: {
       ...graph.positions,
       [stepId]: { x, y: 112 + (steps.length % 3) * 150 }
-    },
-    connections: graph.connections
+    }
   }
 }
 
@@ -147,6 +171,7 @@ function removeStepFromGraph(graph: BlueprintGraph, stepId: string): BlueprintGr
   const positions = { ...graph.positions }
   delete positions[stepId]
   return {
+    ...graph,
     positions,
     connections: graph.connections.filter(
       (connection) => connection.from !== stepId && connection.to !== stepId
@@ -380,6 +405,10 @@ export function BlueprintStudio(): JSX.Element {
   const usesAgentMode =
     draft.agentMode ||
     draft.steps.some((step) => step.type === 'agent' && step.agentMode === true)
+  // File and shell actions run inside the same Blueprint project as agent-mode tools.
+  const usesWorkspaceSteps = draft.steps.some(
+    (step) => step.type === 'file' || step.type === 'shell'
+  )
   const savedWorkspaceId = workspaces.some((workspace) => workspace.id === draft.workspaceId)
     ? draft.workspaceId ?? ''
     : ''
@@ -504,7 +533,7 @@ export function BlueprintStudio(): JSX.Element {
               </strong>
               <span>{t('blueprint.agentModeHint')}</span>
             </div>
-            {usesAgentMode && (
+            {(usesAgentMode || usesWorkspaceSteps) && (
               <label className="blueprint-agent-workspace">
                 <span>{t('blueprint.agentWorkspace')}</span>
                 <select
@@ -630,9 +659,22 @@ export function BlueprintStudio(): JSX.Element {
                 addTelegram: 'Telegram',
                 addDelay: t('blueprint.step.delay'),
                 addWebhook: 'Webhook',
+                addFile: t('blueprint.step.file'),
+                addShell: t('blueprint.step.shell'),
+                addHttp: t('blueprint.step.http'),
+                fileMode: t('blueprint.fileMode'),
+                fileRead: t('blueprint.fileRead'),
+                fileWrite: t('blueprint.fileWrite'),
+                filePath: t('blueprint.filePath'),
+                fileContent: t('blueprint.fileContent'),
+                command: t('blueprint.command'),
+                addNote: t('blueprint.graphAddNote'),
+                deleteNote: t('blueprint.graphDeleteNote'),
+                notePlaceholder: t('blueprint.graphNotePlaceholder'),
                 fitView: t('blueprint.graphFit'),
                 zoomIn: t('blueprint.graphZoomIn'),
                 zoomOut: t('blueprint.graphZoomOut'),
+                zoomReset: t('blueprint.graphZoomReset'),
                 deleteNode: t('blueprint.graphDeleteNode'),
                 moveNode: t('blueprint.graphMoveNode'),
                 nodeName: t('blueprint.graphNodeName'),
@@ -702,6 +744,9 @@ export function BlueprintStudio(): JSX.Element {
                       <option value="telegram">Telegram</option>
                       <option value="delay">{t('blueprint.step.delay')}</option>
                       <option value="webhook">Webhook</option>
+                      <option value="file">{t('blueprint.step.file')}</option>
+                      <option value="shell">{t('blueprint.step.shell')}</option>
+                      <option value="http">{t('blueprint.step.http')}</option>
                     </select>
                     <button className="icon-only" disabled={index === 0} onClick={() => moveStep(index, -1)}>
                       <Icon name="arrowUp" size={13} />
@@ -779,6 +824,62 @@ export function BlueprintStudio(): JSX.Element {
                     </div>
                   )}
 
+                  {step.type === 'file' && (
+                    <div className="blueprint-step-fields">
+                      <label className="wide">
+                        <span>{t('blueprint.filePath')}</span>
+                        <input value={step.filePath ?? ''} placeholder="reports/summary.md" onChange={(event) => updateStep(step.id, { filePath: event.target.value })} />
+                      </label>
+                      <label>
+                        <span>{t('blueprint.fileMode')}</span>
+                        <select value={step.fileMode ?? 'read'} onChange={(event) => updateStep(step.id, { fileMode: event.target.value as 'read' | 'write' })}>
+                          <option value="read">{t('blueprint.fileRead')}</option>
+                          <option value="write">{t('blueprint.fileWrite')}</option>
+                        </select>
+                      </label>
+                      {step.fileMode === 'write' && (
+                        <label className="wide">
+                          <span>{t('blueprint.fileContent')}</span>
+                          <textarea value={step.fileContent ?? ''} onChange={(event) => updateStep(step.id, { fileContent: event.target.value })} />
+                        </label>
+                      )}
+                    </div>
+                  )}
+
+                  {step.type === 'shell' && (
+                    <div className="blueprint-step-fields">
+                      <label className="wide">
+                        <span>{t('blueprint.command')}</span>
+                        <textarea value={step.command ?? ''} placeholder="npm test" onChange={(event) => updateStep(step.id, { command: event.target.value })} />
+                      </label>
+                    </div>
+                  )}
+
+                  {step.type === 'http' && (
+                    <div className="blueprint-step-fields webhook-fields">
+                      <label className="wide">
+                        <span>URL</span>
+                        <input value={step.httpUrl ?? ''} placeholder="https://api.example.com/status" onChange={(event) => updateStep(step.id, { httpUrl: event.target.value })} />
+                      </label>
+                      <label>
+                        <span>{t('blueprint.method')}</span>
+                        <select value={step.httpMethod ?? 'GET'} onChange={(event) => updateStep(step.id, { httpMethod: event.target.value as BlueprintStep['httpMethod'] })}>
+                          <option>GET</option><option>POST</option><option>PUT</option><option>PATCH</option><option>DELETE</option>
+                        </select>
+                      </label>
+                      <label>
+                        <span>{t('blueprint.headersJson')}</span>
+                        <textarea value={step.httpHeaders ?? ''} onChange={(event) => updateStep(step.id, { httpHeaders: event.target.value })} />
+                      </label>
+                      {step.httpMethod !== 'GET' && step.httpMethod !== 'DELETE' && (
+                        <label className="wide">
+                          <span>{t('blueprint.body')}</span>
+                          <textarea value={step.httpBody ?? ''} onChange={(event) => updateStep(step.id, { httpBody: event.target.value })} />
+                        </label>
+                      )}
+                    </div>
+                  )}
+
                   <BlueprintStepRoutes
                     className="blueprint-list-routes"
                     step={step}
@@ -811,6 +912,9 @@ export function BlueprintStudio(): JSX.Element {
             <button onClick={() => addStep('telegram')}><Icon name="telegram" size={13} /> Telegram</button>
             <button onClick={() => addStep('delay')}><Icon name="clock" size={13} /> {t('blueprint.step.delay')}</button>
             <button onClick={() => addStep('webhook')}><Icon name="webhook" size={13} /> Webhook</button>
+            <button onClick={() => addStep('file')}><Icon name="file" size={13} /> {t('blueprint.step.file')}</button>
+            <button onClick={() => addStep('shell')}><Icon name="terminal" size={13} /> {t('blueprint.step.shell')}</button>
+            <button onClick={() => addStep('http')}><Icon name="globe" size={13} /> {t('blueprint.step.http')}</button>
           </div>
             </>
           )}

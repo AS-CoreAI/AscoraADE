@@ -65,11 +65,20 @@
 
 .blueprint-graph-toolbar button:disabled { opacity: 0.38; cursor: default; }
 .blueprint-graph-toolbar button.icon-only { width: 29px; padding: 0; font-size: 17px; }
-.blueprint-graph-view-group > span {
+.blueprint-graph-view-group > .zoom-level {
   width: 44px;
+  min-height: 29px;
+  padding: 0;
+  border: 1px solid transparent;
+  background: transparent;
   color: var(--text-faint);
   font: 10px var(--font-mono);
   text-align: center;
+}
+.blueprint-graph-view-group > .zoom-level:hover {
+  border-color: var(--border);
+  background: var(--bg-hover);
+  color: var(--text);
 }
 
 .blueprint-graph-route-editor {
@@ -275,6 +284,9 @@
 .blueprint-graph-node.type-telegram { --node-color: #38a5e4; }
 .blueprint-graph-node.type-delay { --node-color: #d39a45; }
 .blueprint-graph-node.type-webhook { --node-color: #3fcf8e; }
+.blueprint-graph-node.type-file { --node-color: #c96da8; }
+.blueprint-graph-node.type-shell { --node-color: #d15b5b; }
+.blueprint-graph-node.type-http { --node-color: #35a3a0; }
 .blueprint-graph-node.selected {
   border-color: color-mix(in srgb, var(--node-color) 86%, white);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--node-color) 25%, transparent),
@@ -284,6 +296,64 @@
 .blueprint-graph-node.disconnected.selected { opacity: 0.86; }
 
 .blueprint-graph-start { --node-color: #c34a55; width: 214px; }
+
+/* Sticky comment notes sit behind action nodes and never execute. */
+.blueprint-graph-note {
+  --note-color: #d9b64a;
+  position: absolute;
+  z-index: 2;
+  width: 224px;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid color-mix(in srgb, var(--note-color) 42%, var(--border-strong));
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--note-color) 10%, var(--bg-elevated));
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.22);
+  color: var(--text);
+}
+:root[data-theme='light'] .blueprint-graph-note {
+  background: color-mix(in srgb, var(--note-color) 16%, var(--bg-elevated));
+  box-shadow: 0 5px 14px rgba(30, 30, 38, 0.14);
+}
+.blueprint-graph-note.selected {
+  border-color: color-mix(in srgb, var(--note-color) 86%, white);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--note-color) 25%, transparent),
+    0 8px 22px rgba(0, 0, 0, 0.3);
+}
+.blueprint-graph-note-head {
+  height: 32px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  border-bottom: 1px dashed color-mix(in srgb, var(--note-color) 32%, var(--border));
+  border-radius: 6px 6px 0 0;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--note-color) 16%, transparent), transparent);
+}
+.blueprint-graph-note-icon {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 5px;
+  color: color-mix(in srgb, var(--note-color) 82%, white);
+}
+.blueprint-graph-editor .blueprint-graph-note > textarea {
+  min-height: 88px;
+  padding: 8px 9px;
+  border: 0;
+  border-radius: 0 0 6px 6px;
+  background: transparent;
+  color: var(--text);
+  font-size: 11.5px;
+  line-height: 1.45;
+  resize: vertical;
+}
+.blueprint-graph-editor .blueprint-graph-note > textarea:focus {
+  outline: none;
+  box-shadow: none;
+}
 
 .blueprint-graph-node-head {
   height: 42px;
@@ -707,6 +777,9 @@
 .blueprint-step-card.type-telegram .blueprint-list-routes { --node-color: #38a5e4; }
 .blueprint-step-card.type-delay .blueprint-list-routes { --node-color: #d39a45; }
 .blueprint-step-card.type-webhook .blueprint-list-routes { --node-color: #3fcf8e; }
+.blueprint-step-card.type-file .blueprint-list-routes { --node-color: #c96da8; }
+.blueprint-step-card.type-shell .blueprint-list-routes { --node-color: #d15b5b; }
+.blueprint-step-card.type-http .blueprint-list-routes { --node-color: #35a3a0; }
 .blueprint-step-card .blueprint-list-routes.collapsed { padding-bottom: 8px; }
 .blueprint-step-card .blueprint-list-routes.open { padding-bottom: 10px; }
 .blueprint-step-card .blueprint-list-routes select,

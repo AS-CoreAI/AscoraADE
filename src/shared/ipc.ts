@@ -465,7 +465,14 @@ export interface WProviderChatParams {
 
 // ---------- Blueprints (independent multi-agent automation scenarios) ----------
 
-export type BlueprintStepType = 'agent' | 'telegram' | 'delay' | 'webhook'
+export type BlueprintStepType =
+  | 'agent'
+  | 'telegram'
+  | 'delay'
+  | 'webhook'
+  | 'file'
+  | 'shell'
+  | 'http'
 export type BlueprintRunStatus = 'idle' | 'running' | 'completed' | 'failed' | 'stopped'
 export type BlueprintStepStatus = 'pending' | 'running' | 'completed' | 'failed' | 'skipped'
 
@@ -508,10 +515,20 @@ export interface BlueprintConnection {
   condition?: BlueprintConnectionCondition
 }
 
+/** Non-executable sticky note pinned to the Blueprint graph canvas. */
+export interface BlueprintNote {
+  id: string
+  x: number
+  y: number
+  text: string
+}
+
 /** Optional visual execution graph. Older definitions continue to use step order. */
 export interface BlueprintGraph {
   positions: Record<string, BlueprintNodePosition>
   connections: BlueprintConnection[]
+  /** Canvas annotations; never compiled or executed. */
+  notes?: BlueprintNote[]
 }
 
 /** A named WProvider participant. Every participant owns an isolated web-chat session. */
@@ -561,6 +578,24 @@ export interface BlueprintStep {
   webhookHeaders?: string
   /** Text or JSON body after Blueprint variable interpolation. */
   webhookBody?: string
+
+  // file (paths are confined to the Blueprint project root)
+  fileMode?: 'read' | 'write'
+  filePath?: string
+  /** Text written in write mode after Blueprint variable interpolation. */
+  fileContent?: string
+
+  // shell
+  /** One-shot command executed in the Blueprint project root. */
+  command?: string
+
+  // http request (the response body becomes the step output)
+  httpUrl?: string
+  httpMethod?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
+  /** JSON object serialized as request headers. */
+  httpHeaders?: string
+  /** Request body for methods that allow one. */
+  httpBody?: string
 }
 
 export interface BlueprintSchedule {

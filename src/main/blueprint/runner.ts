@@ -20,6 +20,7 @@ import {
   type WProviderService
 } from '@shared/ipc'
 import { getStore } from '../store'
+import { readAgentFile, runAgentCommand, writeAgentFile } from '../ipc/agent'
 import { abortWProvider, chatWProvider, forgetWProviderSession } from '../wprovider/runner'
 import {
   compileBlueprint,
@@ -44,6 +45,9 @@ const MAX_INTERVAL_MINUTES = 14 * 24 * 60
 const MAX_REPEAT = 20
 const MAX_SHARED_CONTEXT = 24_000
 const MAX_WEBHOOK_OUTPUT = 8_000
+const MAX_COMMAND_OUTPUT = 16_000
+const HTTP_STEP_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] as const
+const BODYLESS_HTTP_METHODS = new Set(['GET', 'DELETE'])
 const REQUEST_TIMEOUT_MS = 30_000
 const MAX_AGENT_TURNS = 16
 const MAX_TOOL_AUDIT_ARG = 2_000
@@ -133,12 +137,19 @@ function normalizeAgent(value: Partial<BlueprintAgent>, index: number): Blueprin
 }
 
 function normalizeStep(value: Partial<BlueprintStep>, index: number): BlueprintStep {
-  const type = ['agent', 'telegram', 'delay', 'webhook'].includes(text(value.type))
+  const type = ['agent', 'telegram', 'delay', 'webhook', 'file', 'shell', 'http'].includes(
+    text(value.type)
+  )
     ? (value.type as BlueprintStep['type'])
     : 'agent'
   const method = ['POST', 'PUT', 'PATCH'].includes(text(value.webhookMethod).toUpperCase())
     ? (text(value.webhookMethod).toUpperCase() as 'POST' | 'PUT' | 'PATCH')
     : 'POST'
+  const httpMethod = HTTP_STEP_METHODS.includes(
+    text(value.httpMethod).toUpperCase() as (typeof HTTP_STEP_METHODS)[number]
+  )
+    ? (text(value.httpMethod).toUpperCase() as BlueprintStep['httpMethod'])
+    : 'GET'
   return {
     id: text(value.id) || randomUUID(),
     name: text(value.name).trim() || `Step ${index + 1}`,
@@ -155,7 +166,15 @@ function normalizeStep(value: Partial<BlueprintStep>, index: number): BlueprintS
     webhookUrl: text(value.webhookUrl),
     webhookMethod: method,
     webhookHeaders: text(value.webhookHeaders),
-    webhookBody: text(value.webhookBody)
+    webhookBody: text(value.webhookBody),
+    fileMode: value.fileMode === 'write' ? 'write' : 'read',
+    filePath: text(value.filePath),
+    fileContent: text(value.fileContent),
+    command: text(value.command),
+    httpUrl: text(value.httpUrl),
+    httpMethod,
+    httpHeaders: text(value.httpHeaders),
+    httpBody: text(value.httpBody)
   }
 }
 
@@ -538,20 +557,24 @@ async function runTelegramStep(active: ActiveBlueprintRun, step: BlueprintStep):
   }.`
 }
 
-function webhookHeaders(raw: string | undefined): Record<string, string> {
-  if (!raw?.trim()) return { 'content-type': 'application/json' }
+function parseJsonHeaders(raw: string | undefined, label: string): Record<string, string> | undefined {
+  if (!raw?.trim()) return undefined
   let parsed: unknown
   try {
     parsed = JSON.parse(raw)
   } catch {
-    throw new Error('Webhook headers must be a JSON object.')
+    throw new Error(`${label} headers must be a JSON object.`)
   }
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new Error('Webhook headers must be a JSON object.')
+    throw new Error(`${label} headers must be a JSON object.`)
   }
   return Object.fromEntries(
     Object.entries(parsed as Record<string, unknown>).map(([key, value]) => [key, String(value)])
   )
+}
+
+function webhookHeaders(raw: string | undefined): Record<string, string> {
+  return parseJsonHeaders(raw, 'Webhook') ?? { 'content-type': 'application/json' }
 }
 
 async function runWebhookStep(active: ActiveBlueprintRun, step: BlueprintStep): Promise<string> {
@@ -586,6 +609,105 @@ async function runWebhookStep(active: ActiveBlueprintRun, step: BlueprintStep): 
   }
 }
 
+/** Resolve the Blueprint project folder required by file and shell actions. */
+async function requireWorkspacePath(active: ActiveBlueprintRun): Promise<string> {
+  const workspace = active.blueprint.workspaceId
+    ? getStore().listWorkspaces().find((candidate) => candidate.id === active.blueprint.workspaceId)
+    : undefined
+  if (!workspace) {
+    throw new Error(
+      'File and command actions need a project. ' +
+      'Choose one in the Agent mode card, then save the Blueprint.'
+    )
+  }
+  const info = await stat(workspace.path).catch(() => null)
+  if (!info?.isDirectory()) {
+    throw new Error(
+      `The project folder for "${workspace.name}" is unavailable. ` +
+      'Restore the folder or choose another project.'
+    )
+  }
+  return workspace.path
+}
+
+async function runFileStep(active: ActiveBlueprintRun, step: BlueprintStep): Promise<string> {
+  const root = await requireWorkspacePath(active)
+  const path = interpolate(step.filePath?.trim() ?? '', active, step.id)
+  if (!path) throw new Error('File path is missing.')
+  if (step.fileMode === 'write') {
+    const template = step.fileContent?.trim() ? step.fileContent : '{{last}}'
+    const result = await writeAgentFile(root, path, interpolate(template, active, step.id))
+    if (!result.ok) throw new Error(result.error || 'Failed to write the file.')
+    return `${result.created ? 'Created' : 'Updated'} ${result.path} (${result.bytes} bytes).`
+  }
+  const result = await readAgentFile(root, path)
+  if (!result.ok) throw new Error(result.error || 'Failed to read the file.')
+  if (result.truncated) throw new Error(`${result.path} is binary or too large to read.`)
+  return result.content ?? ''
+}
+
+async function runShellStep(active: ActiveBlueprintRun, step: BlueprintStep): Promise<string> {
+  const root = await requireWorkspacePath(active)
+  const command = interpolate(step.command?.trim() ?? '', active, step.id)
+  if (!command) throw new Error('Command is empty.')
+  const controller = new AbortController()
+  active.requestAbort = controller
+  try {
+    const result = await runAgentCommand(root, command, controller.signal)
+    if (!result.ok) throw new Error(result.error || 'The command failed to start.')
+    const stdout = result.stdout?.trim() ?? ''
+    const stderr = result.stderr?.trim() ?? ''
+    if (result.timedOut || result.code !== 0) {
+      const head = result.timedOut
+        ? 'The command was killed by the timeout.'
+        : `The command exited with code ${result.code}.`
+      const detail = [stderr, stdout].filter(Boolean).join('\n')
+      throw new Error(cappedText(detail ? `${head}\n${detail}` : head, MAX_COMMAND_OUTPUT))
+    }
+    return cappedText(stdout || stderr || 'The command completed (exit code 0).', MAX_COMMAND_OUTPUT)
+  } finally {
+    if (active.requestAbort === controller) active.requestAbort = null
+  }
+}
+
+async function runHttpStep(active: ActiveBlueprintRun, step: BlueprintStep): Promise<string> {
+  const renderedUrl = interpolate(step.httpUrl?.trim() ?? '', active, step.id)
+  let url: URL
+  try {
+    url = new URL(renderedUrl)
+  } catch {
+    throw new Error('Request URL is invalid.')
+  }
+  if (url.protocol !== 'https:' && url.protocol !== 'http:') {
+    throw new Error('Request URL must use HTTP or HTTPS.')
+  }
+  const method = step.httpMethod ?? 'GET'
+  const bodyTemplate = step.httpBody ?? ''
+  const body =
+    !BODYLESS_HTTP_METHODS.has(method) && bodyTemplate.trim()
+      ? interpolate(bodyTemplate, active, step.id)
+      : undefined
+  const controller = new AbortController()
+  active.requestAbort = controller
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+  try {
+    const response = await fetch(url, {
+      method,
+      headers: parseJsonHeaders(interpolate(step.httpHeaders ?? '', active, step.id), 'Request'),
+      body,
+      signal: controller.signal
+    })
+    const responseBody = (await response.text()).slice(0, MAX_WEBHOOK_OUTPUT)
+    if (!response.ok) {
+      throw new Error(`The request returned HTTP ${response.status}${responseBody ? `: ${responseBody}` : '.'}`)
+    }
+    return responseBody || `The request completed with HTTP ${response.status}.`
+  } finally {
+    clearTimeout(timeout)
+    active.requestAbort = null
+  }
+}
+
 async function executeStep(
   active: ActiveBlueprintRun,
   step: BlueprintStep,
@@ -594,6 +716,9 @@ async function executeStep(
   if (step.type === 'agent') return runAgentStep(active, step, stepRun)
   if (step.type === 'telegram') return runTelegramStep(active, step)
   if (step.type === 'delay') return cancellableDelay(active, step.delaySeconds ?? 1)
+  if (step.type === 'file') return runFileStep(active, step)
+  if (step.type === 'shell') return runShellStep(active, step)
+  if (step.type === 'http') return runHttpStep(active, step)
   return runWebhookStep(active, step)
 }
 

@@ -343,6 +343,9 @@
 .blueprint-step-card.type-telegram .blueprint-step-content { border-left: 2px solid #38a5e4; }
 .blueprint-step-card.type-delay .blueprint-step-content { border-left: 2px solid #d39a45; }
 .blueprint-step-card.type-webhook .blueprint-step-content { border-left: 2px solid var(--accent); }
+.blueprint-step-card.type-file .blueprint-step-content { border-left: 2px solid #c96da8; }
+.blueprint-step-card.type-shell .blueprint-step-content { border-left: 2px solid #d15b5b; }
+.blueprint-step-card.type-http .blueprint-step-content { border-left: 2px solid #35a3a0; }
 .blueprint-step-head { display: flex; align-items: center; gap: 6px; margin-bottom: 9px; }
 .blueprint-step-icon {
   width: 26px;
@@ -357,6 +360,9 @@
 .type-telegram .blueprint-step-icon { color: #38a5e4; }
 .type-delay .blueprint-step-icon { color: #d39a45; }
 .type-webhook .blueprint-step-icon { color: var(--accent); }
+.type-file .blueprint-step-icon { color: #c96da8; }
+.type-shell .blueprint-step-icon { color: #d15b5b; }
+.type-http .blueprint-step-icon { color: #35a3a0; }
 .blueprint-step-name { flex: 1; min-width: 120px; font-weight: 600; }
 .blueprint-step-type { width: 112px; flex-shrink: 0; }
 .blueprint-step-fields { display: grid; grid-template-columns: repeat(2, minmax(160px, 1fr)); gap: 8px; }

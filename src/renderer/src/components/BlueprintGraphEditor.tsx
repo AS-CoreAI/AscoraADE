@@ -18,6 +18,7 @@ import {
   type BlueprintAgent,
   type BlueprintGraph,
   type BlueprintNodePosition,
+  type BlueprintNote,
   type BlueprintStep,
   type BlueprintStepType
 } from '@shared/ipc'
@@ -28,6 +29,7 @@ import '@/styles/blueprint-graph.css'
 export type BlueprintGraphSelection =
   | { kind: 'node'; id: string }
   | { kind: 'connection'; id: string }
+  | { kind: 'note'; id: string }
 
 export interface BlueprintGraphEditorLabels extends BlueprintRoutesLabels {
   ariaLabel: string
@@ -41,9 +43,16 @@ export interface BlueprintGraphEditorLabels extends BlueprintRoutesLabels {
   addTelegram: string
   addDelay: string
   addWebhook: string
+  addFile: string
+  addShell: string
+  addHttp: string
+  addNote: string
+  deleteNote: string
+  notePlaceholder: string
   fitView: string
   zoomIn: string
   zoomOut: string
+  zoomReset: string
   deleteNode: string
   moveNode: string
   nodeName: string
@@ -57,6 +66,12 @@ export interface BlueprintGraphEditorLabels extends BlueprintRoutesLabels {
   method: string
   headers: string
   body: string
+  fileMode: string
+  fileRead: string
+  fileWrite: string
+  filePath: string
+  fileContent: string
+  command: string
   repeat: string
   iterations: string
   agentMode: string
@@ -81,6 +96,8 @@ export interface BlueprintGraphEditorProps {
 
 const NODE_WIDTH = 286
 const START_NODE_WIDTH = 214
+const NOTE_WIDTH = 224
+const NOTE_APPROX_HEIGHT = 132
 const START_PORT_Y = 65
 const INPUT_PORT_Y = 60
 const REPEAT_PORT_Y = 84
@@ -101,9 +118,16 @@ const DEFAULT_LABELS: BlueprintGraphEditorLabels = {
   addTelegram: 'Telegram',
   addDelay: 'Delay',
   addWebhook: 'Webhook',
+  addFile: 'File',
+  addShell: 'Command',
+  addHttp: 'HTTP request',
+  addNote: 'Note',
+  deleteNote: 'Delete note',
+  notePlaceholder: 'Comment for this part of the flow…',
   fitView: 'Fit view',
   zoomIn: 'Zoom in',
   zoomOut: 'Zoom out',
+  zoomReset: 'Reset zoom to 100%',
   deleteNode: 'Delete node',
   moveNode: 'Move node',
   nodeName: 'Node name',
@@ -117,6 +141,12 @@ const DEFAULT_LABELS: BlueprintGraphEditorLabels = {
   method: 'Method',
   headers: 'Headers (JSON)',
   body: 'Body',
+  fileMode: 'Mode',
+  fileRead: 'Read',
+  fileWrite: 'Write',
+  filePath: 'File path',
+  fileContent: 'Content',
+  command: 'Command',
   repeat: 'Repeat',
   iterations: 'Passes',
   routes: 'Routes',
@@ -168,6 +198,14 @@ type Gesture =
       origin: BlueprintNodePosition
     }
   | {
+      kind: 'note'
+      pointerId: number
+      noteId: string
+      clientX: number
+      clientY: number
+      origin: BlueprintNodePosition
+    }
+  | {
       kind: 'connect'
       pointerId: number
       sourceId: string
@@ -177,6 +215,9 @@ function stepIcon(type: BlueprintStepType): JSX.Element {
   if (type === 'agent') return <Icon name="users" size={14} />
   if (type === 'telegram') return <Icon name="telegram" size={14} />
   if (type === 'delay') return <Icon name="clock" size={14} />
+  if (type === 'file') return <Icon name="file" size={14} />
+  if (type === 'shell') return <Icon name="terminal" size={14} />
+  if (type === 'http') return <Icon name="globe" size={14} />
   return <Icon name="webhook" size={14} />
 }
 
@@ -417,6 +458,7 @@ export function BlueprintGraphEditor({
     () => cleanConnections(steps, graph.connections),
     [graph.connections, stepIds]
   )
+  const graphNotes = graph.notes ?? []
   const reachableNodes = useMemo(() => {
     const entryTargets = new Set(
       graphConnections
@@ -467,12 +509,14 @@ export function BlueprintGraphEditor({
       activeSelection.kind === 'node'
         ? activeSelection.id === BLUEPRINT_START_NODE_ID ||
           steps.some((step) => step.id === activeSelection.id)
-        : graphConnections.some((connection) => connection.id === activeSelection.id)
+        : activeSelection.kind === 'note'
+          ? graphNotes.some((note) => note.id === activeSelection.id)
+          : graphConnections.some((connection) => connection.id === activeSelection.id)
     if (!exists) {
       setLocalSelection(null)
       onSelectionChange?.(null)
     }
-  }, [activeSelection, graphConnections, onSelectionChange, stepIds, steps])
+  }, [activeSelection, graphConnections, graphNotes, onSelectionChange, stepIds, steps])
 
   const select = useCallback(
     (next: BlueprintGraphSelection | null): void => {
@@ -495,6 +539,13 @@ export function BlueprintGraphEditor({
       onGraphChange({ ...graph, connections: clean })
     },
     [graph, onGraphChange, steps]
+  )
+
+  const publishNotes = useCallback(
+    (next: BlueprintNote[]): void => {
+      onGraphChange({ ...graph, notes: next })
+    },
+    [graph, onGraphChange]
   )
 
   const updateConnectionCondition = useCallback(
@@ -602,6 +653,50 @@ export function BlueprintGraphEditor({
     [graphConnections, publishConnections, readOnly, select]
   )
 
+  const addNote = (): void => {
+    if (readOnly) return
+    const rect = viewportRef.current?.getBoundingClientRect()
+    const center = rect
+      ? {
+          x: (rect.width / 2 - viewport.x) / viewport.zoom,
+          y: (rect.height / 2 - viewport.y) / viewport.zoom
+        }
+      : { x: 120, y: 120 }
+    const created: BlueprintNote = {
+      id: crypto.randomUUID(),
+      x: Math.round(center.x - NOTE_WIDTH / 2),
+      y: Math.round(center.y - NOTE_APPROX_HEIGHT / 2),
+      text: ''
+    }
+    publishNotes([...graphNotes, created])
+    select({ kind: 'note', id: created.id })
+  }
+
+  const removeNote = (noteId: string): void => {
+    if (readOnly) return
+    publishNotes(graphNotes.filter((note) => note.id !== noteId))
+    if (activeSelection?.kind === 'note' && activeSelection.id === noteId) select(null)
+  }
+
+  const startNoteDrag = (
+    event: PointerEvent<HTMLButtonElement>,
+    note: BlueprintNote
+  ): void => {
+    if (readOnly || event.button !== 0) return
+    event.preventDefault()
+    event.stopPropagation()
+    gestureRef.current = {
+      kind: 'note',
+      pointerId: event.pointerId,
+      noteId: note.id,
+      clientX: event.clientX,
+      clientY: event.clientY,
+      origin: { x: note.x, y: note.y }
+    }
+    viewportRef.current?.setPointerCapture(event.pointerId)
+    select({ kind: 'note', id: note.id })
+  }
+
   const startNodeDrag = (
     event: PointerEvent<HTMLButtonElement>,
     nodeId: string
@@ -637,7 +732,7 @@ export function BlueprintGraphEditor({
   const handleCanvasPointerDown = (event: PointerEvent<HTMLDivElement>): void => {
     if (event.button !== 0 && event.button !== 1) return
     const target = event.target as HTMLElement
-    if (target.closest('.blueprint-graph-node, .blueprint-graph-connection')) return
+    if (target.closest('.blueprint-graph-node, .blueprint-graph-connection, .blueprint-graph-note')) return
     event.preventDefault()
     gestureRef.current = {
       kind: 'pan',
@@ -671,6 +766,20 @@ export function BlueprintGraphEditor({
           y: Math.round((gesture.origin.y + (event.clientY - gesture.clientY) / viewport.zoom) * 2) / 2
         }
       })
+      return
+    }
+    if (gesture.kind === 'note') {
+      publishNotes(
+        graphNotes.map((note) =>
+          note.id === gesture.noteId
+            ? {
+                ...note,
+                x: Math.round((gesture.origin.x + (event.clientX - gesture.clientX) / viewport.zoom) * 2) / 2,
+                y: Math.round((gesture.origin.y + (event.clientY - gesture.clientY) / viewport.zoom) * 2) / 2
+              }
+            : note
+        )
+      )
       return
     }
     setCursor(clientToWorld(event.clientX, event.clientY))
@@ -730,21 +839,26 @@ export function BlueprintGraphEditor({
   const fitView = (): void => {
     const rect = viewportRef.current?.getBoundingClientRect()
     if (!rect) return
-    const points = Object.values(graphPositions)
+    const points = [
+      ...Object.values(graphPositions),
+      ...graphNotes.map((note) => ({ x: note.x, y: note.y }))
+    ]
     if (points.length === 0) return
     const minX = Math.min(...points.map((point) => point.x))
     const minY = Math.min(...points.map((point) => point.y))
     const maxX = Math.max(
       ...Object.entries(graphPositions).map(([id, point]) =>
         point.x + (id === BLUEPRINT_START_NODE_ID ? START_NODE_WIDTH : NODE_WIDTH)
-      )
+      ),
+      ...graphNotes.map((note) => note.x + NOTE_WIDTH)
     )
     const maxY = Math.max(
       ...Object.entries(graphPositions).map(([id, point]) => {
         if (id === BLUEPRINT_START_NODE_ID) return point.y + 110
         const routeCount = graphConnections.filter((connection) => connection.from === id).length
         return point.y + (openRouteEditors[id] ? 500 + routeCount * 118 : 420)
-      })
+      }),
+      ...graphNotes.map((note) => note.y + NOTE_APPROX_HEIGHT)
     )
     const width = Math.max(1, maxX - minX)
     const height = Math.max(1, maxY - minY)
@@ -764,7 +878,7 @@ export function BlueprintGraphEditor({
     const nextPositions = { ...graphPositions }
     delete nextPositions[nodeId]
     onRemoveStep(nodeId)
-    onGraphChange({ positions: nextPositions, connections: nextConnections })
+    onGraphChange({ ...graph, positions: nextPositions, connections: nextConnections })
     select(null)
   }
 
@@ -785,6 +899,10 @@ export function BlueprintGraphEditor({
     if (readOnly || !activeSelection) return
     if (activeSelection.kind === 'connection') {
       removeConnection(activeSelection.id)
+      return
+    }
+    if (activeSelection.kind === 'note') {
+      removeNote(activeSelection.id)
       return
     }
     removeNode(activeSelection.id)
@@ -841,10 +959,29 @@ export function BlueprintGraphEditor({
           <button disabled={readOnly} onClick={() => onAddStep('webhook')}>
             <Icon name="webhook" size={13} /> {labels.addWebhook}
           </button>
+          <button disabled={readOnly} onClick={() => onAddStep('file')}>
+            <Icon name="file" size={13} /> {labels.addFile}
+          </button>
+          <button disabled={readOnly} onClick={() => onAddStep('shell')}>
+            <Icon name="terminal" size={13} /> {labels.addShell}
+          </button>
+          <button disabled={readOnly} onClick={() => onAddStep('http')}>
+            <Icon name="globe" size={13} /> {labels.addHttp}
+          </button>
+          <button disabled={readOnly} onClick={addNote}>
+            <Icon name="message" size={13} /> {labels.addNote}
+          </button>
         </div>
         <div className="blueprint-graph-view-group">
           <button className="icon-only" title={labels.zoomOut} aria-label={labels.zoomOut} onClick={() => zoomBy(0.86)}>−</button>
-          <span>{Math.round(viewport.zoom * 100)}%</span>
+          <button
+            className="zoom-level"
+            title={labels.zoomReset}
+            aria-label={labels.zoomReset}
+            onClick={() => zoomBy(1 / viewport.zoom)}
+          >
+            {Math.round(viewport.zoom * 100)}%
+          </button>
           <button className="icon-only" title={labels.zoomIn} aria-label={labels.zoomIn} onClick={() => zoomBy(1.16)}>+</button>
           <button className="icon-only" title={labels.fitView} aria-label={labels.fitView} onClick={fitView}>
             <Icon name="collapse" size={13} />
@@ -1006,6 +1143,60 @@ export function BlueprintGraphEditor({
             )}
           </svg>
 
+          {graphNotes.map((note) => (
+            <article
+              className={`blueprint-graph-note${
+                activeSelection?.kind === 'note' && activeSelection.id === note.id
+                  ? ' selected'
+                  : ''
+              }`}
+              key={note.id}
+              style={{ left: note.x, top: note.y }}
+              onPointerDown={(event) => {
+                if (!isEditableTarget(event.target)) {
+                  editorRef.current?.focus({ preventScroll: true })
+                }
+                select({ kind: 'note', id: note.id })
+              }}
+            >
+              <div className="blueprint-graph-note-head">
+                <button
+                  className="blueprint-graph-node-drag"
+                  aria-label={`${labels.moveNode}: ${labels.addNote}`}
+                  disabled={readOnly}
+                  onPointerDown={(event) => startNoteDrag(event, note)}
+                >
+                  <Icon name="hand" size={12} />
+                </button>
+                <span className="blueprint-graph-note-icon"><Icon name="message" size={12} /></span>
+                <button
+                  className="blueprint-graph-delete"
+                  title={labels.deleteNote}
+                  aria-label={labels.deleteNote}
+                  disabled={readOnly}
+                  onClick={() => removeNote(note.id)}
+                >
+                  <Icon name="trash" size={11} />
+                </button>
+              </div>
+              <textarea
+                value={note.text}
+                placeholder={labels.notePlaceholder}
+                aria-label={labels.addNote}
+                disabled={readOnly}
+                onChange={(event) =>
+                  publishNotes(
+                    graphNotes.map((candidate) =>
+                      candidate.id === note.id
+                        ? { ...candidate, text: event.target.value }
+                        : candidate
+                    )
+                  )
+                }
+              />
+            </article>
+          ))}
+
           <article
             className={`blueprint-graph-node blueprint-graph-start${
               activeSelection?.kind === 'node' && activeSelection.id === BLUEPRINT_START_NODE_ID
@@ -1120,6 +1311,9 @@ export function BlueprintGraphEditor({
                   <option value="telegram">{labels.addTelegram}</option>
                   <option value="delay">{labels.addDelay}</option>
                   <option value="webhook">{labels.addWebhook}</option>
+                  <option value="file">{labels.addFile}</option>
+                  <option value="shell">{labels.addShell}</option>
+                  <option value="http">{labels.addHttp}</option>
                 </select>
               </div>
 
@@ -1318,6 +1512,121 @@ export function BlueprintGraphEditor({
                         }
                       />
                     </label>
+                  </>
+                )}
+
+                {step.type === 'file' && (
+                  <>
+                    <div className="blueprint-graph-field-pair webhook">
+                      <label className="url-field">
+                        <span>{labels.filePath}</span>
+                        <input
+                          value={step.filePath ?? ''}
+                          placeholder="reports/summary.md"
+                          disabled={readOnly}
+                          onChange={(event) =>
+                            onStepChange(step.id, { filePath: event.target.value })
+                          }
+                        />
+                      </label>
+                      <label>
+                        <span>{labels.fileMode}</span>
+                        <select
+                          value={step.fileMode ?? 'read'}
+                          disabled={readOnly}
+                          onChange={(event) =>
+                            onStepChange(step.id, {
+                              fileMode: event.target.value as 'read' | 'write'
+                            })
+                          }
+                        >
+                          <option value="read">{labels.fileRead}</option>
+                          <option value="write">{labels.fileWrite}</option>
+                        </select>
+                      </label>
+                    </div>
+                    {step.fileMode === 'write' && (
+                      <label>
+                        <span>{labels.fileContent}</span>
+                        <textarea
+                          value={step.fileContent ?? ''}
+                          disabled={readOnly}
+                          onChange={(event) =>
+                            onStepChange(step.id, { fileContent: event.target.value })
+                          }
+                        />
+                      </label>
+                    )}
+                  </>
+                )}
+
+                {step.type === 'shell' && (
+                  <label>
+                    <span>{labels.command}</span>
+                    <textarea
+                      value={step.command ?? ''}
+                      placeholder="npm test"
+                      disabled={readOnly}
+                      onChange={(event) => onStepChange(step.id, { command: event.target.value })}
+                    />
+                  </label>
+                )}
+
+                {step.type === 'http' && (
+                  <>
+                    <div className="blueprint-graph-field-pair webhook">
+                      <label className="url-field">
+                        <span>URL</span>
+                        <input
+                          value={step.httpUrl ?? ''}
+                          placeholder="https://api.example.com/status"
+                          disabled={readOnly}
+                          onChange={(event) =>
+                            onStepChange(step.id, { httpUrl: event.target.value })
+                          }
+                        />
+                      </label>
+                      <label>
+                        <span>{labels.method}</span>
+                        <select
+                          value={step.httpMethod ?? 'GET'}
+                          disabled={readOnly}
+                          onChange={(event) =>
+                            onStepChange(step.id, {
+                              httpMethod: event.target.value as BlueprintStep['httpMethod']
+                            })
+                          }
+                        >
+                          <option>GET</option>
+                          <option>POST</option>
+                          <option>PUT</option>
+                          <option>PATCH</option>
+                          <option>DELETE</option>
+                        </select>
+                      </label>
+                    </div>
+                    <label>
+                      <span>{labels.headers}</span>
+                      <textarea
+                        value={step.httpHeaders ?? ''}
+                        disabled={readOnly}
+                        onChange={(event) =>
+                          onStepChange(step.id, { httpHeaders: event.target.value })
+                        }
+                      />
+                    </label>
+                    {step.httpMethod !== 'GET' && step.httpMethod !== 'DELETE' && (
+                      <label>
+                        <span>{labels.body}</span>
+                        <textarea
+                          value={step.httpBody ?? ''}
+                          disabled={readOnly}
+                          onChange={(event) =>
+                            onStepChange(step.id, { httpBody: event.target.value })
+                          }
+                        />
+                      </label>
+                    )}
                   </>
                 )}
 

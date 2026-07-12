@@ -5,6 +5,7 @@ import {
   type BlueprintConnectionConditionOperator,
   type BlueprintDefinition,
   type BlueprintGraph,
+  type BlueprintNote,
   type BlueprintStep
 } from '@shared/ipc'
 
@@ -40,6 +41,7 @@ const MAX_REPEAT_ITERATIONS = 20
 const MAX_STEP_REPEAT = 20
 const MAX_ACTION_ATTEMPTS = 2_000
 const MAX_CONDITION_VALUE = 4_000
+const MAX_NOTE_TEXT = 4_000
 const CONDITION_OPERATORS: BlueprintConnectionConditionOperator[] = [
   'always',
   'otherwise',
@@ -195,6 +197,26 @@ export function normalizeBlueprintGraph(
       ]
     })
   )
+  const noteIds = new Set<string>()
+  const notes: BlueprintNote[] = (Array.isArray(value.notes) ? value.notes : []).flatMap(
+    (candidate, index) => {
+      if (!candidate || typeof candidate !== 'object') return []
+      const x = Number(candidate.x)
+      const y = Number(candidate.y)
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return []
+      const id = asText(candidate.id) || `note:${index}`
+      if (noteIds.has(id)) return []
+      noteIds.add(id)
+      return [
+        {
+          id,
+          x: Math.max(-100_000, Math.min(100_000, x)),
+          y: Math.max(-100_000, Math.min(100_000, y)),
+          text: asText(candidate.text).slice(0, MAX_NOTE_TEXT)
+        }
+      ]
+    }
+  )
   const connections = (Array.isArray(value.connections) ? value.connections : []).flatMap(
     (candidate, index) => {
       if (!candidate || typeof candidate !== 'object') return []
@@ -217,7 +239,7 @@ export function normalizeBlueprintGraph(
       return [{ id, from, to, ...(condition ? { condition } : {}) }]
     }
   )
-  return { positions, connections }
+  return { positions, connections, ...(notes.length > 0 ? { notes } : {}) }
 }
 
 /** Validate and compile a legacy sequence or a dependency graph with one bounded repeat path. */
