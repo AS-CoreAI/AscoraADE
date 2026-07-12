@@ -7,6 +7,7 @@ import type {
   GitStatusResult
 } from '@shared/ipc'
 import { Icon } from './Icon'
+import { GitDiffViewer, getUnifiedDiffStats } from './GitDiffViewer'
 import { api } from '@/lib/api'
 import { useApp, type AppLanguage } from '@/state/store'
 import { tr, type TranslationKey } from '@/language'
@@ -243,6 +244,16 @@ function GitCommitFileRow({
           <span className="git-file-dir">{t('git.fromOriginal', { path: file.originalPath })}</span>
         )}
       </span>
+      {file.binary ? (
+        <span className="git-file-stats binary">BIN</span>
+      ) : (
+        (file.additions != null || file.deletions != null) && (
+          <span className="git-file-stats" aria-label={`+${file.additions ?? 0} -${file.deletions ?? 0}`}>
+            <span className="additions">+{file.additions ?? 0}</span>
+            <span className="deletions">-{file.deletions ?? 0}</span>
+          </span>
+        )
+      )}
       <span className="git-row-actions">
         <button
           disabled={busy || !canOpen}
@@ -295,6 +306,8 @@ export function GitPanel(): JSX.Element {
   const isBusy = busy !== null || loading
   const gitReady = getGitApi() !== null
   const selectedCommitSummary = history.find((commit) => commit.hash === selectedCommit)
+  const diffStats = useMemo(() => getUnifiedDiffStats(diff), [diff])
+  const selectedDiffPath = selectedCommitFile?.path ?? selected?.path
 
   const refreshHistory = useCallback(async () => {
     if (!activePath) {
@@ -731,31 +744,34 @@ export function GitPanel(): JSX.Element {
           <Icon name="refresh" size={13} />
         </button>
       </div>
-      <div className="panel-body">
-        {!activePath && (
-          <div className="placeholder-note">{t('git.openFolderHint')}</div>
-        )}
+      <div
+        className={`panel-body git-panel-body${selected || selectedCommitFile ? ' has-diff' : ''}`}
+      >
+        <div className="git-list-pane">
+          {!activePath && (
+            <div className="placeholder-note">{t('git.openFolderHint')}</div>
+          )}
 
-        {activePath && (
-          <>
-            <div className="git-summary" title={status?.root}>
-              <Icon name="gitBranch" size={13} />
-              <span>{loading ? t('git.loadingStatus') : branchLabel(status, appLanguage)}</span>
-              <button
-                className="git-inline-btn"
-                title={t('git.fetchOrigin')}
-                disabled={isBusy || !gitReady}
-                onClick={fetchOrigin}
-              >
-                <Icon name="arrowDown" size={13} />
-                {t('git.fetchOrigin')}
-              </button>
-            </div>
+          {activePath && (
+            <>
+              <div className="git-summary" title={status?.root}>
+                <Icon name="gitBranch" size={13} />
+                <span>{loading ? t('git.loadingStatus') : branchLabel(status, appLanguage)}</span>
+                <button
+                  className="git-inline-btn"
+                  title={t('git.fetchOrigin')}
+                  disabled={isBusy || !gitReady}
+                  onClick={fetchOrigin}
+                >
+                  <Icon name="arrowDown" size={13} />
+                  {t('git.fetchOrigin')}
+                </button>
+              </div>
 
-            {error && <div className="git-error">{error}</div>}
+              {error && <div className="git-error">{error}</div>}
 
-            {status?.ok && (
-              <>
+              {status?.ok && (
+                <>
                 <div className="git-commit">
                   <textarea
                     value={commitMessage}
@@ -945,30 +961,49 @@ export function GitPanel(): JSX.Element {
                   </>
                 )}
 
-                {(selected || selectedCommitFile) && (
-                  <div className="git-diff-wrap">
-                    <div className="git-diff-head">
-                      <span>
-                        {selectedCommitFile
-                          ? t('git.commitDiff', {
-                              hash: selectedCommitSummary?.shortHash ?? selectedCommitFile.commit.slice(0, 7)
-                            })
-                          : selected?.staged
-                            ? t('git.stagedDiff')
-                            : t('git.workingDiff')}
-                      </span>
-                      {selected && !selected.staged && (
-                        <button title={t('git.discardSelected')} disabled={isBusy} onClick={discardSelected}>
-                          <Icon name="x" size={13} />
-                        </button>
-                      )}
-                    </div>
-                    <pre className="git-diff">{diffLoading ? t('git.loadingDiff') : diff}</pre>
-                  </div>
-                )}
-              </>
+                </>
+              )}
+            </>
+          )}
+        </div>
+
+        {(selected || selectedCommitFile) && (
+          <div className="git-diff-wrap">
+            <div className="git-diff-head">
+              <span className="git-diff-title">
+                <span>
+                  {selectedCommitFile
+                    ? t('git.commitDiff', {
+                        hash: selectedCommitSummary?.shortHash ?? selectedCommitFile.commit.slice(0, 7)
+                      })
+                    : selected?.staged
+                      ? t('git.stagedDiff')
+                      : t('git.workingDiff')}
+                </span>
+                {selectedDiffPath && <strong title={selectedDiffPath}>{selectedDiffPath}</strong>}
+              </span>
+              {!diffLoading && (diffStats.additions > 0 || diffStats.deletions > 0) && (
+                <span className="git-diff-stats" aria-label={`+${diffStats.additions} -${diffStats.deletions}`}>
+                  <span className="additions">+{diffStats.additions}</span>
+                  <span className="deletions">-{diffStats.deletions}</span>
+                </span>
+              )}
+              {selected && !selected.staged && (
+                <button title={t('git.discardSelected')} disabled={isBusy} onClick={discardSelected}>
+                  <Icon name="x" size={13} />
+                </button>
+              )}
+            </div>
+            {diffLoading ? (
+              <div className="git-diff-loading">{t('git.loadingDiff')}</div>
+            ) : (
+              <GitDiffViewer
+                diff={diff}
+                path={selectedDiffPath}
+                ariaLabel={selectedDiffPath ? `${selectedDiffPath} diff` : 'Git diff'}
+              />
             )}
-          </>
+          </div>
         )}
       </div>
     </div>

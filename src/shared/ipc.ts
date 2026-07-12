@@ -1078,6 +1078,9 @@ export interface GitCommitFile {
   path: string
   originalPath?: string
   status: GitFileStatus
+  additions?: number | null
+  deletions?: number | null
+  binary?: boolean
 }
 
 export interface GitStatusResult {

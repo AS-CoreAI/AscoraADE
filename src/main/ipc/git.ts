@@ -40,6 +40,14 @@ interface GitSnapshot {
   outgoingCommits: GitCommitSummary[]
 }
 
+interface GitNumstat {
+  path: string
+  originalPath?: string
+  additions: number | null
+  deletions: number | null
+  binary: boolean
+}
+
 class GitError extends Error {}
 
 function cleanOutput(text: string): string {
@@ -234,6 +242,89 @@ function parseCommitFiles(stdout: string): GitCommitFile[] {
     }
   }
   return files
+}
+
+function parseNumstatCount(value: string): number {
+  if (!/^\d+$/.test(value)) throw new GitError('Invalid git numstat output.')
+  const count = Number(value)
+  if (!Number.isSafeInteger(count)) throw new GitError('Invalid git numstat output.')
+  return count
+}
+
+function parseNumstat(stdout: string): GitNumstat[] {
+  if (stdout && !stdout.endsWith('\0')) throw new GitError('Invalid git numstat output.')
+  const records = stdout.split('\0')
+  const stats: GitNumstat[] = []
+  let index = 0
+
+  while (index < records.length) {
+    const record = records[index]
+    index += 1
+    if (!record) {
+      if (index === records.length) break
+      throw new GitError('Invalid git numstat output.')
+    }
+
+    const firstTab = record.indexOf('\t')
+    const secondTab = firstTab < 0 ? -1 : record.indexOf('\t', firstTab + 1)
+    if (firstTab < 1 || secondTab < firstTab + 2) {
+      throw new GitError('Invalid git numstat output.')
+    }
+
+    const additionsText = record.slice(0, firstTab)
+    const deletionsText = record.slice(firstTab + 1, secondTab)
+    const binary = additionsText === '-' && deletionsText === '-'
+    if ((additionsText === '-') !== (deletionsText === '-')) {
+      throw new GitError('Invalid git numstat output.')
+    }
+
+    let path = record.slice(secondTab + 1)
+    let originalPath: string | undefined
+    if (!path) {
+      originalPath = records[index]
+      path = records[index + 1]
+      index += 2
+      if (!originalPath || !path) throw new GitError('Invalid git numstat output.')
+    }
+
+    stats.push({
+      path,
+      originalPath,
+      additions: binary ? null : parseNumstatCount(additionsText),
+      deletions: binary ? null : parseNumstatCount(deletionsText),
+      binary
+    })
+  }
+
+  return stats
+}
+
+function commitFileKey(path: string, originalPath?: string): string {
+  return `${originalPath ?? ''}\0${path}`
+}
+
+function mergeCommitFileStats(files: GitCommitFile[], stats: GitNumstat[]): GitCommitFile[] {
+  const byIdentity = new Map<string, GitNumstat>()
+  const byPath = new Map<string, GitNumstat>()
+  const ambiguousPaths = new Set<string>()
+
+  for (const stat of stats) {
+    byIdentity.set(commitFileKey(stat.path, stat.originalPath), stat)
+    if (byPath.has(stat.path)) ambiguousPaths.add(stat.path)
+    else byPath.set(stat.path, stat)
+  }
+
+  return files.map((file) => {
+    const exact = byIdentity.get(commitFileKey(file.path, file.originalPath))
+    const stat = exact ?? (ambiguousPaths.has(file.path) ? undefined : byPath.get(file.path))
+    if (!stat) return file
+    return {
+      ...file,
+      additions: stat.additions,
+      deletions: stat.deletions,
+      binary: stat.binary
+    }
+  })
 }
 
 async function outgoingCommits(root: string, upstream?: string): Promise<GitCommitSummary[]> {
@@ -555,17 +646,20 @@ export function registerGitHandlers(): void {
       try {
         const root = await repoRoot(cwd)
         const hash = safeCommitHash(commit)
-        const output = await runGit(root, [
-          'diff-tree',
-          '--no-commit-id',
-          '--name-status',
+        const commonArgs = [
           '-r',
           '-z',
           '--find-renames',
           '--root',
           hash
+        ]
+        const [filesOutput, statsOutput] = await Promise.all([
+          runGit(root, ['diff-tree', '--no-commit-id', '--name-status', ...commonArgs]),
+          runGit(root, ['diff-tree', '--no-commit-id', '--numstat', ...commonArgs])
         ])
-        return { ok: true, files: parseCommitFiles(output.stdout) }
+        const files = parseCommitFiles(filesOutput.stdout)
+        const stats = parseNumstat(statsOutput.stdout)
+        return { ok: true, files: mergeCommitFileStats(files, stats) }
       } catch (err) {
         return { ok: false, error: err instanceof Error ? err.message : String(err) }
       }

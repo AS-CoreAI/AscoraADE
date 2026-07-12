@@ -42,6 +42,9 @@ const TITLE_KEYS: Record<string, TranslationKey> = {
   preview: 'dock.livePreview'
 }
 
+const GIT_PANEL_INITIAL_WIDTH = 760
+const GIT_PANEL_READABLE_WIDTH = 620
+
 function titleOf(id: keyof typeof TITLE_KEYS): string {
   return tr(useApp.getState().appLanguage, TITLE_KEYS[id])
 }
@@ -66,11 +69,18 @@ function firstExisting(api: DockviewApi, ids: string[]): string | undefined {
   return ids.find((id) => api.getPanel(id))
 }
 
+function ensureGitPanelWidth(panel: NonNullable<ReturnType<DockviewApi['getPanel']>>): void {
+  const currentWidth = panel.api.group.api.boundingBox?.width
+  if (currentWidth !== undefined && currentWidth >= GIT_PANEL_READABLE_WIDTH) return
+  panel.api.group.api.setSize({ width: GIT_PANEL_INITIAL_WIDTH })
+}
+
 /** Focus a panel, opening it docked (in a sensible spot) if it isn't open yet. */
 function focusOrOpen(api: DockviewApi, id: 'explorer' | 'git' | 'chat' | 'blueprint' | 'blueprintHub'): void {
   const existing = api.getPanel(id)
   if (existing) {
     existing.api.setActive()
+    if (id === 'git') ensureGitPanelWidth(existing)
     return
   }
   if (id === 'chat' || id === 'blueprint' || id === 'blueprintHub') {
@@ -82,12 +92,28 @@ function focusOrOpen(api: DockviewApi, id: 'explorer' | 'git' | 'chat' | 'bluepr
   // explorer | git — share one left-hand sidebar group (tabbed together).
   const other = id === 'explorer' ? 'git' : 'explorer'
   if (api.getPanel(other)) {
-    api.addPanel({ id, component: id, title: titleOf(id), position: { referencePanel: other, direction: 'within' } })
+    const panel = api.addPanel({
+      id,
+      component: id,
+      title: titleOf(id),
+      position: { referencePanel: other, direction: 'within' }
+    })
+    if (id === 'git') ensureGitPanelWidth(panel)
     return
   }
   const ref = firstExisting(api, ['editor', 'chat'])
-  if (ref) api.addPanel({ id, component: id, title: titleOf(id), initialWidth: 260, position: { referencePanel: ref, direction: 'left' } })
-  else api.addPanel({ id, component: id, title: titleOf(id), initialWidth: 260 })
+  const initialWidth = id === 'git' ? GIT_PANEL_INITIAL_WIDTH : 260
+  if (ref) {
+    api.addPanel({
+      id,
+      component: id,
+      title: titleOf(id),
+      initialWidth,
+      position: { referencePanel: ref, direction: 'left' }
+    })
+  } else {
+    api.addPanel({ id, component: id, title: titleOf(id), initialWidth })
+  }
 }
 
 /** Open the editor (and a terminal beneath it) once files are open. */
@@ -200,12 +226,14 @@ export function DockLayout(): JSX.Element {
     reconcilePreview(api)
     reconcileSsh(api)
     setActiveId(api.activePanel?.id)
+    if (api.activePanel?.id === 'git') ensureGitPanelWidth(api.activePanel)
 
     disposables.current = [
       api.onDidLayoutChange(() => setDockLayout(api.toJSON())),
       api.onDidActivePanelChange(() => {
         const id = api.activePanel?.id
         setActiveId(id)
+        if (id === 'git' && api.activePanel) ensureGitPanelWidth(api.activePanel)
         // Focusing an SSH terminal makes the whole IDE target that remote host.
         if (id?.startsWith(SSH_PREFIX)) {
           const connId = id.slice(SSH_PREFIX.length)
