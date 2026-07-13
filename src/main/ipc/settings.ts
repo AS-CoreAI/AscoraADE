@@ -11,6 +11,7 @@ export function registerSettingsHandlers(): void {
   ipcMain.handle(IPC.settings.all, () => getStore().allSettings())
 
   ipcMain.handle(IPC.workspace.list, (): Workspace[] => getStore().listWorkspaces())
+  ipcMain.handle(IPC.workspace.listArchived, (): Workspace[] => getStore().listWorkspaces(true))
   ipcMain.handle(IPC.workspace.add, (_e, path: string): Workspace =>
     getStore().addWorkspace(basename(path), path)
   )
@@ -18,6 +19,12 @@ export function registerSettingsHandlers(): void {
     const value = name.trim()
     return value ? getStore().renameWorkspace(id, value) : null
   })
+  ipcMain.handle(IPC.workspace.archive, (_e, id: string): Workspace | null =>
+    getStore().archiveWorkspace(id)
+  )
+  ipcMain.handle(IPC.workspace.restore, (_e, id: string): Workspace | null =>
+    getStore().restoreWorkspace(id)
+  )
   ipcMain.handle(IPC.workspace.tasks, (_e, workspaceId: string, deletedOnly = false): TaskSummary[] =>
     getStore().listTasks(workspaceId, deletedOnly)
   )

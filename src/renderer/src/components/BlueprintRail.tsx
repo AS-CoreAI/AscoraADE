@@ -1,4 +1,5 @@
-import { useEffect, type JSX } from 'react'
+import { useEffect, useState, type JSX } from 'react'
+import { createPortal } from 'react-dom'
 import { Icon } from './Icon'
 import { useApp } from '@/state/store'
 import { useBlueprints } from '@/state/blueprints'
@@ -13,12 +14,24 @@ export function BlueprintRail(): JSX.Element {
   const removeBlueprint = useBlueprints((state) => state.removeBlueprint)
   const service = useApp((state) => state.wproviderService)
   const appLanguage = useApp((state) => state.appLanguage)
+  const [blueprintToDelete, setBlueprintToDelete] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState(false)
   const t = (key: Parameters<typeof tr>[1], values?: Record<string, string | number>): string =>
     tr(appLanguage, key, values)
+  const selectedForDelete = items.find((item) => item.id === blueprintToDelete) ?? null
 
   useEffect(() => {
     void init()
   }, [init])
+
+  useEffect(() => {
+    if (!selectedForDelete) return
+    const closeOnEscape = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape' && !deleting) setBlueprintToDelete(null)
+    }
+    document.addEventListener('keydown', closeOnEscape)
+    return () => document.removeEventListener('keydown', closeOnEscape)
+  }, [deleting, selectedForDelete])
 
   const show = (id: string): void => {
     open(id)
@@ -28,6 +41,17 @@ export function BlueprintRail(): JSX.Element {
   const create = async (): Promise<void> => {
     const blueprint = await createBlueprint('team', service)
     show(blueprint.id)
+  }
+
+  const confirmDelete = async (): Promise<void> => {
+    if (!selectedForDelete || deleting) return
+    setDeleting(true)
+    try {
+      await removeBlueprint(selectedForDelete.id)
+      setBlueprintToDelete(null)
+    } finally {
+      setDeleting(false)
+    }
   }
 
   return (
@@ -79,9 +103,7 @@ export function BlueprintRail(): JSX.Element {
                   aria-label={t('blueprint.delete')}
                   onClick={(event) => {
                     event.stopPropagation()
-                    if (window.confirm(t('blueprint.deleteConfirm', { name: blueprint.name }))) {
-                      void removeBlueprint(blueprint.id)
-                    }
+                    setBlueprintToDelete(blueprint.id)
                   }}
                 >
                   <Icon name="trash" size={13} />
@@ -91,6 +113,76 @@ export function BlueprintRail(): JSX.Element {
           })
         )}
       </div>
+      {selectedForDelete && createPortal(
+        <div
+          className="modal-backdrop workspace-archive-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !deleting) setBlueprintToDelete(null)
+          }}
+        >
+          <div
+            className="modal workspace-archive-modal blueprint-delete-modal"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="blueprint-delete-title"
+            aria-describedby="blueprint-delete-description"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <button
+              className="modal-close workspace-archive-close"
+              title={t('common.close')}
+              aria-label={t('common.close')}
+              disabled={deleting}
+              onClick={() => setBlueprintToDelete(null)}
+            >
+              <Icon name="x" size={15} />
+            </button>
+            <div className="workspace-archive-hero">
+              <span className="workspace-archive-symbol blueprint-delete-symbol">
+                <Icon name="blueprint" size={22} />
+              </span>
+              <div>
+                <h2 id="blueprint-delete-title">{t('blueprint.delete')}</h2>
+                <p>{selectedForDelete.name}</p>
+              </div>
+            </div>
+            <div className="workspace-archive-content">
+              <p className="workspace-archive-question">
+                {t('blueprint.deleteConfirm', { name: selectedForDelete.name })}
+              </p>
+              <p id="blueprint-delete-description" className="workspace-archive-description">
+                {t('blueprint.deleteDescription')}
+              </p>
+              <div className="blueprint-delete-summary">
+                <Icon name="blueprint" size={14} />
+                <div>
+                  <strong>{selectedForDelete.name}</strong>
+                  {selectedForDelete.description && <span>{selectedForDelete.description}</span>}
+                </div>
+              </div>
+            </div>
+            <div className="workspace-archive-actions">
+              <button
+                className="btn"
+                autoFocus
+                disabled={deleting}
+                onClick={() => setBlueprintToDelete(null)}
+              >
+                {t('common.cancel')}
+              </button>
+              <button
+                className="btn workspace-archive-submit"
+                disabled={deleting}
+                onClick={() => void confirmDelete()}
+              >
+                <Icon name="trash" size={14} />
+                {t('blueprint.delete')}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   )
 }

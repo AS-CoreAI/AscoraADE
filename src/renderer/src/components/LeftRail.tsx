@@ -53,6 +53,8 @@ export function LeftRail(): JSX.Element {
   const setAllWorkspacesCollapsed = useApp((s) => s.setAllWorkspacesCollapsed)
   const reorderWorkspaces = useApp((s) => s.reorderWorkspaces)
   const renameWorkspace = useApp((s) => s.renameWorkspace)
+  const archiveWorkspace = useApp((s) => s.archiveWorkspace)
+  const restoreWorkspace = useApp((s) => s.restoreWorkspace)
   const openTask = useApp((s) => s.openTask)
   const deleteTask = useApp((s) => s.deleteTask)
   const restoreTask = useApp((s) => s.restoreTask)
@@ -67,7 +69,10 @@ export function LeftRail(): JSX.Element {
   const [search, setSearch] = useState('')
   const [searchOpen, setSearchOpen] = useState(false)
   const [archiveOpen, setArchiveOpen] = useState(false)
+  const [archivedWorkspaces, setArchivedWorkspaces] = useState<Workspace[]>([])
   const [archivedTasks, setArchivedTasks] = useState<Record<string, TaskSummary[]>>({})
+  const [workspaceToArchive, setWorkspaceToArchive] = useState<Workspace | null>(null)
+  const [archivingWorkspace, setArchivingWorkspace] = useState(false)
   const searchInputRef = useRef<HTMLInputElement>(null)
   const view = useApp((s) => s.view)
   const openAnalytics = useApp((s) => s.openAnalytics)
@@ -134,6 +139,15 @@ export function LeftRail(): JSX.Element {
     return () => document.removeEventListener('keydown', closeOnEscape)
   }, [aboutOpen])
 
+  useEffect(() => {
+    if (!workspaceToArchive) return
+    const closeOnEscape = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape' && !archivingWorkspace) setWorkspaceToArchive(null)
+    }
+    document.addEventListener('keydown', closeOnEscape)
+    return () => document.removeEventListener('keydown', closeOnEscape)
+  }, [archivingWorkspace, workspaceToArchive])
+
   /** Open an external link in the OS browser (renderer can't navigate away). */
   const openLink = (url: string): void => {
     setAboutOpen(false)
@@ -156,11 +170,28 @@ export function LeftRail(): JSX.Element {
       setArchiveOpen(false)
       return
     }
-    const entries = await Promise.all(
-      workspaces.map(async (workspace) => [workspace.id, await api.workspace.tasks(workspace.id, true)] as const)
-    )
+    const projects = await api.workspace.listArchived()
+    const entries = await Promise.all([
+      ...workspaces.map(async (workspace) =>
+        [workspace.id, await api.workspace.tasks(workspace.id, true)] as const
+      ),
+      ...projects.map(async (workspace) =>
+        [workspace.id, await api.workspace.tasks(workspace.id, true)] as const
+      )
+    ])
+    setArchivedWorkspaces(projects)
     setArchivedTasks(Object.fromEntries(entries))
     setArchiveOpen(true)
+  }
+
+  const confirmArchiveWorkspace = async (): Promise<void> => {
+    if (!workspaceToArchive || archivingWorkspace) return
+    setArchivingWorkspace(true)
+    try {
+      if (await archiveWorkspace(workspaceToArchive)) setWorkspaceToArchive(null)
+    } finally {
+      setArchivingWorkspace(false)
+    }
   }
 
   const saveWorkspaceName = async (): Promise<void> => {
@@ -274,6 +305,57 @@ export function LeftRail(): JSX.Element {
         {archiveOpen && (
           <div className="archive-task-list">
             <div className="archive-task-heading"><Icon name="archive" size={13} /> {t('rail.archived')}</div>
+            {archivedWorkspaces.map((ws) => {
+              const tasks = archivedTasks[ws.id] ?? []
+              return (
+                <div className="archive-workspace" key={ws.id}>
+                  <div className={`archive-workspace-row${active?.id === ws.id ? ' active' : ''}`} title={ws.path}>
+                    <span className="archive-workspace-icon"><Icon name="folder" size={14} /></span>
+                    <span className="name">{ws.name}</span>
+                    <span className="archive-chat-count">{t('rail.archivedChats', { count: tasks.length })}</span>
+                    <span className="time">{formatTaskTime(ws.deletedAt ?? ws.lastOpenedAt, appLanguage)}</span>
+                    <button
+                      className="workspace-restore"
+                      title={t('rail.restoreProject')}
+                      aria-label={t('rail.restoreProject')}
+                      onClick={() => {
+                        void restoreWorkspace(ws).then((restored) => {
+                          if (!restored) return
+                          setArchivedWorkspaces((current) => current.filter((item) => item.id !== ws.id))
+                          setArchivedTasks((current) => {
+                            const next = { ...current }
+                            delete next[ws.id]
+                            return next
+                          })
+                        })
+                      }}
+                    >
+                      <Icon name="refresh" size={13} />
+                    </button>
+                  </div>
+                  {tasks.map((task) => (
+                    <div
+                      className={`task-item archived archive-project-task${activeTaskId === task.id ? ' active' : ''}`}
+                      key={task.id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => void openTask(ws, task.id, true)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault()
+                          void openTask(ws, task.id, true)
+                        }
+                      }}
+                      title={task.title}
+                    >
+                      <Icon name="archive" size={11} />
+                      <span className="name">{task.title}</span>
+                      <span className="time">{formatTaskTime(task.deletedAt ?? task.updatedAt, appLanguage)}</span>
+                    </div>
+                  ))}
+                </div>
+              )
+            })}
             {workspaces.flatMap((ws) => (archivedTasks[ws.id] ?? []).map((task) => (
               <div className={`task-item archived${activeTaskId === task.id ? ' active' : ''}`} key={task.id} role="button" tabIndex={0} onClick={() => void openTask(ws, task.id, true)} onKeyDown={(event) => {
                 if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); void openTask(ws, task.id, true) }
@@ -281,7 +363,7 @@ export function LeftRail(): JSX.Element {
                 <Icon name="archive" size={12} />
                 <span className="name">{task.title}</span>
                 <span className="time">{formatTaskTime(task.deletedAt ?? task.updatedAt, appLanguage)}</span>
-                <button className="task-restore" title="Восстановить задачу" aria-label="Восстановить задачу" onClick={(event) => {
+                <button className="task-restore" title={t('rail.restoreTask')} aria-label={t('rail.restoreTask')} onClick={(event) => {
                   event.stopPropagation()
                   void restoreTask(ws, task.id).then(() => setArchivedTasks((current) => ({
                     ...current,
@@ -290,7 +372,9 @@ export function LeftRail(): JSX.Element {
                 }}><Icon name="refresh" size={13} /></button>
               </div>
             )))}
-            {workspaces.every((ws) => (archivedTasks[ws.id] ?? []).length === 0) && <div className="task-empty">Архив пуст</div>}
+            {archivedWorkspaces.length === 0 && workspaces.every((ws) => (archivedTasks[ws.id] ?? []).length === 0) && (
+              <div className="task-empty">{t('rail.archiveEmpty')}</div>
+            )}
           </div>
         )}
 
@@ -331,7 +415,7 @@ export function LeftRail(): JSX.Element {
                   event.stopPropagation()
                   setWorkspaceMenu({
                     x: Math.min(event.clientX, window.innerWidth - 180),
-                    y: Math.min(event.clientY, window.innerHeight - 44),
+                    y: Math.min(event.clientY, window.innerHeight - 80),
                     ws
                   })
                 }}
@@ -455,6 +539,76 @@ export function LeftRail(): JSX.Element {
             setRenamingWorkspace({ id: workspaceMenu.ws.id, name: workspaceMenu.ws.name })
             setWorkspaceMenu(null)
           }}>{t('rail.renameProject')}</button>
+          <button className="context-item context-item-danger" role="menuitem" onClick={() => {
+            setWorkspaceToArchive(workspaceMenu.ws)
+            setWorkspaceMenu(null)
+          }}>{t('rail.archiveProject')}</button>
+        </div>,
+        document.body
+      )}
+
+      {workspaceToArchive && createPortal(
+        <div
+          className="modal-backdrop workspace-archive-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !archivingWorkspace) setWorkspaceToArchive(null)
+          }}
+        >
+          <div
+            className="modal workspace-archive-modal"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="workspace-archive-title"
+            aria-describedby="workspace-archive-description"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <button
+              className="modal-close workspace-archive-close"
+              title={t('common.close')}
+              aria-label={t('common.close')}
+              disabled={archivingWorkspace}
+              onClick={() => setWorkspaceToArchive(null)}
+            >
+              <Icon name="x" size={15} />
+            </button>
+            <div className="workspace-archive-hero">
+              <span className="workspace-archive-symbol"><Icon name="archive" size={22} /></span>
+              <div>
+                <h2 id="workspace-archive-title">{t('rail.archiveProjectTitle')}</h2>
+                <p>{workspaceToArchive.name}</p>
+              </div>
+            </div>
+            <div className="workspace-archive-content">
+              <p className="workspace-archive-question">
+                {t('rail.archiveProjectConfirm', { name: workspaceToArchive.name })}
+              </p>
+              <p id="workspace-archive-description" className="workspace-archive-description">
+                {t('rail.archiveProjectDescription')}
+              </p>
+              <div className="workspace-archive-path" title={workspaceToArchive.path}>
+                <Icon name="folder" size={13} />
+                <span>{workspaceToArchive.path}</span>
+              </div>
+            </div>
+            <div className="workspace-archive-actions">
+              <button
+                className="btn"
+                autoFocus
+                disabled={archivingWorkspace}
+                onClick={() => setWorkspaceToArchive(null)}
+              >
+                {t('common.cancel')}
+              </button>
+              <button
+                className="btn workspace-archive-submit"
+                disabled={archivingWorkspace}
+                onClick={() => void confirmArchiveWorkspace()}
+              >
+                <Icon name="archive" size={14} />
+                {t('rail.archiveProjectAction')}
+              </button>
+            </div>
+          </div>
         </div>,
         document.body
       )}

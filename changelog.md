@@ -1,3 +1,15 @@
+## Ascora ADE 1.2.4
+What's new?
+
+### Added
+- **Restorable project archive** — projects can now be removed from the workspace through a dedicated confirmation modal without deleting their folders or conversation history. Archiving soft-deletes the project and all of its chats, stops any active runs, and groups the complete project under the rail's Archive button; restoring brings the project back with every chat and its saved history. SQLite and JSON fallback stores both preserve the project tombstone, and reopening the same folder also restores its archived record instead of creating a duplicate.
+- **Markdown emphasis in agent replies** — text responses from every backend, including DeepSeek through WProvider and Claude CLI, now render `**bold**`/`__bold__`, inline backtick code, and fenced code blocks. The renderer creates React elements directly instead of accepting model-generated HTML, while user messages remain literal text.
+- **Blueprint deletion confirmation modal** — deleting a Blueprint now opens an in-app destructive confirmation dialog with the scenario name and description, a clear warning about schedules and run history, safe initial focus on Cancel, Escape/backdrop dismissal, and disabled controls while removal is in progress.
+
+### Fixed
+- **Localized Claude re-authentication in chat** — expired Claude OAuth sessions now produce one localized error card instead of duplicate assistant/result/stderr messages. The original CLI output remains available under Technical details, and an inline Sign in to Claude again button launches the existing `claude /login` terminal flow directly from the failed chat. The structured error identity is persisted, so the message follows the selected interface language after reopening the task.
+- **OpenRouter is available for initial setup again** — the Agent backend settings always show OpenRouter, so it can be selected, enabled, and given an API key on a fresh installation. The regular chat provider picker still hides it until setup is complete.
+
 ## Ascora ADE 1.2.3
 What's new?
 

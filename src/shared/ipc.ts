@@ -57,8 +57,11 @@ export const IPC = {
   },
   workspace: {
     list: 'workspace:list',
+    listArchived: 'workspace:listArchived',
     add: 'workspace:add',
     rename: 'workspace:rename',
+    archive: 'workspace:archive',
+    restore: 'workspace:restore',
     tasks: 'workspace:tasks',
     task: 'workspace:task',
     saveTask: 'workspace:saveTask',
@@ -200,6 +203,8 @@ export interface Workspace {
   name: string
   path: string
   lastOpenedAt: number
+  /** Epoch ms when the project was soft-deleted from the workspace rail. */
+  deletedAt?: number
 }
 
 /** A recorded task/conversation under a workspace. */
@@ -234,6 +239,8 @@ export interface TaskMessage {
   role: 'user' | 'assistant'
   kind: 'text' | 'tool'
   text: string
+  /** Stable UI-facing error identity; lets persisted messages localize at render time. */
+  errorCode?: 'claude_oauth_expired'
   /** Display name of the model that produced this assistant turn, stamped at
    *  creation so a mid-chat model switch leaves earlier messages untouched. */
   model?: string

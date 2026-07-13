@@ -161,6 +161,69 @@ async function copyText(text: string): Promise<void> {
   if (!copied) throw new Error('Clipboard write failed')
 }
 
+/** Render the small, common Markdown subset used in agent replies without
+ * trusting model-generated HTML. Code is tokenized before emphasis so markers
+ * inside backticks remain literal. */
+function renderInlineMarkdown(text: string, keyPrefix: string): Array<string | JSX.Element> {
+  const nodes: Array<string | JSX.Element> = []
+  const tokenPattern = /(`[^`\n]+`|\*\*[^*\n]+?\*\*|__[^_\n]+?__)/g
+  let cursor = 0
+  let tokenIndex = 0
+  for (const match of text.matchAll(tokenPattern)) {
+    const index = match.index ?? 0
+    if (index > cursor) nodes.push(text.slice(cursor, index))
+    const token = match[0]
+    const key = `${keyPrefix}-${tokenIndex}`
+    if (token.startsWith('`')) {
+      nodes.push(<code className="msg-inline-code" key={key}>{token.slice(1, -1)}</code>)
+    } else {
+      nodes.push(
+        <strong key={key}>
+          {renderInlineMarkdown(token.slice(2, -2), `${key}-strong`)}
+        </strong>
+      )
+    }
+    cursor = index + token.length
+    tokenIndex += 1
+  }
+  if (cursor < text.length) nodes.push(text.slice(cursor))
+  return nodes
+}
+
+function AssistantMarkdown({ text }: { text: string }): JSX.Element {
+  const blocks: JSX.Element[] = []
+  const fencePattern = /```([^\r\n`]*)\r?\n([\s\S]*?)```/g
+  let cursor = 0
+  let blockIndex = 0
+  for (const match of text.matchAll(fencePattern)) {
+    const index = match.index ?? 0
+    if (index > cursor) {
+      blocks.push(
+        <span key={`text-${blockIndex}`}>
+          {renderInlineMarkdown(text.slice(cursor, index), `text-${blockIndex}`)}
+        </span>
+      )
+    }
+    const language = match[1].trim()
+    blocks.push(
+      <pre className="msg-code-block" key={`code-${blockIndex}`}>
+        {language && <span className="msg-code-language">{language}</span>}
+        <code>{match[2].replace(/\r?\n$/, '')}</code>
+      </pre>
+    )
+    cursor = index + match[0].length
+    blockIndex += 1
+  }
+  if (cursor < text.length || blocks.length === 0) {
+    blocks.push(
+      <span key={`text-${blockIndex}`}>
+        {renderInlineMarkdown(text.slice(cursor), `text-${blockIndex}`)}
+      </span>
+    )
+  }
+  return <div className="msg-text markdown">{blocks}</div>
+}
+
 function isCopilotAuthError(m: ChatMessage): boolean {
   if (m.role !== 'assistant') return false
   const haystack = `${m.model ?? ''}\n${m.text}`
@@ -172,14 +235,30 @@ function isCopilotAuthError(m: ChatMessage): boolean {
   )
 }
 
+function isClaudeAuthError(m: ChatMessage): boolean {
+  if (m.role !== 'assistant') return false
+  if (m.errorCode === 'claude_oauth_expired') return true
+  if (/oauth session expired|oauth token.*expired|could not be refreshed/i.test(m.text)) return true
+  const looksLikeClaude = /claude/i.test(`${m.model ?? ''}\n${m.text}`)
+  return (
+    looksLikeClaude &&
+    /(failed to authenticate|oauth session expired|oauth token.*expired|authentication session.*expired|could not be refreshed)/i.test(
+      m.text
+    )
+  )
+}
+
 function TextMessage({ m }: { m: ChatMessage }): JSX.Element {
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'error'>('idle')
+  const [claudeLoginState, setClaudeLoginState] = useState<'idle' | 'opening' | 'opened' | 'error'>('idle')
   const resetTimer = useRef<number | null>(null)
   const setCopilotAuthOpen = useApp((s) => s.setCopilotAuthOpen)
   const appLanguage = useApp((s) => s.appLanguage)
   const t = (key: TranslationKey, values?: Record<string, string | number>): string =>
     tr(appLanguage, key, values)
   const showCopilotAuth = isCopilotAuthError(m)
+  const showClaudeAuth = isClaudeAuthError(m)
+  const displayText = showClaudeAuth ? t('chat.claudeAuthExpired') : m.text
   const attachments = m.role === 'user' ? (m.attachments ?? []) : []
 
   useEffect(
@@ -190,15 +269,26 @@ function TextMessage({ m }: { m: ChatMessage }): JSX.Element {
   )
 
   const copy = async (): Promise<void> => {
-    if (!m.text) return
+    if (!displayText) return
     try {
-      await copyText(m.text)
+      await copyText(displayText)
       setCopyState('copied')
     } catch {
       setCopyState('error')
     }
     if (resetTimer.current !== null) window.clearTimeout(resetTimer.current)
     resetTimer.current = window.setTimeout(() => setCopyState('idle'), 1800)
+  }
+
+  const reauthenticateClaude = async (): Promise<void> => {
+    if (claudeLoginState === 'opening') return
+    setClaudeLoginState('opening')
+    try {
+      const result = await api.claude.login()
+      setClaudeLoginState(result.ok ? 'opened' : 'error')
+    } catch {
+      setClaudeLoginState('error')
+    }
   }
 
   return (
@@ -212,7 +302,7 @@ function TextMessage({ m }: { m: ChatMessage }): JSX.Element {
             type="button"
             className={`msg-copy ${copyState}`}
             onClick={() => void copy()}
-            disabled={!m.text}
+            disabled={!displayText}
             title={copyState === 'copied' ? t('common.copied') : copyState === 'error' ? t('common.copyFailed') : t('chat.copyResponse')}
             aria-label={t('chat.copyAssistantResponse')}
           >
@@ -221,10 +311,10 @@ function TextMessage({ m }: { m: ChatMessage }): JSX.Element {
           </button>
         )}
       </div>
-      {(m.text || attachments.length > 0) && (
-        <div className={`bubble${attachments.length > 0 ? ' has-attachments' : ''}`}>
+      {(displayText || attachments.length > 0) && (
+        <div className={`bubble${attachments.length > 0 ? ' has-attachments' : ''}${showClaudeAuth ? ' auth-error' : ''}`}>
           {attachments.length > 0 && (
-            <div className={`msg-attachments${m.text ? ' has-text' : ''}`} role="list">
+            <div className={`msg-attachments${displayText ? ' has-text' : ''}`} role="list">
               {attachments.map((attachment, index) => (
                 <div
                   key={`${attachment.name}-${index}`}
@@ -244,7 +334,17 @@ function TextMessage({ m }: { m: ChatMessage }): JSX.Element {
               ))}
             </div>
           )}
-          {m.text && <span className="msg-text">{m.text}</span>}
+          {displayText && (
+            m.role === 'assistant'
+              ? <AssistantMarkdown text={displayText} />
+              : <span className="msg-text">{displayText}</span>
+          )}
+          {showClaudeAuth && m.text.trim() && (
+            <details className="msg-technical-details">
+              <summary>{t('chat.technicalDetails')}</summary>
+              <pre>{m.text.replace(/^\s*⚠\s*/, '')}</pre>
+            </details>
+          )}
         </div>
       )}
       {showCopilotAuth && (
@@ -253,6 +353,25 @@ function TextMessage({ m }: { m: ChatMessage }): JSX.Element {
             <Icon name="terminal" size={13} />
             {t('chat.authorizeCopilot')}
           </button>
+        </div>
+      )}
+      {showClaudeAuth && (
+        <div className="msg-actions claude-auth-actions">
+          <button
+            type="button"
+            className="msg-action claude-auth-action"
+            disabled={claudeLoginState === 'opening'}
+            onClick={() => void reauthenticateClaude()}
+          >
+            <Icon name="terminal" size={13} />
+            {claudeLoginState === 'opening' ? t('chat.claudeLoginOpening') : t('chat.reauthorizeClaude')}
+          </button>
+          {claudeLoginState === 'opened' && (
+            <span className="msg-action-status success">{t('chat.claudeLoginOpened')}</span>
+          )}
+          {claudeLoginState === 'error' && (
+            <span className="msg-action-status error">{t('chat.claudeLoginFailed')}</span>
+          )}
         </div>
       )}
     </div>

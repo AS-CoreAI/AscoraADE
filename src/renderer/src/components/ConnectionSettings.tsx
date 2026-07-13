@@ -1059,9 +1059,6 @@ export function ConnectionSettings(): JSX.Element | null {
   const activeSsh = useApp((s) => s.activeSsh)
   const lmStudioReachable = useApp((s) => s.lmStudioReachable)
   const ollamaReachable = useApp((s) => s.ollamaReachable)
-  const openRouterReady = useApp(
-    (s) => s.openRouterEnabled && s.openRouterApiKey.trim().length > 0
-  )
   const lmStudioUnavailable = !lmStudioReachable
   const ollamaUnavailable = !ollamaReachable
   const cantWorkFromSsh = t('composer.cantWorkFromSsh')
@@ -1082,16 +1079,12 @@ export function ConnectionSettings(): JSX.Element | null {
       disabled: ollamaUnavailable || blockedBySsh('ollama'),
       tooltip: sshBlockedTitle('ollama') ?? (ollamaUnavailable ? t('composer.ollamaNotRunning') : undefined)
     },
-    ...(openRouterReady
-      ? [
-          {
-            value: 'openrouter' as const,
-            label: t('settings.providerOpenRouter'),
-            disabled: blockedBySsh('openrouter'),
-            tooltip: sshBlockedTitle('openrouter')
-          }
-        ]
-      : []),
+    {
+      value: 'openrouter',
+      label: t('settings.providerOpenRouter'),
+      disabled: blockedBySsh('openrouter'),
+      tooltip: sshBlockedTitle('openrouter')
+    },
     {
       value: 'codex',
       label: t('settings.providerCodex'),

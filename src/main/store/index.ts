@@ -18,9 +18,13 @@ export interface Store {
   getSetting<T = unknown>(key: string): T | undefined
   setSetting(key: string, value: unknown): void
   allSettings(): Record<string, unknown>
-  listWorkspaces(): Workspace[]
+  listWorkspaces(deletedOnly?: boolean): Workspace[]
   addWorkspace(name: string, path: string): Workspace
   renameWorkspace(id: string, name: string): Workspace | null
+  /** Soft-delete a project and all of its chats without touching its folder on disk. */
+  archiveWorkspace(id: string): Workspace | null
+  /** Restore a soft-deleted project together with all of its chats. */
+  restoreWorkspace(id: string): Workspace | null
   listTasks(workspaceId: string, deletedOnly?: boolean): TaskSummary[]
   getTask(taskId: string, includeDeleted?: boolean): TaskRecord | null
   saveTask(task: TaskRecord): TaskSummary
@@ -126,8 +130,13 @@ class JsonStore implements Store {
     return { ...this.data.settings }
   }
 
-  listWorkspaces(): Workspace[] {
-    return [...this.data.workspaces].sort((a, b) => b.lastOpenedAt - a.lastOpenedAt)
+  listWorkspaces(deletedOnly = false): Workspace[] {
+    return this.data.workspaces
+      .filter((workspace) => deletedOnly ? !!workspace.deletedAt : !workspace.deletedAt)
+      .sort((a, b) => deletedOnly
+        ? (b.deletedAt ?? 0) - (a.deletedAt ?? 0)
+        : b.lastOpenedAt - a.lastOpenedAt)
+      .map((workspace) => ({ ...workspace }))
   }
   addWorkspace(name: string, path: string): Workspace {
     const now = Date.now()
@@ -135,8 +144,14 @@ class JsonStore implements Store {
     if (existing) {
       existing.name = name
       existing.lastOpenedAt = now
+      if (existing.deletedAt) {
+        delete existing.deletedAt
+        for (const task of this.data.tasks) {
+          if (task.workspaceId === existing.id) delete task.deletedAt
+        }
+      }
       this.scheduleFlush()
-      return existing
+      return { ...existing }
     }
     const ws: Workspace = { id: randomUUID(), name, path, lastOpenedAt: now }
     this.data.workspaces.push(ws)
@@ -158,6 +173,32 @@ class JsonStore implements Store {
     return { ...workspace }
   }
 
+  archiveWorkspace(id: string): Workspace | null {
+    const workspace = this.data.workspaces.find((item) => item.id === id)
+    if (!workspace || workspace.deletedAt) return null
+    const deletedAt = Date.now()
+    workspace.deletedAt = deletedAt
+    for (const task of this.data.tasks) {
+      if (task.workspaceId !== id) continue
+      task.deletedAt = deletedAt
+      if (task.status === 'running') task.status = 'idle'
+    }
+    this.scheduleFlush()
+    return { ...workspace }
+  }
+
+  restoreWorkspace(id: string): Workspace | null {
+    const workspace = this.data.workspaces.find((item) => item.id === id)
+    if (!workspace?.deletedAt) return null
+    delete workspace.deletedAt
+    workspace.lastOpenedAt = Date.now()
+    for (const task of this.data.tasks) {
+      if (task.workspaceId === id) delete task.deletedAt
+    }
+    this.scheduleFlush()
+    return { ...workspace }
+  }
+
   getTask(taskId: string, includeDeleted = false): TaskRecord | null {
     const task = this.data.tasks.find((item) => item.id === taskId && (includeDeleted || !item.deletedAt))
     return task ? structuredClone(task) : null
@@ -167,7 +208,14 @@ class JsonStore implements Store {
     const stored = structuredClone(task)
     const index = this.data.tasks.findIndex((item) => item.id === task.id)
     if (index === -1) this.data.tasks.push(stored)
-    else this.data.tasks[index] = stored
+    else {
+      // A late renderer save must not resurrect a chat after its project was
+      // archived. Restoration explicitly clears the stored tombstone first.
+      if (this.data.tasks[index].deletedAt && !stored.deletedAt) {
+        stored.deletedAt = this.data.tasks[index].deletedAt
+      }
+      this.data.tasks[index] = stored
+    }
     this.scheduleFlush()
     return taskSummary(stored)
   }
@@ -225,7 +273,8 @@ class SqliteStore implements Store {
         id             TEXT PRIMARY KEY,
         name           TEXT NOT NULL,
         path           TEXT NOT NULL UNIQUE,
-        last_opened_at INTEGER NOT NULL
+        last_opened_at INTEGER NOT NULL,
+        deleted_at     INTEGER
       );
       CREATE TABLE IF NOT EXISTS tasks (
         id           TEXT PRIMARY KEY,
@@ -255,17 +304,22 @@ class SqliteStore implements Store {
       CREATE INDEX IF NOT EXISTS usage_ts ON usage(ts);
     `)
 
-    const columns = this.db.prepare('PRAGMA table_info(tasks)').all() as { name: string }[]
-    if (!columns.some((column) => column.name === 'messages_json')) {
+    const workspaceColumns = this.db.prepare('PRAGMA table_info(workspaces)').all() as { name: string }[]
+    if (!workspaceColumns.some((column) => column.name === 'deleted_at')) {
+      this.db.exec('ALTER TABLE workspaces ADD COLUMN deleted_at INTEGER')
+    }
+
+    const taskColumns = this.db.prepare('PRAGMA table_info(tasks)').all() as { name: string }[]
+    if (!taskColumns.some((column) => column.name === 'messages_json')) {
       this.db.exec("ALTER TABLE tasks ADD COLUMN messages_json TEXT NOT NULL DEFAULT '[]'")
     }
-    if (!columns.some((column) => column.name === 'convo_json')) {
+    if (!taskColumns.some((column) => column.name === 'convo_json')) {
       this.db.exec("ALTER TABLE tasks ADD COLUMN convo_json TEXT NOT NULL DEFAULT '[]'")
     }
-    if (!columns.some((column) => column.name === 'sessions_json')) {
+    if (!taskColumns.some((column) => column.name === 'sessions_json')) {
       this.db.exec("ALTER TABLE tasks ADD COLUMN sessions_json TEXT NOT NULL DEFAULT '{}'")
     }
-    if (!columns.some((column) => column.name === 'deleted_at')) {
+    if (!taskColumns.some((column) => column.name === 'deleted_at')) {
       this.db.exec('ALTER TABLE tasks ADD COLUMN deleted_at INTEGER')
     }
     this.db.prepare("UPDATE tasks SET status = 'idle' WHERE status = 'running'").run()
@@ -294,24 +348,41 @@ class SqliteStore implements Store {
     return out
   }
 
-  listWorkspaces(): Workspace[] {
+  listWorkspaces(deletedOnly = false): Workspace[] {
     const rows = this.db
-      .prepare('SELECT id, name, path, last_opened_at FROM workspaces ORDER BY last_opened_at DESC')
-      .all() as { id: string; name: string; path: string; last_opened_at: number }[]
-    return rows.map((r) => ({ id: r.id, name: r.name, path: r.path, lastOpenedAt: r.last_opened_at }))
+      .prepare(
+        `SELECT id, name, path, last_opened_at, deleted_at FROM workspaces
+         WHERE deleted_at IS ${deletedOnly ? 'NOT NULL ORDER BY deleted_at DESC' : 'NULL ORDER BY last_opened_at DESC'}`
+      )
+      .all() as { id: string; name: string; path: string; last_opened_at: number; deleted_at: number | null }[]
+    return rows.map((r) => ({
+      id: r.id,
+      name: r.name,
+      path: r.path,
+      lastOpenedAt: r.last_opened_at,
+      ...(r.deleted_at ? { deletedAt: r.deleted_at } : {})
+    }))
   }
   addWorkspace(name: string, path: string): Workspace {
     const now = Date.now()
-    const existing = this.db.prepare('SELECT id FROM workspaces WHERE path = ?').get(path) as
-      | { id: string }
+    const existing = this.db.prepare('SELECT id, deleted_at FROM workspaces WHERE path = ?').get(path) as
+      | { id: string; deleted_at: number | null }
       | undefined
     const id = existing?.id ?? randomUUID()
-    this.db
-      .prepare(
-        `INSERT INTO workspaces (id, name, path, last_opened_at) VALUES (?, ?, ?, ?)
-         ON CONFLICT(path) DO UPDATE SET name = excluded.name, last_opened_at = excluded.last_opened_at`
-      )
-      .run(id, name, path, now)
+    this.db.transaction(() => {
+      this.db
+        .prepare(
+          `INSERT INTO workspaces (id, name, path, last_opened_at, deleted_at) VALUES (?, ?, ?, ?, NULL)
+           ON CONFLICT(path) DO UPDATE SET
+             name = excluded.name,
+             last_opened_at = excluded.last_opened_at,
+             deleted_at = NULL`
+        )
+        .run(id, name, path, now)
+      if (existing?.deleted_at) {
+        this.db.prepare('UPDATE tasks SET deleted_at = NULL WHERE workspace_id = ?').run(id)
+      }
+    })()
     return { id, name, path, lastOpenedAt: now }
   }
   renameWorkspace(id: string, name: string): Workspace | null {
@@ -322,6 +393,51 @@ class SqliteStore implements Store {
       .prepare('SELECT id, name, path, last_opened_at FROM workspaces WHERE id = ?')
       .get(id) as { id: string; name: string; path: string; last_opened_at: number }
     return { id: row.id, name: row.name, path: row.path, lastOpenedAt: row.last_opened_at }
+  }
+
+  archiveWorkspace(id: string): Workspace | null {
+    const deletedAt = Date.now()
+    const archived = this.db.transaction(() => {
+      const info = this.db
+        .prepare('UPDATE workspaces SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL')
+        .run(deletedAt, id)
+      if (info.changes === 0) return false
+      this.db
+        .prepare(
+          `UPDATE tasks SET deleted_at = ?, status = CASE WHEN status = 'running' THEN 'idle' ELSE status END
+           WHERE workspace_id = ?`
+        )
+        .run(deletedAt, id)
+      return true
+    })()
+    if (!archived) return null
+    const row = this.db
+      .prepare('SELECT id, name, path, last_opened_at FROM workspaces WHERE id = ?')
+      .get(id) as { id: string; name: string; path: string; last_opened_at: number }
+    return {
+      id: row.id,
+      name: row.name,
+      path: row.path,
+      lastOpenedAt: row.last_opened_at,
+      deletedAt
+    }
+  }
+
+  restoreWorkspace(id: string): Workspace | null {
+    const lastOpenedAt = Date.now()
+    const restored = this.db.transaction(() => {
+      const info = this.db
+        .prepare('UPDATE workspaces SET deleted_at = NULL, last_opened_at = ? WHERE id = ? AND deleted_at IS NOT NULL')
+        .run(lastOpenedAt, id)
+      if (info.changes === 0) return false
+      this.db.prepare('UPDATE tasks SET deleted_at = NULL WHERE workspace_id = ?').run(id)
+      return true
+    })()
+    if (!restored) return null
+    const row = this.db
+      .prepare('SELECT id, name, path FROM workspaces WHERE id = ?')
+      .get(id) as { id: string; name: string; path: string }
+    return { id: row.id, name: row.name, path: row.path, lastOpenedAt }
   }
 
   listTasks(workspaceId: string, deletedOnly = false): TaskSummary[] {

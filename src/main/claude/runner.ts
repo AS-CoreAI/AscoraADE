@@ -382,6 +382,7 @@ export function runClaude(
     let usage: TokenUsage | undefined
     let stdoutBuf = ''
     let stderrBuf = ''
+    let stderrText = ''
     // tool_use id → its mapped item, so the matching tool_result updates it.
     const pendingTools = new Map<string, Partial<CodexItem> & { type: string }>()
 
@@ -472,6 +473,7 @@ export function runClaude(
     })
 
     child.stderr?.on('data', (chunk: string) => {
+      stderrText += chunk
       stderrBuf += chunk
       let nl: number
       while ((nl = stderrBuf.indexOf('\n')) >= 0) {
@@ -490,7 +492,7 @@ export function runClaude(
         return
       }
       if (code === 0) resolve({ ok: true, code, threadId: sessionId, usage })
-      else resolve({ ok: false, code, threadId: sessionId, usage, error: stderrBuf.trim() || `claude exited with code ${code}` })
+      else resolve({ ok: false, code, threadId: sessionId, usage, error: stderrText.trim() || `claude exited with code ${code}` })
     })
 
     sender.once('destroyed', () => killRun(id))

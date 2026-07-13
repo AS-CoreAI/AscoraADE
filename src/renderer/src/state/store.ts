@@ -859,6 +859,15 @@ function modelLabel(s: {
   }
 }
 
+/** Claude emits the same expired-session failure through assistant text,
+ * result JSON, and stderr. Recognize all known phrasings so one structured,
+ * localizable chat message can replace the raw duplicates. */
+function isClaudeAuthFailure(text: string): boolean {
+  return /(failed to authenticate|oauth session expired|oauth token.*expired|authentication session.*expired|could not be refreshed|run\s+[`'"]?claude\s+\/?login)/i.test(
+    text
+  )
+}
+
 /**
  * Order workspaces by a saved id sequence. Workspaces missing from `order`
  * (newly opened folders) float to the top by recency; everything else follows
@@ -1271,6 +1280,8 @@ interface AppState {
   setAllWorkspacesCollapsed: (collapsed: boolean) => void
   reorderWorkspaces: (draggedId: string, targetId: string) => void
   renameWorkspace: (id: string, name: string) => Promise<boolean>
+  archiveWorkspace: (ws: Workspace) => Promise<boolean>
+  restoreWorkspace: (ws: Workspace) => Promise<boolean>
   openTask: (ws: Workspace, taskId: string, includeDeleted?: boolean) => Promise<void>
   restoreTask: (ws: Workspace, taskId: string) => Promise<void>
   deleteTask: (ws: Workspace, taskId: string) => Promise<void>
@@ -1817,6 +1828,7 @@ export const useApp = create<AppState>((set, get) => {
     if (!ws) return
     const workspaces = await api.workspace.list()
     const tasks = await api.workspace.tasks(ws.id)
+    for (const task of tasks) deletedRuns.delete(task.id)
     set((state) => ({
       workspaces: sortWorkspaces(workspaces, state.workspaceOrder),
       tasksByWorkspace: { ...state.tasksByWorkspace, [ws.id]: tasks }
@@ -2067,6 +2079,92 @@ export const useApp = create<AppState>((set, get) => {
     set((state) => ({
       workspaces: state.workspaces.map((workspace) => workspace.id === id ? renamed : workspace),
       active: state.active?.id === id ? renamed : state.active
+    }))
+    return true
+  },
+
+  async archiveWorkspace(ws) {
+    const state = get()
+    const taskIds = new Set(
+      (state.tasksByWorkspace[ws.id] ?? []).map((task) => task.id)
+    )
+    for (const [taskId, run] of Object.entries(state.runs)) {
+      if (run.workspaceId === ws.id) taskIds.add(taskId)
+    }
+    if (state.active?.id === ws.id && state.activeTaskId) taskIds.add(state.activeTaskId)
+
+    // Stop every foreground/background run before stamping the project as
+    // archived, otherwise a late completion could save an active copy again.
+    for (const taskId of taskIds) {
+      const run = readRun(taskId)
+      if (!run?.streaming) continue
+      deletedRuns.add(taskId)
+      get().stopStreaming(taskId)
+    }
+    if (state.active?.id === ws.id && state.liveRoot === ws.path) await get().stopLive()
+
+    const archived = await api.workspace.archive(ws.id)
+    if (!archived) return false
+
+    set((current) => {
+      const tasksByWorkspace = { ...current.tasksByWorkspace }
+      delete tasksByWorkspace[ws.id]
+      const runs = { ...current.runs }
+      for (const [taskId, run] of Object.entries(runs)) {
+        if (run.workspaceId === ws.id) delete runs[taskId]
+      }
+      const wasActive = current.active?.id === ws.id
+      return {
+        workspaces: current.workspaces.filter((workspace) => workspace.id !== ws.id),
+        tasksByWorkspace,
+        runs,
+        ...(wasActive
+          ? {
+              active: null,
+              activeSsh: null,
+              view: 'home' as const,
+              messages: [],
+              convo: [],
+              activeTaskId: null,
+              archivedTaskId: null,
+              activeTaskTitle: '',
+              streaming: false,
+              streamId: null,
+              thinking: false,
+              thinkingTokens: 0,
+              thinkingStartedAt: null,
+              codexThreadId: null,
+              copilotSessionId: null,
+              claudeSessionId: null,
+              geminiSessionId: null,
+              glmSessionId: null,
+              treeRoots: [],
+              childrenByPath: {},
+              expanded: {},
+              treeLoading: false,
+              treeError: null,
+              openFiles: [],
+              activeFile: null
+            }
+          : {})
+      }
+    })
+    return true
+  },
+
+  async restoreWorkspace(ws) {
+    const restored = await api.workspace.restore(ws.id)
+    if (!restored) return false
+    const tasks = await api.workspace.tasks(restored.id)
+    for (const task of tasks) deletedRuns.delete(task.id)
+    set((state) => ({
+      workspaces: sortWorkspaces(
+        [restored, ...state.workspaces.filter((workspace) => workspace.id !== restored.id)],
+        state.workspaceOrder
+      ),
+      tasksByWorkspace: { ...state.tasksByWorkspace, [restored.id]: tasks },
+      active: state.active?.id === restored.id ? restored : state.active,
+      archivedTaskId: state.active?.id === restored.id ? null : state.archivedTaskId
     }))
     return true
   },
@@ -3231,6 +3329,21 @@ export const useApp = create<AppState>((set, get) => {
         const itemCards = new Map<string, string>() // agent item id → chat card id
         const itemChars = new Map<string, number>() // agent item id → chars already counted
         let sawError = false
+        let claudeAuthMessageId: string | null = null
+
+        const addClaudeAuthError = (detail: string): void => {
+          sawError = true
+          if (claudeAuthMessageId) return
+          claudeAuthMessageId = crypto.randomUUID()
+          addMsg({
+            id: claudeAuthMessageId,
+            role: 'assistant',
+            kind: 'text',
+            model: assistantModel,
+            errorCode: 'claude_oauth_expired',
+            text: detail.replace(/^\s*⚠\s*/, '').trim()
+          })
+        }
 
         // Grow the live token estimate as generated text arrives (without
         // double-counting an item that streams in via successive updates).
@@ -3263,8 +3376,13 @@ export const useApp = create<AppState>((set, get) => {
             }
             if (it.type === 'agent_message') {
               if (event.phase === 'completed' && it.text?.trim()) {
-                countText(it.id, it.text.trim())
-                addMsg({ id: crypto.randomUUID(), role: 'assistant', kind: 'text', model: assistantModel, text: it.text.trim() })
+                const text = it.text.trim()
+                if (isClaude && isClaudeAuthFailure(text)) {
+                  addClaudeAuthError(text)
+                } else {
+                  countText(it.id, text)
+                  addMsg({ id: crypto.randomUUID(), role: 'assistant', kind: 'text', model: assistantModel, text })
+                }
               }
               return
             }
@@ -3277,8 +3395,14 @@ export const useApp = create<AppState>((set, get) => {
               addMsg({ id: cardId, role: 'assistant', kind: 'tool', text: '', ...card })
             }
           } else if (event.kind === 'error') {
-            sawError = true
-            addMsg({ id: crypto.randomUUID(), role: 'assistant', kind: 'text', model: assistantModel, text: `⚠ ${event.message}` })
+            if (isClaude && isClaudeAuthFailure(event.message)) {
+              addClaudeAuthError(event.message)
+            } else {
+              sawError = true
+              addMsg({ id: crypto.randomUUID(), role: 'assistant', kind: 'text', model: assistantModel, text: `⚠ ${event.message}` })
+            }
+          } else if (event.kind === 'notice' && isClaude && isClaudeAuthFailure(event.text)) {
+            addClaudeAuthError(event.text)
           }
         }
 
@@ -3384,24 +3508,28 @@ export const useApp = create<AppState>((set, get) => {
 
         if (!res.ok && !res.aborted) {
           finalStatus = 'error'
-          addMsg({
-            id: crypto.randomUUID(),
-            role: 'assistant',
-            kind: 'text',
-            model: assistantModel,
-            text: `⚠ ${
-              res.error ??
-              (isGlm
-                ? 'ZCode run failed.'
-                : isClaude
-                  ? 'Claude run failed.'
-                  : isGemini
-                    ? 'Gemini run failed.'
-                    : isCopilot
-                      ? 'Copilot run failed.'
-                      : 'Codex run failed.')
-            }`
-          })
+          const error =
+            res.error ??
+            (isGlm
+              ? 'ZCode run failed.'
+              : isClaude
+                ? 'Claude run failed.'
+                : isGemini
+                  ? 'Gemini run failed.'
+                  : isCopilot
+                    ? 'Copilot run failed.'
+                    : 'Codex run failed.')
+          if (isClaude && (claudeAuthMessageId || isClaudeAuthFailure(error))) {
+            addClaudeAuthError(error)
+          } else {
+            addMsg({
+              id: crypto.randomUUID(),
+              role: 'assistant',
+              kind: 'text',
+              model: assistantModel,
+              text: `⚠ ${error}`
+            })
+          }
         } else if (sawError) {
           finalStatus = 'error'
         }
