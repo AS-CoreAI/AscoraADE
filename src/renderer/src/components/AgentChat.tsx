@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type JSX } from 'react'
 import type { GitBranch, GitStatusResult } from '@shared/ipc'
 import { Composer } from './Composer'
+import { FileIcon } from './FileIcon'
 import { Icon } from './Icon'
 import { useApp, type ChatMessage, type ToolStatus } from '@/state/store'
 import { lineDiff } from '@/lib/diff'
@@ -179,6 +180,7 @@ function TextMessage({ m }: { m: ChatMessage }): JSX.Element {
   const t = (key: TranslationKey, values?: Record<string, string | number>): string =>
     tr(appLanguage, key, values)
   const showCopilotAuth = isCopilotAuthError(m)
+  const attachments = m.role === 'user' ? (m.attachments ?? []) : []
 
   useEffect(
     () => () => {
@@ -219,7 +221,32 @@ function TextMessage({ m }: { m: ChatMessage }): JSX.Element {
           </button>
         )}
       </div>
-      <div className="bubble">{m.text}</div>
+      {(m.text || attachments.length > 0) && (
+        <div className={`bubble${attachments.length > 0 ? ' has-attachments' : ''}`}>
+          {attachments.length > 0 && (
+            <div className={`msg-attachments${m.text ? ' has-text' : ''}`} role="list">
+              {attachments.map((attachment, index) => (
+                <div
+                  key={`${attachment.name}-${index}`}
+                  className={`msg-attachment ${attachment.previewDataUrl ? 'image' : 'file'}`}
+                  role="listitem"
+                  title={attachment.name}
+                >
+                  {attachment.previewDataUrl ? (
+                    <img src={attachment.previewDataUrl} alt={attachment.name} draggable={false} />
+                  ) : (
+                    <>
+                      <FileIcon name={attachment.name} size={17} />
+                      <span>{attachment.name}</span>
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+          {m.text && <span className="msg-text">{m.text}</span>}
+        </div>
+      )}
       {showCopilotAuth && (
         <div className="msg-actions">
           <button type="button" className="msg-action" onClick={() => setCopilotAuthOpen(true)}>

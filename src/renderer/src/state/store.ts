@@ -7,6 +7,7 @@ import type {
   SshConnection,
   LlmMessage,
   TaskMessage,
+  TaskMessageAttachment,
   TaskSummary,
   ToolDef,
   LlmProvider,
@@ -1398,7 +1399,10 @@ interface AppState {
   deleteSkill: (id: string) => void
 
   setMode: (m: AgentMode) => void
-  submitTask: (text: string) => Promise<void>
+  submitTask: (
+    text: string,
+    display?: { text: string; attachments?: TaskMessageAttachment[] }
+  ) => Promise<void>
   approveTool: (id: string) => void
   rejectTool: (id: string) => void
   /** Stop a run; defaults to the active task when no id is given. */
@@ -3069,15 +3073,19 @@ export const useApp = create<AppState>((set, get) => {
     set({ mode })
   },
 
-  async submitTask(text) {
+  async submitTask(text, display) {
     const trimmed = text.trim()
     const active = get().active
     if (!trimmed || !active || get().streaming) return
+    const displayAttachments = (display?.attachments ?? []).filter((attachment) => attachment.name.trim())
+    const requestedDisplayText = display?.text.trim() ?? trimmed
+    const displayText = requestedDisplayText || (displayAttachments.length > 0 ? '' : trimmed)
     const root = active.path
     const workspaceId = active.id
     const workspaceName = active.name
     const taskId = get().activeTaskId ?? crypto.randomUUID()
-    const title = get().activeTaskTitle || taskTitle(trimmed)
+    const titleSource = displayText || displayAttachments.map((attachment) => attachment.name).join(', ') || trimmed
+    const title = get().activeTaskTitle || taskTitle(titleSource)
     let finalStatus: TaskSummary['status'] = 'idle'
 
     abortedRuns.delete(taskId)
@@ -3133,7 +3141,16 @@ export const useApp = create<AppState>((set, get) => {
       thinkingStartedAt: Date.now(),
       activeTaskId: taskId,
       activeTaskTitle: title,
-      messages: [...s.messages, { id: crypto.randomUUID(), role: 'user', kind: 'text', text: trimmed }],
+      messages: [
+        ...s.messages,
+        {
+          id: crypto.randomUUID(),
+          role: 'user',
+          kind: 'text',
+          text: displayText,
+          ...(displayAttachments.length > 0 ? { attachments: displayAttachments } : {})
+        }
+      ],
       convo: [...s.convo, { role: 'user', content: trimmed }]
     }))
     // Pin the composer selection to this chat now that it has an id (a brand-new

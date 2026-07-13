@@ -785,6 +785,87 @@ button {
 .composer-folder .chev {
   color: var(--text-faint);
 }
+.composer-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 7px;
+  padding: 3px 10px 8px;
+}
+.composer-attachment {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-elevated);
+}
+.composer-attachment.image {
+  width: 54px;
+  height: 54px;
+  overflow: hidden;
+}
+.composer-attachment.image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.composer-attachment.file {
+  gap: 7px;
+  width: fit-content;
+  max-width: 220px;
+  height: 36px;
+  padding: 0 29px 0 9px;
+  color: var(--text-muted);
+  font-size: 11.5px;
+}
+.composer-attachment.file > svg {
+  flex: 0 0 auto;
+}
+.composer-attachment-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.composer-attachment-remove {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border-radius: 50%;
+  background: rgba(18, 18, 20, 0.78);
+  color: #fff;
+  opacity: 0.72;
+  transition: opacity 120ms ease, background 120ms ease;
+}
+.composer-attachment.file .composer-attachment-remove {
+  top: 8px;
+  right: 6px;
+  background: transparent;
+  color: var(--text-faint);
+}
+.composer-attachment:hover .composer-attachment-remove,
+.composer-attachment-remove:hover,
+.composer-attachment-remove:focus-visible {
+  opacity: 1;
+}
+.composer-attachment-remove:hover,
+.composer-attachment-remove:focus-visible {
+  background: rgba(18, 18, 20, 0.92);
+  outline: none;
+}
+.composer-attachment.file .composer-attachment-remove:hover,
+.composer-attachment.file .composer-attachment-remove:focus-visible {
+  background: var(--bg-hover);
+  color: var(--text);
+}
 .composer-input {
   width: 100%;
   min-height: 26px;
@@ -1457,6 +1538,57 @@ button {
   border: 1px solid var(--border);
   padding: 9px 12px;
   border-radius: 10px;
+}
+.msg .bubble.has-attachments {
+  white-space: normal;
+}
+.msg-text {
+  display: block;
+  white-space: pre-wrap;
+}
+.msg-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+.msg-attachments.has-text {
+  margin-bottom: 8px;
+}
+.msg-attachment {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--bg-input);
+}
+.msg-attachment.image {
+  width: 64px;
+  height: 64px;
+}
+.msg-attachment.image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  user-select: none;
+}
+.msg-attachment.file {
+  gap: 7px;
+  max-width: 220px;
+  height: 34px;
+  padding: 0 9px;
+  color: var(--text-muted);
+  font-size: 11.5px;
+}
+.msg-attachment.file > svg {
+  flex: 0 0 auto;
+}
+.msg-attachment.file span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .msg-actions {
   display: flex;

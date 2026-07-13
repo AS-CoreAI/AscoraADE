@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type DragEvent, type JSX, type KeyboardEvent } from 'react'
 import { Icon } from './Icon'
+import { FileIcon } from './FileIcon'
 import { ProviderSelect, type ProviderSelectOption } from './ProviderSelect'
 import { useApp, type AgentMode, type AppLanguage } from '@/state/store'
 import { api } from '@/lib/api'
@@ -194,11 +195,21 @@ function droppedFilePaths(files: FileList): string[] {
   return [...new Set([...direct, ...fallback])]
 }
 
+function attachmentSourceKey(filePath: string): string {
+  const normalized = filePath.replace(/\\/g, '/')
+  return api.system.platform === 'win32' ? normalized.toLowerCase() : normalized
+}
+
 function attachmentBlock(files: AttachmentFile[], language: AppLanguage): string {
   const title = files.length === 1
     ? tr(language, 'composer.attachedFile')
     : tr(language, 'composer.attachedFiles')
   return [title, ...files.map((file) => `- @${file.path}`)].join('\n')
+}
+
+function promptWithAttachments(text: string, files: AttachmentFile[], language: AppLanguage): string {
+  const blocks = [text.trim(), files.length > 0 ? attachmentBlock(files, language) : '']
+  return blocks.filter(Boolean).join('\n\n')
 }
 
 export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.Element {
@@ -258,6 +269,7 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
     tr(appLanguage, key, values)
 
   const [text, setText] = useState('')
+  const [attachments, setAttachments] = useState<AttachmentFile[]>([])
   const [draggingFiles, setDraggingFiles] = useState(false)
   const [attaching, setAttaching] = useState(false)
   const [attachStatus, setAttachStatus] = useState<{
@@ -266,6 +278,9 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
   } | null>(null)
   const ref = useRef<HTMLTextAreaElement>(null)
   const attachStatusTimer = useRef<number | null>(null)
+  const attachmentImportRef = useRef<symbol | null>(null)
+  const attachmentPathsRef = useRef(new Set<string>())
+  const attachmentSourcesRef = useRef(new Set<string>())
 
   const openRouterReady = openRouterEnabled && openRouterApiKey.trim().length > 0
   const lmStudioUnavailable = !lmStudioReachable
@@ -338,7 +353,12 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
         ? models
         : [selectedLocalModel || (provider === 'ollama' ? 'ollama' : 'local-model')]
   const readOnly = !!activeTaskId && archivedTaskId === activeTaskId
-  const canSend = text.trim().length > 0 && !!active && !streaming && !readOnly
+  const canSend =
+    (text.trim().length > 0 || attachments.length > 0) &&
+    !!active &&
+    !streaming &&
+    !attaching &&
+    !readOnly
   const canAttach = !!active && !activeSsh && !attaching && !readOnly
 
   const grow = (): void => {
@@ -346,10 +366,6 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
     if (!el) return
     el.style.height = 'auto'
     el.style.height = `${Math.min(el.scrollHeight, 220)}px`
-  }
-
-  const growSoon = (): void => {
-    window.requestAnimationFrame(grow)
   }
 
   const showAttachStatus = (kind: 'ok' | 'error', statusText: string): void => {
@@ -365,23 +381,38 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
     []
   )
 
+  useEffect(() => {
+    attachmentImportRef.current = null
+    attachmentPathsRef.current.clear()
+    attachmentSourcesRef.current.clear()
+    setAttaching(false)
+    setAttachments([])
+    setDraggingFiles(false)
+  }, [active?.id, activeSsh, activeTaskId])
+
   const insertAttachments = (files: AttachmentFile[]): void => {
-    const block = attachmentBlock(files, appLanguage)
-    setText((current) => {
-      const base = current.trimEnd()
-      return base ? `${base}\n\n${block}` : block
+    const added = files.filter((file) => {
+      const sourceKey = attachmentSourceKey(file.sourcePath ?? file.absolutePath)
+      if (attachmentPathsRef.current.has(file.path) || attachmentSourcesRef.current.has(sourceKey)) return false
+      attachmentPathsRef.current.add(file.path)
+      attachmentSourcesRef.current.add(sourceKey)
+      return true
     })
+    if (added.length > 0) setAttachments((current) => [...current, ...added])
     ref.current?.focus()
-    growSoon()
   }
 
   const attachFiles = async (filePaths: string[]): Promise<void> => {
     const root = active?.path
-    const paths = [...new Set(filePaths.map((path) => path.trim()).filter(Boolean))]
-    if (paths.length === 0) {
+    const taskId = activeTaskId
+    const selectedPaths = [...new Set(filePaths.map((path) => path.trim()).filter(Boolean))]
+    const paths = selectedPaths.filter((path) => !attachmentSourcesRef.current.has(attachmentSourceKey(path)))
+    if (attachmentImportRef.current) return
+    if (selectedPaths.length === 0) {
       showAttachStatus('error', t('composer.readFilePathsError'))
       return
     }
+    if (paths.length === 0) return
     if (!root) {
       showAttachStatus('error', t('composer.openFolderBeforeAttach'))
       return
@@ -390,10 +421,30 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
       showAttachStatus('error', t('composer.attachLocalOnly'))
       return
     }
+    const currentContext = useApp.getState()
+    if (
+      currentContext.active?.path !== root ||
+      currentContext.activeTaskId !== taskId ||
+      currentContext.activeSsh
+    ) {
+      return
+    }
 
+    const importToken = Symbol('attachment-import')
+    attachmentImportRef.current = importToken
     setAttaching(true)
+    const isCurrentImport = (): boolean => {
+      const context = useApp.getState()
+      return (
+        attachmentImportRef.current === importToken &&
+        context.active?.path === root &&
+        context.activeTaskId === taskId &&
+        !context.activeSsh
+      )
+    }
     try {
       const result = await api.fs.importFiles(root, paths)
+      if (!isCurrentImport()) return
       if (!result.ok) {
         showAttachStatus('error', result.error ?? t('composer.attachFailed'))
         return
@@ -404,9 +455,14 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
       showAttachStatus('ok', t('composer.attachedCount', { count: files.length }))
       void refreshDirectory(root)
     } catch (err) {
-      showAttachStatus('error', err instanceof Error ? err.message : t('composer.attachFailed'))
+      if (isCurrentImport()) {
+        showAttachStatus('error', err instanceof Error ? err.message : t('composer.attachFailed'))
+      }
     } finally {
-      setAttaching(false)
+      if (attachmentImportRef.current === importToken) {
+        attachmentImportRef.current = null
+        setAttaching(false)
+      }
     }
   }
 
@@ -417,9 +473,19 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
   }
 
   const send = (): void => {
-    if (!canSend) return
-    submitTask(text)
+    if (!canSend || attachmentImportRef.current) return
+    const prompt = promptWithAttachments(text, attachments, appLanguage)
+    void submitTask(prompt, {
+      text,
+      attachments: attachments.map(({ name, previewDataUrl }) => ({
+        name,
+        ...(previewDataUrl ? { previewDataUrl } : {})
+      }))
+    })
+    attachmentPathsRef.current.clear()
+    attachmentSourcesRef.current.clear()
     setText('')
+    setAttachments([])
     if (ref.current) ref.current.style.height = 'auto'
   }
 
@@ -465,6 +531,41 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
           <Icon name="chevronDown" size={13} />
           <span className="chev" />
         </button>
+      )}
+
+      {attachments.length > 0 && (
+        <div className="composer-attachments" role="list">
+          {attachments.map((file) => (
+            <div
+              key={file.path}
+              className={`composer-attachment ${file.previewDataUrl ? 'image' : 'file'}`}
+              role="listitem"
+              title={file.name}
+            >
+              {file.previewDataUrl ? (
+                <img src={file.previewDataUrl} alt={file.name} draggable={false} />
+              ) : (
+                <>
+                  <FileIcon name={file.name} size={17} />
+                  <span className="composer-attachment-name">{file.name}</span>
+                </>
+              )}
+              <button
+                type="button"
+                className="composer-attachment-remove"
+                title={`${t('common.delete')}: ${file.name}`}
+                aria-label={`${t('common.delete')}: ${file.name}`}
+                onClick={() => {
+                  attachmentPathsRef.current.delete(file.path)
+                  attachmentSourcesRef.current.delete(attachmentSourceKey(file.sourcePath ?? file.absolutePath))
+                  setAttachments((current) => current.filter((item) => item.path !== file.path))
+                }}
+              >
+                <Icon name="x" size={11} />
+              </button>
+            </div>
+          ))}
+        </div>
       )}
 
       <textarea

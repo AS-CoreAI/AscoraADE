@@ -1,4 +1,5 @@
-import { ipcMain, shell } from 'electron'
+import { ipcMain, nativeImage, shell } from 'electron'
+import { constants as fsConstants } from 'node:fs'
 import { copyFile, mkdir, readdir, readFile, rename, rm, stat, unlink, writeFile } from 'node:fs/promises'
 import { join, basename, dirname, extname, isAbsolute, relative, resolve } from 'node:path'
 import {
@@ -14,6 +15,13 @@ import {
 /** Max file size we'll read into the editor (2 MB) before flagging as truncated. */
 const MAX_FILE_BYTES = 2 * 1024 * 1024
 const ATTACHMENTS_DIR = '.ascora-attachments'
+const ATTACHMENT_PREVIEW_SIZE = 96
+const MAX_ATTACHMENT_PREVIEW_BYTES = 20 * 1024 * 1024
+const MAX_ATTACHMENT_PREVIEW_PIXELS = 20_000_000
+const MAX_ATTACHMENT_PREVIEW_DIMENSION = 12_000
+const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp', '.ico', '.avif'])
+const PORTABLE_PREVIEW_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg'])
+const JPEG_SIZE_MARKERS = new Set([0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf])
 
 /**
  * Read one directory level into TreeNodes, excluding ignored dirs (spec 5.1).
@@ -117,17 +125,118 @@ async function pathExists(path: string): Promise<boolean> {
   }
 }
 
-async function nextAttachmentPath(root: string, name: string): Promise<string> {
+async function copyIntoAttachments(root: string, source: string, name: string): Promise<string> {
   const dir = join(root, ATTACHMENTS_DIR)
   await mkdir(dir, { recursive: true })
   const safeName = safeEntryName(name) ?? 'attachment'
   const ext = extname(safeName)
   const stem = ext ? safeName.slice(0, -ext.length) : safeName
-  let target = join(dir, safeName)
-  for (let i = 2; await pathExists(target); i += 1) {
-    target = join(dir, `${stem}-${i}${ext}`)
+  for (let i = 1; ; i += 1) {
+    const target = join(dir, i === 1 ? safeName : `${stem}-${i}${ext}`)
+    try {
+      await copyFile(source, target, fsConstants.COPYFILE_EXCL)
+      return target
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err
+    }
   }
-  return target
+}
+
+function encodedImageDimensions(buffer: Buffer, extension: string): { width: number; height: number } | null {
+  if (
+    extension === '.png' &&
+    buffer.length >= 24 &&
+    buffer[0] === 0x89 &&
+    buffer.subarray(1, 4).toString('ascii') === 'PNG'
+  ) {
+    return { width: buffer.readUInt32BE(16), height: buffer.readUInt32BE(20) }
+  }
+  if ((extension === '.jpg' || extension === '.jpeg') && buffer.length >= 10 && buffer[0] === 0xff && buffer[1] === 0xd8) {
+    let offset = 2
+    while (offset + 8 < buffer.length) {
+      if (buffer[offset] !== 0xff) {
+        offset += 1
+        continue
+      }
+      while (offset < buffer.length && buffer[offset] === 0xff) offset += 1
+      if (offset >= buffer.length) break
+      const marker = buffer[offset]
+      offset += 1
+      if (marker === 0xd9 || marker === 0xda) break
+      if (marker === 0x01 || (marker >= 0xd0 && marker <= 0xd8)) continue
+      if (offset + 1 >= buffer.length) break
+      const segmentLength = buffer.readUInt16BE(offset)
+      if (segmentLength < 2 || offset + segmentLength > buffer.length) break
+      if (JPEG_SIZE_MARKERS.has(marker) && segmentLength >= 7) {
+        return {
+          width: buffer.readUInt16BE(offset + 5),
+          height: buffer.readUInt16BE(offset + 3)
+        }
+      }
+      offset += segmentLength
+    }
+  }
+  return null
+}
+
+async function hasSafePortableImageDimensions(filePath: string, extension: string): Promise<boolean> {
+  if (!PORTABLE_PREVIEW_EXTENSIONS.has(extension)) return false
+  const dimensions = encodedImageDimensions(await readFile(filePath), extension)
+  if (!dimensions || dimensions.width < 1 || dimensions.height < 1) return false
+  return (
+    dimensions.width <= MAX_ATTACHMENT_PREVIEW_DIMENSION &&
+    dimensions.height <= MAX_ATTACHMENT_PREVIEW_DIMENSION &&
+    dimensions.width * dimensions.height <= MAX_ATTACHMENT_PREVIEW_PIXELS
+  )
+}
+
+async function attachmentPreviewDataUrl(filePath: string, fileSize: number): Promise<string | undefined> {
+  const extension = extname(filePath).toLowerCase()
+  if (fileSize > MAX_ATTACHMENT_PREVIEW_BYTES || !IMAGE_EXTENSIONS.has(extension)) {
+    return undefined
+  }
+  try {
+    if (process.platform === 'win32' || process.platform === 'darwin') {
+      const thumbnail = await nativeImage.createThumbnailFromPath(filePath, {
+        width: ATTACHMENT_PREVIEW_SIZE,
+        height: ATTACHMENT_PREVIEW_SIZE
+      })
+      return thumbnail.isEmpty() ? undefined : thumbnail.toDataURL()
+    }
+    if (!(await hasSafePortableImageDimensions(filePath, extension))) return undefined
+    const image = nativeImage.createFromPath(filePath)
+    if (image.isEmpty()) return undefined
+    const { width, height } = image.getSize()
+    if (width < 1 || height < 1) return undefined
+    const scale = Math.min(1, ATTACHMENT_PREVIEW_SIZE / Math.max(width, height))
+    const thumbnail = scale < 1
+      ? image.resize({
+          width: Math.max(1, Math.round(width * scale)),
+          height: Math.max(1, Math.round(height * scale)),
+          quality: 'good'
+        })
+      : image
+    return thumbnail.toDataURL()
+  } catch {
+    // Unsupported or corrupt images remain usable as ordinary file attachments.
+    return undefined
+  }
+}
+
+async function attachmentFile(
+  root: string,
+  filePath: string,
+  fileSize: number,
+  sourcePath: string
+): Promise<AttachmentFile> {
+  const previewDataUrl = await attachmentPreviewDataUrl(filePath, fileSize)
+  return {
+    name: basename(filePath),
+    sourcePath,
+    path: toWorkspacePath(relative(root, filePath)),
+    absolutePath: filePath,
+    ...(previewDataUrl ? { previewDataUrl } : {})
+  }
 }
 
 export function registerFsHandlers(): void {
@@ -191,21 +300,12 @@ export function registerFsHandlers(): void {
           if (!info.isFile()) return { ok: false, error: `${basename(source)} is not a file.` }
 
           if (isInside(root, source)) {
-            files.push({
-              name: basename(source),
-              path: toWorkspacePath(relative(root, source)),
-              absolutePath: source
-            })
+            files.push(await attachmentFile(root, source, info.size, source))
             continue
           }
 
-          const target = await nextAttachmentPath(root, basename(source))
-          await copyFile(source, target)
-          files.push({
-            name: basename(target),
-            path: toWorkspacePath(relative(root, target)),
-            absolutePath: target
-          })
+          const target = await copyIntoAttachments(root, source, basename(source))
+          files.push(await attachmentFile(root, target, info.size, source))
         }
 
         return { ok: true, files }
