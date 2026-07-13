@@ -6,10 +6,11 @@ import {
   type CodexRunResult,
   type ClaudePermissionMode,
   type ClaudeRunParams,
-  type ClaudeUsageResult
+  type ClaudeUsageResult,
+  type CopilotLoginResult
 } from '@shared/ipc'
 import { getStore } from '../store'
-import { checkClaude, killRun, runClaude } from '../claude/runner'
+import { checkClaude, killRun, logoutClaude, openClaudeLogin, runClaude } from '../claude/runner'
 import { fetchClaudeUsage } from '../claude/usage'
 
 function readClaudeConfig(): {
@@ -28,6 +29,10 @@ function readClaudeConfig(): {
 
 export function registerClaudeHandlers(): void {
   ipcMain.handle(IPC.claude.check, (): Promise<CodexCheckResult> => checkClaude(readClaudeConfig().claudePath))
+
+  ipcMain.handle(IPC.claude.login, (): CopilotLoginResult => openClaudeLogin(readClaudeConfig().claudePath))
+
+  ipcMain.handle(IPC.claude.logout, (): CopilotLoginResult => logoutClaude())
 
   ipcMain.handle(
     IPC.claude.run,

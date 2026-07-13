@@ -12,8 +12,10 @@ import {
   type CodexReasoning,
   type CodexRunParams,
   type CodexRunResult,
-  type CodexSandbox
+  type CodexSandbox,
+  type CopilotLoginResult
 } from '@shared/ipc'
+import { openCliLoginTerminal } from '../cli-login'
 
 /**
  * Drives OpenAI's `codex` CLI as an alternative agent backend to LM Studio.
@@ -145,6 +147,69 @@ function collect(
   })
 }
 
+/** Decode a JWT payload without verification — enough to read local identity claims. */
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
+  const payload = token.split('.')[1]
+  if (!payload) return null
+  try {
+    const json = Buffer.from(payload.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8')
+    const parsed = JSON.parse(json) as unknown
+    return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : null
+  } catch {
+    return null
+  }
+}
+
+/** Read the signed-in identity from ~/.codex/auth.json (email + ChatGPT plan). */
+function readCodexAccount(): string | undefined {
+  try {
+    const raw = readFileSync(join(homedir(), '.codex', 'auth.json'), 'utf8')
+    const auth = JSON.parse(raw) as {
+      OPENAI_API_KEY?: string | null
+      tokens?: { id_token?: string }
+    }
+    const claims = auth.tokens?.id_token ? decodeJwtPayload(auth.tokens.id_token) : null
+    const email = typeof claims?.email === 'string' ? claims.email : undefined
+    const authClaims = claims?.['https://api.openai.com/auth'] as
+      | { chatgpt_plan_type?: string }
+      | undefined
+    const plan = typeof authClaims?.chatgpt_plan_type === 'string' ? authClaims.chatgpt_plan_type : undefined
+    if (email) return plan ? `${email} (${plan})` : email
+    if (auth.OPENAI_API_KEY) return 'API key'
+    return undefined
+  } catch {
+    return undefined
+  }
+}
+
+export function openCodexLogin(configured?: string): CopilotLoginResult {
+  const { path, found } = resolveCodexPath(configured)
+  if (!found) {
+    return {
+      ok: false,
+      error: 'Codex CLI not found. Install it, or set the binary path in agent backend settings.'
+    }
+  }
+  return openCliLoginTerminal('Codex login', path, ['login'])
+}
+
+export async function logoutCodex(configured?: string): Promise<CopilotLoginResult> {
+  const { path, found } = resolveCodexPath(configured)
+  if (!found) {
+    return {
+      ok: false,
+      error: 'Codex CLI not found. Install it, or set the binary path in agent backend settings.'
+    }
+  }
+  const result = await collect(path, ['logout'])
+  if (result.error) return { ok: false, error: result.error }
+  const text = `${result.stdout}\n${result.stderr}`.trim()
+  if (result.code !== 0 && !/not logged in/i.test(text)) {
+    return { ok: false, error: text.split('\n').find((l) => l.trim()) || 'codex logout failed.' }
+  }
+  return { ok: true }
+}
+
 export async function checkCodex(configured?: string): Promise<CodexCheckResult> {
   const { path, found } = resolveCodexPath(configured)
   if (!found) {
@@ -178,7 +243,8 @@ export async function checkCodex(configured?: string): Promise<CodexCheckResult>
     path,
     version,
     loggedIn,
-    authNote: authText.split('\n').find((l) => l.trim()) || undefined
+    authNote: authText.split('\n').find((l) => l.trim()) || undefined,
+    account: loggedIn ? readCodexAccount() : undefined
   }
 }
 

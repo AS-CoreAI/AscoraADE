@@ -1,5 +1,6 @@
-import { useState, type JSX } from 'react'
+import { useEffect, useState, type JSX } from 'react'
 import { Icon } from './Icon'
+import { api } from '@/lib/api'
 import { ProviderSelect, type ProviderSelectOption } from './ProviderSelect'
 import {
   CODEX_MODEL_PRESETS,
@@ -43,6 +44,77 @@ import {
 function useT(): (key: TranslationKey, values?: Record<string, string | number>) => string {
   const appLanguage = useApp((s) => s.appLanguage)
   return (key, values) => tr(appLanguage, key, values)
+}
+
+interface CliAuthState {
+  busy: boolean
+  status: string | null
+  signIn: () => Promise<void>
+  signOut: () => Promise<void>
+}
+
+/**
+ * Sign-in/sign-out actions for a CLI backend. Login opens an external
+ * terminal, so after launching it the hook re-checks the auth state on window
+ * focus and every few seconds until the account shows up.
+ */
+function useCliAuth(
+  login: () => Promise<{ ok: boolean; error?: string }>,
+  logout: () => Promise<{ ok: boolean; error?: string }>,
+  loggedIn: boolean | undefined,
+  recheck: () => Promise<void>
+): CliAuthState {
+  const t = useT()
+  const [busy, setBusy] = useState(false)
+  const [status, setStatus] = useState<string | null>(null)
+  const [watching, setWatching] = useState(false)
+
+  useEffect(() => {
+    if (!watching) return
+    if (loggedIn) {
+      setWatching(false)
+      setStatus(t('settings.signedIn'))
+      return
+    }
+    const onFocus = (): void => void recheck()
+    window.addEventListener('focus', onFocus)
+    const timer = window.setInterval(() => void recheck(), 5000)
+    return () => {
+      window.removeEventListener('focus', onFocus)
+      window.clearInterval(timer)
+    }
+    // `t` is recreated per render and would restart the watcher every time.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [watching, loggedIn, recheck])
+
+  const signIn = async (): Promise<void> => {
+    setBusy(true)
+    try {
+      const result = await login()
+      setStatus(result.ok ? t('settings.loginTerminalOpened') : result.error ?? t('settings.loginFailed'))
+      if (result.ok) setWatching(true)
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : t('settings.loginFailed'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const signOut = async (): Promise<void> => {
+    setBusy(true)
+    setWatching(false)
+    try {
+      const result = await logout()
+      setStatus(result.ok ? t('settings.signedOut') : result.error ?? t('settings.logoutFailed'))
+      await recheck()
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : t('settings.logoutFailed'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return { busy, status, signIn, signOut }
 }
 
 function LmStudioPanel(): JSX.Element {
@@ -200,6 +272,7 @@ function CodexPanel(): JSX.Element {
   const check = useApp((s) => s.codexCheck)
   const checking = useApp((s) => s.codexChecking)
   const checkCodex = useApp((s) => s.checkCodex)
+  const auth = useCliAuth(api.codex.login, api.codex.logout, check?.loggedIn, checkCodex)
 
   const [path, setPath] = useState(codexPath)
 
@@ -294,7 +367,9 @@ function CodexPanel(): JSX.Element {
         {!checking && check && check.installed && (
           <>
             ✓ {check.version ?? 'codex'} ·{' '}
-            {check.loggedIn ? check.authNote ?? t('settings.signedIn') : t('settings.notSignedInCodex')}
+            {check.loggedIn
+              ? [check.authNote ?? t('settings.signedIn'), check.account].filter(Boolean).join(' · ')
+              : t('settings.notSignedInCodex')}
             {check.path ? <div className="field-hint">{check.path}</div> : null}
           </>
         )}
@@ -306,9 +381,23 @@ function CodexPanel(): JSX.Element {
         </div>
       )}
 
-      <button className="btn" style={{ alignSelf: 'flex-start' }} onClick={() => void checkCodex()} disabled={checking}>
-        {t('settings.recheck')}
-      </button>
+      <div className="field-row" style={{ alignSelf: 'flex-start' }}>
+        {check?.installed && !check.loggedIn && (
+          <button className="btn btn-icon" onClick={() => void auth.signIn()} disabled={auth.busy || checking}>
+            <Icon name="terminal" size={14} />
+            {t('settings.signIn')}
+          </button>
+        )}
+        {check?.installed && check.loggedIn && (
+          <button className="btn" onClick={() => void auth.signOut()} disabled={auth.busy || checking}>
+            {t('settings.signOut')}
+          </button>
+        )}
+        <button className="btn" onClick={() => void checkCodex()} disabled={checking}>
+          {t('settings.recheck')}
+        </button>
+      </div>
+      {auth.status && <div className="field-hint">{auth.status}</div>}
     </>
   )
 }
@@ -456,6 +545,7 @@ function ClaudePanel(): JSX.Element {
   const check = useApp((s) => s.claudeCheck)
   const checking = useApp((s) => s.claudeChecking)
   const checkClaude = useApp((s) => s.checkClaude)
+  const auth = useCliAuth(api.claude.login, api.claude.logout, check?.loggedIn, checkClaude)
 
   const [path, setPath] = useState(claudePath)
   const apply = async (): Promise<void> => {
@@ -529,20 +619,30 @@ function ClaudePanel(): JSX.Element {
         {!checking && check && !check.installed && `✗ ${check.error ?? 'Claude Code CLI not found.'}`}
         {!checking && check && check.installed && (
           <>
-            ✓ {check.version ?? 'claude'} · {check.authNote ?? t('settings.ready')}
+            ✓ {check.version ?? 'claude'} ·{' '}
+            {[check.authNote ?? t('settings.ready'), check.account].filter(Boolean).join(' · ')}
             {check.path ? <div className="field-hint">{check.path}</div> : null}
           </>
         )}
       </div>
 
-      <button
-        className="btn"
-        style={{ alignSelf: 'flex-start' }}
-        onClick={() => void checkClaude()}
-        disabled={checking}
-      >
-        {t('settings.recheck')}
-      </button>
+      <div className="field-row" style={{ alignSelf: 'flex-start' }}>
+        {check?.installed && !check.loggedIn && (
+          <button className="btn btn-icon" onClick={() => void auth.signIn()} disabled={auth.busy || checking}>
+            <Icon name="terminal" size={14} />
+            {t('settings.signIn')}
+          </button>
+        )}
+        {check?.installed && check.loggedIn && (
+          <button className="btn" onClick={() => void auth.signOut()} disabled={auth.busy || checking}>
+            {t('settings.signOut')}
+          </button>
+        )}
+        <button className="btn" onClick={() => void checkClaude()} disabled={checking}>
+          {t('settings.recheck')}
+        </button>
+      </div>
+      {auth.status && <div className="field-hint">{auth.status}</div>}
     </>
   )
 }

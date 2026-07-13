@@ -77,6 +77,8 @@ export const IPC = {
   },
   codex: {
     check: 'codex:check',
+    login: 'codex:login',
+    logout: 'codex:logout',
     run: 'codex:run',
     abort: 'codex:abort',
     event: 'codex:event',
@@ -91,6 +93,8 @@ export const IPC = {
   },
   claude: {
     check: 'claude:check',
+    login: 'claude:login',
+    logout: 'claude:logout',
     run: 'claude:run',
     abort: 'claude:abort',
     event: 'claude:event',
@@ -836,6 +840,8 @@ export interface CodexCheckResult {
   loggedIn?: boolean
   /** Human-readable auth note, e.g. "Logged in using ChatGPT". */
   authNote?: string
+  /** Signed-in identity when it can be read locally, e.g. "user@mail.com (Plus)". */
+  account?: string
   error?: string
 }
 

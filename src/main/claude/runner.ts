@@ -1,6 +1,6 @@
 import { app, type WebContents } from 'electron'
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
-import { existsSync, readdirSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { delimiter, join } from 'node:path'
 import {
@@ -12,8 +12,10 @@ import {
   type ClaudePermissionMode,
   type ClaudeRunParams,
   type CodexEventPayload,
+  type CopilotLoginResult,
   type TokenUsage
 } from '@shared/ipc'
+import { openCliLoginTerminal } from '../cli-login'
 
 /**
  * Drives Anthropic's `claude` CLI as a third agent backend (alongside LM Studio
@@ -129,13 +131,91 @@ function collect(
   })
 }
 
-/** Weak login signal: presence of Claude Code credentials on disk. */
+const CLAUDE_CREDENTIAL_FILES = (): string[] => [
+  join(homedir(), '.claude', '.credentials.json'),
+  join(homedir(), '.config', 'claude', '.credentials.json')
+]
+
+const CLAUDE_CONFIG_FILE = (): string => join(homedir(), '.claude.json')
+
+interface ClaudeOauthAccount {
+  emailAddress?: string
+  organizationName?: string
+}
+
+/** Read the signed-in identity recorded by Claude Code in ~/.claude.json. */
+function readClaudeOauthAccount(): ClaudeOauthAccount | undefined {
+  try {
+    const raw = readFileSync(CLAUDE_CONFIG_FILE(), 'utf8')
+    const parsed = JSON.parse(raw) as { oauthAccount?: ClaudeOauthAccount }
+    return parsed.oauthAccount && typeof parsed.oauthAccount === 'object'
+      ? parsed.oauthAccount
+      : undefined
+  } catch {
+    return undefined
+  }
+}
+
+function claudeAccountLabel(): string | undefined {
+  const account = readClaudeOauthAccount()
+  if (!account?.emailAddress) return undefined
+  return account.organizationName
+    ? `${account.emailAddress} (${account.organizationName})`
+    : account.emailAddress
+}
+
+/**
+ * Login signal: an OAuth credentials file on disk, or an oauthAccount recorded
+ * in ~/.claude.json (macOS keeps the tokens in the Keychain, so the config
+ * entry is the only visible marker there).
+ */
 function looksLoggedIn(): boolean {
   return (
-    existsSync(join(homedir(), '.claude', '.credentials.json')) ||
-    existsSync(join(homedir(), '.claude.json')) ||
-    existsSync(join(homedir(), '.config', 'claude', '.credentials.json'))
+    CLAUDE_CREDENTIAL_FILES().some((file) => existsSync(file)) ||
+    readClaudeOauthAccount()?.emailAddress !== undefined
   )
+}
+
+export function openClaudeLogin(configured?: string): CopilotLoginResult {
+  const { path, found } = resolveClaudePath(configured)
+  if (!found) {
+    return {
+      ok: false,
+      error: 'Claude Code CLI not found. Install it, or set the binary path in agent backend settings.'
+    }
+  }
+  // `claude /login` starts the interactive REPL and immediately runs the
+  // sign-in flow; on a logged-out install plain `claude` would prompt too.
+  return openCliLoginTerminal('Claude login', path, ['/login'])
+}
+
+/**
+ * Sign out the way `/logout` does: drop the stored OAuth credentials and the
+ * account marker from ~/.claude.json, keeping every other setting intact.
+ */
+export function logoutClaude(): CopilotLoginResult {
+  let removed = false
+  try {
+    for (const file of CLAUDE_CREDENTIAL_FILES()) {
+      if (existsSync(file)) {
+        rmSync(file)
+        removed = true
+      }
+    }
+    const configFile = CLAUDE_CONFIG_FILE()
+    if (existsSync(configFile)) {
+      const parsed = JSON.parse(readFileSync(configFile, 'utf8')) as Record<string, unknown>
+      if ('oauthAccount' in parsed) {
+        delete parsed.oauthAccount
+        writeFileSync(configFile, JSON.stringify(parsed, null, 2))
+        removed = true
+      }
+    }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) }
+  }
+  if (!removed) return { ok: false, error: 'No stored Claude Code credentials were found.' }
+  return { ok: true }
 }
 
 export async function checkClaude(configured?: string): Promise<CodexCheckResult> {
@@ -160,7 +240,8 @@ export async function checkClaude(configured?: string): Promise<CodexCheckResult
     path,
     version: ver.stdout.trim().split('\n')[0] || undefined,
     loggedIn,
-    authNote: loggedIn ? 'Signed in (subscription)' : 'Run `claude` once to sign in'
+    authNote: loggedIn ? 'Signed in (subscription)' : 'Run `claude` once to sign in',
+    account: loggedIn ? claudeAccountLabel() : undefined
   }
 }
 

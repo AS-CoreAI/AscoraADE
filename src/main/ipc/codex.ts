@@ -7,10 +7,11 @@ import {
   type CodexRunParams,
   type CodexRunResult,
   type CodexSandbox,
-  type CodexUsageResult
+  type CodexUsageResult,
+  type CopilotLoginResult
 } from '@shared/ipc'
 import { getStore } from '../store'
-import { checkCodex, killRun, runCodex } from '../codex/runner'
+import { checkCodex, killRun, logoutCodex, openCodexLogin, runCodex } from '../codex/runner'
 import { fetchCodexUsage } from '../codex/usage'
 
 function readCodexConfig(): {
@@ -31,6 +32,10 @@ function readCodexConfig(): {
 
 export function registerCodexHandlers(): void {
   ipcMain.handle(IPC.codex.check, (): Promise<CodexCheckResult> => checkCodex(readCodexConfig().codexPath))
+
+  ipcMain.handle(IPC.codex.login, (): CopilotLoginResult => openCodexLogin(readCodexConfig().codexPath))
+
+  ipcMain.handle(IPC.codex.logout, (): Promise<CopilotLoginResult> => logoutCodex(readCodexConfig().codexPath))
 
   ipcMain.handle(
     IPC.codex.run,

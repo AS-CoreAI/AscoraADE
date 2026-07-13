@@ -227,6 +227,10 @@ const api = {
   },
   codex: {
     check: (): Promise<CodexCheckResult> => ipcRenderer.invoke(IPC.codex.check),
+    /** Opens a terminal running `codex login` (browser OAuth flow). */
+    login: (): Promise<CopilotLoginResult> => ipcRenderer.invoke(IPC.codex.login),
+    /** Signs the Codex CLI out (`codex logout`). */
+    logout: (): Promise<CopilotLoginResult> => ipcRenderer.invoke(IPC.codex.logout),
     /** Runs a Codex turn; `onEvent` fires per normalized stream event. */
     run: (
       id: string,
@@ -266,6 +270,10 @@ const api = {
   },
   claude: {
     check: (): Promise<CodexCheckResult> => ipcRenderer.invoke(IPC.claude.check),
+    /** Opens a terminal running `claude /login`. */
+    login: (): Promise<CopilotLoginResult> => ipcRenderer.invoke(IPC.claude.login),
+    /** Removes the stored Claude Code credentials (same effect as `/logout`). */
+    logout: (): Promise<CopilotLoginResult> => ipcRenderer.invoke(IPC.claude.logout),
     /** Runs a Claude Code turn; `onEvent` fires per normalized stream event. */
     run: (
       id: string,

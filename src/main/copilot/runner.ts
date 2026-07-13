@@ -15,6 +15,7 @@ import {
   type CopilotReasoning,
   type CopilotRunParams
 } from '@shared/ipc'
+import { openCliLoginTerminal } from '../cli-login'
 
 /**
  * Drives GitHub's `copilot` CLI as another local agent backend.
@@ -198,14 +199,6 @@ export async function checkCopilot(configured?: string, verifyAuth = false): Pro
   }
 }
 
-function psQuote(value: string): string {
-  return `'${value.replace(/'/g, "''")}'`
-}
-
-function shQuote(value: string): string {
-  return `'${value.replace(/'/g, "'\\''")}'`
-}
-
 export function openCopilotLogin(configured?: string): CopilotLoginResult {
   const { path, found } = resolveCopilotPath(configured)
   if (!found) {
@@ -214,77 +207,7 @@ export function openCopilotLogin(configured?: string): CopilotLoginResult {
       error: 'GitHub Copilot CLI not found. Install it, or set the binary path in agent backend settings.'
     }
   }
-
-  try {
-    if (process.platform === 'win32') {
-      const command =
-        `& ${psQuote(path)} login; ` +
-        'Write-Host ""; ' +
-        'Write-Host "After login completes, return to Ascora ADE. It will re-check automatically."'
-      // Launch through `cmd /c start` so a NEW console window appears. Spawning
-      // powershell directly with detached:true sets DETACHED_PROCESS, which gives
-      // the child no console at all — the login terminal would never show up.
-      // -EncodedCommand (base64 UTF-16LE) sidesteps start's quoting rules.
-      const encoded = Buffer.from(command, 'utf16le').toString('base64')
-      const child = spawn(
-        'cmd.exe',
-        [
-          '/c',
-          'start',
-          'Copilot login',
-          'powershell.exe',
-          '-NoExit',
-          '-NoProfile',
-          '-ExecutionPolicy',
-          'Bypass',
-          '-EncodedCommand',
-          encoded
-        ],
-        {
-          cwd: homedir(),
-          detached: true,
-          stdio: 'ignore',
-          windowsHide: true
-        }
-      )
-      child.unref()
-      return { ok: true }
-    }
-
-    if (process.platform === 'darwin') {
-      const command = `${shQuote(path)} login; echo; echo "After login completes, return to Ascora ADE. It will re-check automatically."`
-      const child = spawn(
-        'osascript',
-        ['-e', `tell application "Terminal" to do script ${JSON.stringify(command)}`],
-        { detached: true, stdio: 'ignore' }
-      )
-      child.unref()
-      return { ok: true }
-    }
-
-    const command = `${shQuote(path)} login; echo; read -r -p "Return to Ascora ADE; it will re-check automatically. Press Enter to close."`
-    const terminal = process.env.TERMINAL?.trim()
-    const candidates: Array<[string, string[]]> = [
-      ['x-terminal-emulator', ['-e', 'sh', '-lc', command]],
-      ['gnome-terminal', ['--', 'sh', '-lc', command]],
-      ['konsole', ['-e', 'sh', '-lc', command]],
-      ['xterm', ['-e', 'sh', '-lc', command]]
-    ]
-    if (terminal) candidates.unshift([terminal, ['-e', 'sh', '-lc', command]])
-    let lastError = ''
-    for (const [file, args] of candidates) {
-      try {
-        const child = spawn(file, args, { detached: true, stdio: 'ignore' })
-        child.unref()
-        return { ok: true }
-      } catch (err) {
-        lastError = err instanceof Error ? err.message : String(err)
-      }
-    }
-    return { ok: false, error: lastError || 'Unable to open a terminal for copilot login.' }
-  } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) }
-  }
+  return openCliLoginTerminal('Copilot login', path, ['login'])
 }
 
 // ---------- git change snapshot ----------
