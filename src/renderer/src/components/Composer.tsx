@@ -109,6 +109,7 @@ export const GEMINI_PERMISSION_SHORT_KEY: Record<GeminiApprovalMode, Translation
 export const CODEX_MODEL_PRESETS = [
   'gpt-5.6-terra',
   'gpt-5.6-lunna',
+  'gpt-5.6-sol',
   'gpt-5.5',
   'gpt-5.4',
   'gpt-5.4-mini',
