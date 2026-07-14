@@ -644,7 +644,7 @@ export function getStore(): Store {
     const file = join(userData, 'ascora-store.json')
     console.warn(
       '[store] better-sqlite3 unavailable — using JSON store fallback ' +
-        '(install C++ build tools, then `npm install better-sqlite3`):',
+        '(install C++ build tools, then `npm run rebuild`):',
       err instanceof Error ? err.message : err
     )
     store = new JsonStore(file)

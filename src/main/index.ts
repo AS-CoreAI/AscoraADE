@@ -12,6 +12,20 @@ import { stopAllBlueprints } from './blueprint/runner'
 // This does not bypass a challenge; it lets the user's successful solve stick.
 app.commandLine.appendSwitch('disable-blink-features', 'AutomationControlled')
 
+// Keep provider sign-in on the password/2FA path. Chromium's automatic
+// passkey discovery can otherwise hand the request to Windows WebAuthn and
+// open the native "Windows Security — choose a passkey" dialog without an
+// explicit user action. The Windows-only flag is ignored on macOS/Linux.
+app.commandLine.appendSwitch(
+  'disable-features',
+  [
+    'WebAuthenticationUseNativeWinApi',
+    'WebAuthenticationPasskeyUpgrade',
+    'WebAuthenticationImmediateGet',
+    'WebAuthenticationImmediateGetAutoselect'
+  ].join(',')
+)
+
 // Single-instance lock: focus the existing window instead of opening a second.
 if (!app.requestSingleInstanceLock()) {
   app.quit()

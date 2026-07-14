@@ -96,6 +96,28 @@ const cancelledOps = new Set<string>()
 let netListenerInstalled = false
 let sessionHeadersInstalled = false
 
+/**
+ * The single identity WProvider presents everywhere — every provider, every
+ * hidden driver window, every sign-in redirect. We spoof Firefox rather than
+ * Chrome because Electron is Chromium: a Chrome UA is contradicted by the
+ * Chromium-only JS surface (navigator.userAgentData never carries the "Google
+ * Chrome" brand) and Google's sign-in rejects that mismatch as an insecure
+ * embedded browser. Firefox has no Client Hints and no such probes, so it is
+ * the one mainstream identity Electron can present coherently once the
+ * Chromium-only globals are stripped (see the wprovider preloads). Bump the
+ * version when providers start flagging it as outdated.
+ */
+function firefoxUserAgent(): string {
+  const version = '140.0'
+  if (process.platform === 'win32') {
+    return `Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:${version}) Gecko/20100101 Firefox/${version}`
+  }
+  if (process.platform === 'darwin') {
+    return `Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:${version}) Gecko/20100101 Firefox/${version}`
+  }
+  return `Mozilla/5.0 (X11; Linux x86_64; rv:${version}) Gecko/20100101 Firefox/${version}`
+}
+
 function enqueueWProviderOp<T>(run: () => Promise<T>): Promise<T> {
   const next = queue.then(
     () => run(),
@@ -136,38 +158,53 @@ function usesRenderedDomCapture(service: WProviderService): boolean {
 
 function wpSession(): Session {
   const ses = session.fromPartition(PARTITION)
-  // Strip the Electron/app tokens: some SSO providers (Google) refuse logins
-  // from user agents they classify as embedded browsers.
-  const ua = ses
-    .getUserAgent()
-    .replace(/\sElectron\/[\d.]+/i, '')
-    .replace(/\sascora-ade\/[\d.]+/i, '')
+  // One coherent Firefox identity for every provider and every redirect in the
+  // persistent WProvider session (including Google OAuth).
+  const ua = firefoxUserAgent()
   if (ua !== ses.getUserAgent()) ses.setUserAgent(ua)
   if (!sessionHeadersInstalled) {
     sessionHeadersInstalled = true
-    const chromeMajor = /Chrome\/(\d+)/i.exec(ua)?.[1] ?? '132'
     ses.webRequest.onBeforeSendHeaders(
-      { urls: ['https://grok.com/*', 'https://*.grok.com/*', 'https://*.x.ai/*'] },
+      { urls: ['https://*/*'] },
       (details, callback) => {
-        // Chromium's default client hints can still reveal the Electron shell
-        // after the classic User-Agent has been cleaned. Keep both views of the
-        // browser consistent so Cloudflare can persist its challenge result.
+        // Force the Firefox UA on every request — main frame, subresources, and
+        // the service-worker/background fetches a per-window override misses —
+        // and strip the Chromium-only User-Agent Client Hints entirely, since
+        // real Firefox sends none. A mixed identity is what Google's sign-in
+        // rejects as an insecure browser.
         const headers = { ...details.requestHeaders }
-        const setHeader = (name: string, value: string): void => {
-          for (const existing of Object.keys(headers)) {
-            if (existing.toLowerCase() === name.toLowerCase()) delete headers[existing]
-          }
-          headers[name] = value
+        for (const existing of Object.keys(headers)) {
+          const lower = existing.toLowerCase()
+          if (lower === 'user-agent' || lower.startsWith('sec-ch-ua')) delete headers[existing]
         }
-        setHeader('User-Agent', ua)
-        setHeader('Sec-CH-UA', `"Google Chrome";v="${chromeMajor}", "Chromium";v="${chromeMajor}", "Not_A Brand";v="24"`)
-        setHeader('Sec-CH-UA-Mobile', '?0')
-        setHeader('Sec-CH-UA-Platform', process.platform === 'win32' ? '"Windows"' : process.platform === 'darwin' ? '"macOS"' : '"Linux"')
+        headers['User-Agent'] = ua
         callback({ requestHeaders: headers })
       }
     )
   }
   return ses
+}
+
+/**
+ * Rejected sign-in attempts ("This browser or app may not be secure") leave
+ * anti-abuse and half-established session cookies on google.com that make
+ * accounts.google.com silently 302 the next attempt straight back to Gemini —
+ * the sign-in form never appears. The user reaches this path only when no
+ * usable session exists, so drop every Google cookie and start clean.
+ */
+async function clearStaleGoogleAuthCookies(): Promise<void> {
+  const ses = wpSession()
+  for (const domain of ['google.com', 'youtube.com']) {
+    const cookies = await ses.cookies.get({ domain })
+    await Promise.all(
+      cookies.map((cookie) =>
+        ses.cookies.remove(
+          `https://${cookie.domain?.replace(/^\./, '') || domain}${cookie.path || '/'}`,
+          cookie.name
+        )
+      )
+    )
+  }
 }
 
 async function clearStaleGrokChallengeCookies(): Promise<void> {
@@ -182,27 +219,39 @@ async function clearStaleGrokChallengeCookies(): Promise<void> {
 }
 
 /**
- * @param withTap Patch window.fetch/XHR to tap chat-completion streams. Only
- *   the hidden driver window needs this — bot-management on these sites
- *   commonly fingerprints a hooked fetch (toString() no longer native) or a
- *   disabled context isolation, so the visible sign-in window is kept as
- *   close to a stock Chromium tab as possible. Without this, DeepSeek's login
- *   modal was closing itself into a "verifying" challenge before sign-in
- *   could complete.
+ * Window flavors:
+ *  - `tap`: hidden driver window; patches window.fetch/XHR to read completion
+ *    streams. Only this one needs a hooked fetch, which bot-management commonly
+ *    fingerprints (toString() no longer native), so the sign-in windows avoid it.
+ *  - `plain`: visible sign-in window kept as close to a stock, sandboxed
+ *    Chromium tab as possible — no preload, no Node. (DeepSeek's login modal
+ *    closed itself into a "verifying" challenge when a preload was present.)
+ *  - `google`: visible Google sign-in window. Its UA is spoofed to Firefox, so
+ *    it needs a preload (contextIsolation off) to strip the Chromium-only JS
+ *    surface that would otherwise contradict that UA. No fetch tap.
  */
-function createWindow(show: boolean, withTap = true): BrowserWindow {
+type WindowVariant = 'tap' | 'plain' | 'google'
+
+function createWindow(show: boolean, variant: WindowVariant = 'tap'): BrowserWindow {
   wpSession() // make sure the partition exists with the cleaned UA
-  const win = new BrowserWindow({
-    show,
-    width: 1180,
-    height: 840,
-    title: 'Ascora WProvider',
-    autoHideMenuBar: true,
-    webPreferences: withTap
+  const webPreferences =
+    variant === 'plain'
       ? {
           partition: PARTITION,
-          preload: join(__dirname, '../preload/wprovider.js'),
-          // The preload must patch the PAGE's window.fetch, so no isolation here.
+          contextIsolation: true,
+          // The visible authentication surface needs no preload or Node APIs;
+          // keep it equivalent to a sandboxed browser tab.
+          sandbox: true,
+          nodeIntegration: false,
+          backgroundThrottling: false
+        }
+      : {
+          partition: PARTITION,
+          preload: join(
+            __dirname,
+            variant === 'google' ? '../preload/wprovider-google.js' : '../preload/wprovider.js'
+          ),
+          // The preload must patch the PAGE's globals, so no isolation here.
           // Nothing is exposed to the page — ipcRenderer stays in the preload's
           // closure — and the window only ever navigates to the provider's site.
           contextIsolation: false,
@@ -210,13 +259,13 @@ function createWindow(show: boolean, withTap = true): BrowserWindow {
           nodeIntegration: false,
           backgroundThrottling: false
         }
-      : {
-          partition: PARTITION,
-          contextIsolation: true,
-          sandbox: false,
-          nodeIntegration: false,
-          backgroundThrottling: false
-        }
+  const win = new BrowserWindow({
+    show,
+    width: 1180,
+    height: 840,
+    title: 'Ascora WProvider',
+    autoHideMenuBar: true,
+    webPreferences
   })
   return win
 }
@@ -524,12 +573,31 @@ const QWEN_PENDING_ACTIVATION_MESSAGE =
 function composerLookupJs(): string {
   return `(() => {
     const selectors = ${JSON.stringify(COMPOSER_SELECTORS)};
+    // Cloudflare Turnstile injects a hidden textarea into the provider page.
+    // It is a challenge response transport, not the web chat's composer.
+    const isChallengeField = (el) => {
+      const identity = [
+        el.id,
+        el.getAttribute?.('name'),
+        el.getAttribute?.('class'),
+        el.getAttribute?.('aria-label')
+      ].filter(Boolean).join(' ');
+      if (/turnstile|captcha|challenge/i.test(identity)) return true;
+      return Boolean(
+        el.closest?.(
+          '[class*="turnstile" i], [id*="turnstile" i], [class*="captcha" i], [id*="captcha" i], [class*="challenge" i], [id*="challenge" i]'
+        )
+      );
+    };
+    let hiddenCandidate = null;
     for (const sel of selectors) {
-      const el = document.querySelector(sel);
-      if (el && !el.disabled && el.offsetParent !== null) return el;
-      if (el && !el.disabled) return el;
+      for (const el of document.querySelectorAll(sel)) {
+        if (el.disabled || el.getAttribute?.('aria-disabled') === 'true' || isChallengeField(el)) continue;
+        if (el.offsetParent !== null) return el;
+        hiddenCandidate ||= el;
+      }
     }
-    return null;
+    return hiddenCandidate;
   })()`
 }
 
@@ -917,11 +985,13 @@ async function checkDeepSeekLoggedIn(): Promise<boolean> {
 /**
  * Services whose page shows a usable-looking composer even when signed out —
  * ChatGPT lets anonymous visitors type into the real composer, and Mistral's
- * login screen carries a stray textarea that composerLookupJs picks up. For
- * these, composer presence alone must never count as "signed in".
+ * login screen carries a stray textarea that composerLookupJs picks up. Claude
+ * also passes through challenge and login surfaces on the chat origin. For
+ * these services, composer presence alone must never count as "signed in".
  */
 const COMPOSER_NOT_ENOUGH_SERVICES: ReadonlySet<WProviderService> = new Set([
   'mistral',
+  'claude',
   'gemini',
   'chatgpt'
 ])
@@ -1148,7 +1218,7 @@ async function checkMistralLoggedIn(): Promise<boolean> {
 async function checkClaudeLoggedIn(): Promise<boolean> {
   for (const win of [authWin, hiddenWin]) {
     if (!win || !windowOnService(win, 'claude')) continue
-    if (await hasComposer(win)) return true
+    if (await serviceComposerSignedIn(win, 'claude')) return true
   }
 
   // Do not navigate the hidden driver out from under an in-flight generation.
@@ -1582,7 +1652,12 @@ export async function loginWProvider(service: WProviderService): Promise<WProvid
   // the next Grok login immediately re-enter the same challenge. Preserve the
   // valid cf_clearance/auth cookies, but discard only those transient attempts.
   if (service === 'grok') await clearStaleGrokChallengeCookies()
-  authWin = createWindow(true, false)
+  if (service === 'gemini') await clearStaleGoogleAuthCookies()
+  // The whole session already presents Firefox (UA + no Client Hints). Google
+  // sign-in additionally needs the page's JS surface to match, so Gemini's
+  // window uses the 'google' preload that strips the Chromium-only globals
+  // (navigator.userAgentData, window.chrome, …); see wprovider-google.ts.
+  authWin = createWindow(true, service === 'gemini' ? 'google' : 'plain')
   const win = authWin
   win.on('closed', () => {
     authWin = null

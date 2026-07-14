@@ -1,6 +1,6 @@
 appId: com.ascora.ade
 productName: Ascora ADE
-copyright: Copyright © 2026 Ascora
+copyright: Copyright © 2026 ASCore AI (ascoreai.com)
 
 directories:
   output: dist
@@ -27,6 +27,18 @@ files:
 
 win:
   icon: build/icon.png
+  # Never publish an unsigned Windows artifact. Release/CI must provide an
+  # OV/EV certificate issued to exactly "ASCore AI" via WIN_CSC_LINK and
+  # WIN_CSC_KEY_PASSWORD (or make it available in the certificate store).
+  forceCodeSigning: true
+  publisherName:
+    - ASCore AI
+  legalTrademarks: ASCore AI — https://ascoreai.com
+  signtoolOptions:
+    publisherName: ASCore AI
+    signingHashAlgorithms:
+      - sha256
+    rfc3161TimeStampServer: http://timestamp.digicert.com
   target:
     - target: nsis
       arch: [x64]

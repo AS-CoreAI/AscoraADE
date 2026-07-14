@@ -2,9 +2,15 @@
   "name": "ascora-ade",
   "version": "1.2.3",
   "description": "Ascora ADE — Agentic Development Environment for local LLMs (LM Studio)",
-  "author": "Ascora",
+  "author": {
+    "name": "ASCore AI",
+    "url": "https://ascoreai.com"
+  },
   "homepage": "https://ade.ascoreai.com",
   "license": "MIT",
+  "engines": {
+    "node": ">=22.12.0"
+  },
   "main": "./out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
@@ -15,9 +21,10 @@
     "typecheck:web": "tsc -p tsconfig.web.json --noEmit",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
     "rebuild": "electron-rebuild -f -w better-sqlite3",
+    "rebuild:optional": "electron-rebuild -f -w better-sqlite3 || node -e \"console.warn('[ascora] better-sqlite3 rebuild skipped - using JSON store fallback (install C++ build tools, then run npm run rebuild)')\"",
     "dist:win": "electron-vite build && electron-builder --win",
     "dist:linux": "electron-vite build && electron-builder --linux",
-    "postinstall": "electron-rebuild -f -w better-sqlite3 || echo \"[ascora] better-sqlite3 rebuild skipped — using JSON store fallback (install C++ build tools, then run: npm install better-sqlite3)\""
+    "postinstall": "install-electron && npm run rebuild:optional"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.6.0",
@@ -34,7 +41,7 @@
     "zustand": "^5.0.3"
   },
   "optionalDependencies": {
-    "better-sqlite3": "^11.8.1"
+    "better-sqlite3": "^12.11.1"
   },
   "devDependencies": {
     "@electron/rebuild": "^3.7.1",
@@ -44,7 +51,7 @@
     "@types/react-dom": "^18.3.5",
     "@types/ssh2": "^1.15.5",
     "@vitejs/plugin-react": "^4.3.4",
-    "electron": "^34.0.0",
+    "electron": "^43.1.0",
     "electron-builder": "^25.1.8",
     "electron-vite": "^3.0.0",
     "typescript": "^5.7.3",
