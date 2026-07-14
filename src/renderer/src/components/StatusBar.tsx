@@ -1,5 +1,5 @@
-import { useEffect, type JSX } from 'react'
-import { useApp, type AppLanguage } from '@/state/store'
+import { useEffect, useId, useRef, useState, type JSX } from 'react'
+import { useApp, type AppLanguage, type LiveOpenTarget } from '@/state/store'
 import { tr, type TranslationKey } from '@/language'
 import { Icon } from './Icon'
 import {
@@ -15,12 +15,21 @@ import { WPROVIDER_SERVICE_INFO } from '@shared/ipc'
 
 /** Re-poll Claude usage every few minutes while it's the active backend. */
 const USAGE_POLL_MS = 3 * 60 * 1000
+const LIVE_TARGET_STORAGE_KEY = 'ascora.live-open-target'
 
 const CONN_COLOR: Record<string, string> = {
   unknown: 'var(--text-faint)',
   connecting: 'var(--blue)',
   connected: 'var(--accent)',
   error: 'var(--danger)'
+}
+
+function savedLiveTarget(): LiveOpenTarget {
+  try {
+    return localStorage.getItem(LIVE_TARGET_STORAGE_KEY) === 'browser' ? 'browser' : 'ascora'
+  } catch {
+    return 'ascora'
+  }
 }
 
 /** Compact "resets in 4h" label from an ISO reset timestamp. */
@@ -36,6 +45,10 @@ export function resetLabel(iso?: string, language: AppLanguage = 'en'): string {
 }
 
 export function StatusBar(): JSX.Element {
+  const [liveTarget, setLiveTarget] = useState<LiveOpenTarget>(savedLiveTarget)
+  const [liveTargetOpen, setLiveTargetOpen] = useState(false)
+  const liveTargetRef = useRef<HTMLSpanElement>(null)
+  const liveTargetMenuId = useId()
   const active = useApp((s) => s.active)
   const provider = useApp((s) => s.provider)
   const model = useApp((s) => s.model)
@@ -90,6 +103,17 @@ export function StatusBar(): JSX.Element {
   const current = openFiles.find((f) => f.path === activeFile)
   const isHtml = !!current && /\.html?$/i.test(current.name)
 
+  const chooseLiveTarget = (target: LiveOpenTarget): void => {
+    setLiveTarget(target)
+    setLiveTargetOpen(false)
+    try {
+      localStorage.setItem(LIVE_TARGET_STORAGE_KEY, target)
+    } catch {
+      // The selection still works for this session when storage is unavailable.
+    }
+    void goLive(target)
+  }
+
   const isCodex = provider === 'codex'
   const isCopilot = provider === 'copilot'
   const isClaude = provider === 'claude'
@@ -115,6 +139,22 @@ export function StatusBar(): JSX.Element {
     const timer = setInterval(() => void refresh(), USAGE_POLL_MS)
     return () => clearInterval(timer)
   }, [isCodex, isClaude, refreshCodexUsage, refreshClaudeUsage])
+
+  useEffect(() => {
+    if (!liveTargetOpen) return
+    const closeOnOutside = (event: PointerEvent): void => {
+      if (!liveTargetRef.current?.contains(event.target as Node)) setLiveTargetOpen(false)
+    }
+    const closeOnEscape = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') setLiveTargetOpen(false)
+    }
+    window.addEventListener('pointerdown', closeOnOutside)
+    window.addEventListener('keydown', closeOnEscape)
+    return () => {
+      window.removeEventListener('pointerdown', closeOnOutside)
+      window.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [liveTargetOpen])
 
   // Headline usage window (most-consumed) for the status-bar indicator.
   const usageWin = isCodex ? codexUsage?.headline : isClaude ? claudeUsage?.headline : undefined
@@ -258,33 +298,81 @@ export function StatusBar(): JSX.Element {
           <Icon name="terminal" size={12} /> {sshConn.username}@{sshConn.host}
         </button>
       )}
-      {!activeSsh && isHtml &&
-        (liveUrl ? (
-          <>
+      {!activeSsh && isHtml && (
+        <span className="live-controls">
+          <button
+            type="button"
+            className={`seg seg-btn${liveUrl ? ' live-on' : ''}`}
+            onClick={() => void goLive(liveTarget)}
+            title={
+              liveTarget === 'browser'
+                ? t('status.openLiveInBrowser')
+                : t('status.openLiveInAscora')
+            }
+          >
+            <Icon name="globe" size={12} />
+            {liveUrl ? `Live${livePort ? ` :${livePort}` : ''}` : t('status.goLive')}
+          </button>
+          <span
+            className={`live-target-picker${liveTargetOpen ? ' open' : ''}`}
+            ref={liveTargetRef}
+          >
             <button
-              className="seg seg-btn live-on"
-              onClick={() => void goLive()}
-              title={t('status.openLivePreview')}
+              type="button"
+              className="seg seg-btn live-target-toggle"
+              title={t('status.chooseLiveTarget')}
+              aria-label={t('status.chooseLiveTarget')}
+              aria-haspopup="listbox"
+              aria-expanded={liveTargetOpen}
+              aria-controls={liveTargetMenuId}
+              onClick={() => setLiveTargetOpen((open) => !open)}
             >
-              <Icon name="globe" size={12} /> Live{livePort ? ` :${livePort}` : ''}
+              <Icon name="chevronDown" size={10} />
             </button>
+            {liveTargetOpen && (
+              <div
+                className="live-target-menu"
+                id={liveTargetMenuId}
+                role="listbox"
+                aria-label={t('status.chooseLiveTarget')}
+              >
+                <button
+                  type="button"
+                  className="live-target-option"
+                  role="option"
+                  aria-selected={liveTarget === 'ascora'}
+                  onClick={() => chooseLiveTarget('ascora')}
+                >
+                  <Icon name="maximize" size={13} />
+                  <span>{t('status.openLiveInAscora')}</span>
+                  {liveTarget === 'ascora' && <Icon name="check" size={13} />}
+                </button>
+                <button
+                  type="button"
+                  className="live-target-option"
+                  role="option"
+                  aria-selected={liveTarget === 'browser'}
+                  onClick={() => chooseLiveTarget('browser')}
+                >
+                  <Icon name="external" size={13} />
+                  <span>{t('status.openLiveInBrowser')}</span>
+                  {liveTarget === 'browser' && <Icon name="check" size={13} />}
+                </button>
+              </div>
+            )}
+          </span>
+          {liveUrl && (
             <button
-              className="seg seg-btn"
+              type="button"
+              className="seg seg-btn live-stop"
               onClick={() => void stopLive()}
               title={t('status.stopLiveServer')}
             >
               <Icon name="x" size={12} />
             </button>
-          </>
-        ) : (
-          <button
-            className="seg seg-btn"
-            onClick={() => void goLive()}
-            title={t('status.startLiveServer')}
-          >
-            <Icon name="globe" size={12} /> {t('status.goLive')}
-          </button>
-        ))}
+          )}
+        </span>
+      )}
       {current && <span className="seg">{current.language}</span>}
       <span className="seg">{active ? active.path : t('status.noFolderOpen')}</span>
     </div>

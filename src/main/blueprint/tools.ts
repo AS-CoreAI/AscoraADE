@@ -9,6 +9,7 @@ import {
   listAgentDir,
   readAgentFile,
   runAgentCommand,
+  runAgentTypescript,
   searchAgentFiles,
   writeAgentFile
 } from '../ipc/agent'
@@ -47,7 +48,8 @@ export function blueprintAgentModePrompt(workspace?: Workspace): string {
         '- search_files(query, [path], [regex], [glob], [context], [case_sensitive]): search project files',
         '- write_file(path, content): create or fully overwrite a file',
         '- edit_file(path, old_string, new_string, [replace_all]): replace an exact snippet',
-        '- run_command(command): run a one-shot command in the project root'
+        '- run_command(command): run a one-shot command in the project root',
+        '- run_typescript(code): run TypeScript that defines async function main() in the project root'
       ]
     : []
 
@@ -204,7 +206,10 @@ export async function executeBlueprintTool(
       : `Error: ${result.error}`
   }
 
-  const result = await runAgentCommand(root, asString(call.args.command), signal)
+  const result =
+    call.name === 'run_typescript'
+      ? await runAgentTypescript(root, asString(call.args.code), signal)
+      : await runAgentCommand(root, asString(call.args.command), signal)
   if (!result.ok) return `Error: ${result.error}`
   const head = result.timedOut ? 'Exit: killed (timeout)' : `Exit code: ${result.code}`
   const output = [head]

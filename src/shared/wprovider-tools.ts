@@ -6,6 +6,7 @@ export const WPROVIDER_TOOL_NAMES = [
   'write_file',
   'edit_file',
   'run_command',
+  'run_typescript',
   'web_fetch',
   'web_search'
 ] as const
@@ -29,12 +30,21 @@ export function isWProviderToolName(name: string): name is WProviderToolName {
   return (WPROVIDER_TOOL_NAMES as readonly string[]).includes(name)
 }
 
+/**
+ * `run_typescript` follows Mistral's native convention: the supplied program
+ * defines `main()` and the host invokes it once. Keep the wrapper shared so
+ * local, SSH and Blueprint executions have identical behaviour.
+ */
+export function wrapWProviderTypescript(code: string): string {
+  return `${code}\n\n;Promise.resolve().then(() => {\n  if (typeof main !== 'function') {\n    throw new Error('run_typescript code must define a main() function.')\n  }\n  return main()\n}).then((value) => {\n  if (value !== undefined) {\n    console.log(typeof value === 'string' ? value : JSON.stringify(value, null, 2))\n  }\n}).catch((error) => {\n  console.error(error instanceof Error ? error.stack || error.message : String(error))\n  process.exitCode = 1\n})\n`
+}
+
 /** True when text appears to be a tool request even if its JSON cannot be parsed. */
 export function hasWProviderToolCallIntent(content: string): boolean {
   return (
     /```tool_call\b/i.test(content) ||
-    /(?:^|\n)\s*tool_call\s*(?:\n|$)/i.test(content) ||
-    /\{\s*"tool"\s*:/.test(content)
+    /(?:^|\n)\s*tool_call\s*(?:\{|\n|$)/i.test(content) ||
+    /\{\s*"(?:tool|name)"\s*:/.test(content)
   )
 }
 

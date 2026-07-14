@@ -2752,6 +2752,78 @@ button.changes-badge:hover {
 .statusbar .seg-btn.live-on {
   color: var(--accent);
 }
+.statusbar .live-controls {
+  height: 100%;
+  display: inline-flex;
+  align-items: center;
+}
+.statusbar .live-target-picker {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+.statusbar .live-target-toggle {
+  width: 17px;
+  height: 18px;
+  justify-content: center;
+  gap: 0;
+  margin-left: 3px;
+  padding: 0;
+  border-left: 1px solid var(--border);
+  border-radius: 2px;
+}
+.statusbar .live-target-toggle:hover,
+.statusbar .live-target-picker.open .live-target-toggle {
+  color: var(--text);
+  background: var(--bg-hover);
+}
+.statusbar .live-target-menu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 5px);
+  z-index: 80;
+  min-width: 184px;
+  padding: 5px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  box-shadow: 0 10px 28px var(--modal-shadow);
+}
+.statusbar .live-target-option {
+  width: 100%;
+  min-height: 30px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+.statusbar .live-target-option:hover,
+.statusbar .live-target-option:focus-visible,
+.statusbar .live-target-option[aria-selected='true'] {
+  color: var(--text);
+  background: var(--bg-hover);
+}
+.statusbar .live-target-option > span {
+  flex: 1;
+  white-space: nowrap;
+}
+.statusbar .live-target-option > svg {
+  flex-shrink: 0;
+}
+.statusbar .live-target-option > svg:last-child:not(:first-child) {
+  color: var(--accent);
+}
+.statusbar .live-stop {
+  margin-left: 7px;
+}
 /* Claude subscription usage indicator (mirrors the Claude Code extension). */
 .statusbar .seg-btn.usage-warn {
   color: var(--danger);
@@ -3522,6 +3594,10 @@ button.changes-badge:hover {
 .wprovider-auth-status {
   color: var(--accent);
   font-weight: 600;
+}
+.wprovider-auth-status.unauthorized {
+  color: var(--text-faint);
+  font-weight: 500;
 }
 
 /* ---------- Agent tool cards ---------- */

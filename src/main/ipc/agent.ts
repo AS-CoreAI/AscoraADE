@@ -1,7 +1,8 @@
 import { ipcMain } from 'electron'
-import { exec } from 'node:child_process'
+import { exec, execFile } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import { delimiter, isAbsolute, join, relative, resolve } from 'node:path'
 import {
   IPC,
@@ -17,6 +18,7 @@ import {
   type AgentSearchResult,
   type AgentWriteResult
 } from '@shared/ipc'
+import { wrapWProviderTypescript } from '@shared/wprovider-tools'
 
 /**
  * Tool primitives the agent loop calls (see store.ts). Every path is resolved
@@ -29,6 +31,7 @@ const MAX_READ_BYTES = 1024 * 1024 // 1 MB — keep tool output within token bud
 const MAX_RANGE_BYTES = 8 * 1024 * 1024 // ranged reads may slice a bigger file
 const RUN_TIMEOUT_MS = 60_000
 const RUN_MAX_BUFFER = 8 * 1024 * 1024
+const TYPESCRIPT_MAX_BYTES = 1024 * 1024
 const SEARCH_MAX_MATCHES = 200
 const SEARCH_MAX_FILE_BYTES = 1024 * 1024
 const SEARCH_LINE_CAP = 240
@@ -472,6 +475,61 @@ function runCommand(root: string, command: string, signal?: AbortSignal): Promis
   })
 }
 
+/** Execute a bounded TypeScript entry point without depending on a global tsx/ts-node install. */
+async function runTypescript(root: string, code: string, signal?: AbortSignal): Promise<AgentRunResult> {
+  if (!code || !code.trim()) return { ok: false, error: 'No TypeScript code provided.' }
+  if (Buffer.byteLength(code, 'utf8') > TYPESCRIPT_MAX_BYTES) {
+    return { ok: false, error: 'TypeScript code exceeds the 1 MB limit.' }
+  }
+
+  let tempRoot = ''
+  try {
+    tempRoot = await mkdtemp(join(tmpdir(), 'ascora-typescript-'))
+    const entry = join(tempRoot, 'tool.ts')
+    await writeFile(entry, wrapWProviderTypescript(code), 'utf8')
+
+    return await new Promise<AgentRunResult>((resolvePromise) => {
+      execFile(
+        process.execPath,
+        ['--no-warnings', '--experimental-transform-types', entry],
+        {
+          cwd: root,
+          timeout: RUN_TIMEOUT_MS,
+          maxBuffer: RUN_MAX_BUFFER,
+          windowsHide: true,
+          signal,
+          env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' }
+        },
+        (error, stdout, stderr) => {
+          const out = String(stdout ?? '')
+          const err = String(stderr ?? '')
+          if (!error) {
+            resolvePromise({ ok: true, stdout: out, stderr: err, code: 0 })
+            return
+          }
+          const killed = (error as { killed?: boolean }).killed === true
+          const codeValue = (error as { code?: unknown }).code
+          if (typeof codeValue === 'string' && !killed) {
+            resolvePromise({ ok: false, stdout: out, stderr: err, error: error.message })
+            return
+          }
+          resolvePromise({
+            ok: true,
+            stdout: out,
+            stderr: err,
+            code: typeof codeValue === 'number' ? codeValue : null,
+            timedOut: killed
+          })
+        }
+      )
+    })
+  } catch (err) {
+    return { ok: false, ...errResult(err) }
+  } finally {
+    if (tempRoot) await rm(tempRoot, { recursive: true, force: true }).catch(() => undefined)
+  }
+}
+
 // Blueprints run in the main process, so expose the same confined primitives
 // that the renderer-backed agent loop reaches through IPC. Keeping one
 // implementation prevents the two WProvider modes from drifting apart.
@@ -481,7 +539,8 @@ export {
   writeFileTool as writeAgentFile,
   editFileTool as editAgentFile,
   searchFiles as searchAgentFiles,
-  runCommand as runAgentCommand
+  runCommand as runAgentCommand,
+  runTypescript as runAgentTypescript
 }
 
 export function registerAgentHandlers(): void {
@@ -517,5 +576,9 @@ export function registerAgentHandlers(): void {
   ipcMain.handle(
     IPC.agent.runCommand,
     (_e, root: string, command: string): Promise<AgentRunResult> => runCommand(root, command)
+  )
+  ipcMain.handle(
+    IPC.agent.runTypescript,
+    (_e, root: string, code: string): Promise<AgentRunResult> => runTypescript(root, code)
   )
 }

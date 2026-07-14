@@ -364,7 +364,13 @@ async function waitForDevTools(port: number, child: ChildProcess): Promise<strin
   }
 }
 
-async function startBrowser(url: string): Promise<BrowserLaunch> {
+interface StartBrowserOptions {
+  /** Park the window far off-screen: unattended chat/status turns must not pop
+   *  a maximized browser at the user. Sign-in stays visible (interactive). */
+  background?: boolean
+}
+
+async function startBrowser(url: string, options: StartBrowserOptions = {}): Promise<BrowserLaunch> {
   await closeActiveBrowser()
   const executable = findBrowserExecutable()
   if (!executable) {
@@ -388,7 +394,18 @@ async function startBrowser(url: string): Promise<BrowserLaunch> {
       '--no-first-run',
       '--no-default-browser-check',
       '--disable-background-mode',
-      '--start-maximized',
+      ...(options.background
+        ? [
+            // Off-screen instead of headless/minimized: the fingerprint stays
+            // that of a normal windowed Chrome (Cloudflare), and the page is
+            // not occlusion-throttled while it streams.
+            '--window-position=-32000,-32000',
+            '--window-size=1280,900',
+            '--disable-backgrounding-occluded-windows',
+            '--disable-renderer-backgrounding',
+            '--disable-background-timer-throttling'
+          ]
+        : ['--start-maximized']),
       '--new-window',
       url
     ],
@@ -584,13 +601,13 @@ async function createTarget(launch: BrowserLaunch, url: string): Promise<DevTool
 export async function ensureExternalWProviderPage(url: string): Promise<ExternalDriverPage> {
   let launch = activeLaunch
   if (!launch) {
-    launch = await startBrowser(url)
+    launch = await startBrowser(url, { background: true })
   }
   let targets: DevToolsTarget[]
   try {
     targets = await listTargets(launch.port)
   } catch {
-    launch = await startBrowser(url)
+    launch = await startBrowser(url, { background: true })
     targets = await listTargets(launch.port)
   }
   const origin = new URL(url).origin

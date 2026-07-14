@@ -15,13 +15,14 @@ const TOOL_LABEL_KEY: Record<string, TranslationKey> = {
   write_file: 'chat.tool.writeFile',
   edit_file: 'chat.tool.editFile',
   run_command: 'chat.tool.runCommand',
+  run_typescript: 'chat.tool.runTypescript',
   apply_patch: 'chat.tool.editFiles',
   web_fetch: 'chat.tool.webFetch',
   web_search: 'chat.tool.webSearch'
 }
 
 function toolIcon(tool?: string): 'terminal' | 'folder' | 'file' | 'search' | 'globe' {
-  if (tool === 'run_command') return 'terminal'
+  if (tool === 'run_command' || tool === 'run_typescript') return 'terminal'
   if (tool === 'list_dir') return 'folder'
   if (tool === 'search_files' || tool === 'web_search') return 'search'
   if (tool === 'web_fetch') return 'globe'
@@ -30,6 +31,7 @@ function toolIcon(tool?: string): 'terminal' | 'folder' | 'file' | 'search' | 'g
 
 function toolSummary(m: ChatMessage): string {
   if (m.tool === 'run_command') return String(m.args?.command ?? '')
+  if (m.tool === 'run_typescript') return String(m.args?.code ?? '').split('\n', 1)[0]
   if (m.tool === 'search_files' || m.tool === 'web_search') return String(m.args?.query ?? '')
   if (m.tool === 'web_fetch') return String(m.args?.url ?? '')
   return String(m.args?.path ?? '')
@@ -89,7 +91,8 @@ function ToolCard({ m }: { m: ChatMessage }): JSX.Element {
           <Diff oldText={m.oldContent ?? ''} newText={m.newContent ?? ''} />
         )}
 
-      {m.tool === 'run_command' && (m.output?.trim() || m.stderr?.trim()) && (
+      {(m.tool === 'run_command' || m.tool === 'run_typescript') &&
+        (m.output?.trim() || m.stderr?.trim()) && (
         <pre className="tool-output">
           {m.output}
           {m.stderr?.trim() ? <span className="tool-stderr">{m.output ? '\n' : ''}{m.stderr}</span> : null}
@@ -97,7 +100,7 @@ function ToolCard({ m }: { m: ChatMessage }): JSX.Element {
             <span className="tool-stderr">{`\n[exit ${m.exitCode}]`}</span>
           ) : null}
         </pre>
-      )}
+        )}
 
       {(m.tool === 'search_files' || m.tool === 'web_search' || m.tool === 'web_fetch') &&
         status === 'done' &&
@@ -125,14 +128,26 @@ function ToolCard({ m }: { m: ChatMessage }): JSX.Element {
   )
 }
 
-function ReasoningBlock({ text }: { text: string }): JSX.Element {
+/** Grok-style compact duration: 37s, 2m, 2m 10s. */
+function formatReasoningDuration(ms: number): string {
+  const totalSeconds = Math.max(1, Math.round(ms / 1000))
+  if (totalSeconds < 60) return `${totalSeconds}s`
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+  return seconds ? `${minutes}m ${seconds}s` : `${minutes}m`
+}
+
+function ReasoningBlock({ text, durationMs }: { text: string; durationMs?: number }): JSX.Element {
   const [open, setOpen] = useState(false)
   const appLanguage = useApp((s) => s.appLanguage)
+  const label = durationMs
+    ? tr(appLanguage, 'chat.reasonedFor', { duration: formatReasoningDuration(durationMs) })
+    : tr(appLanguage, 'chat.thoughtProcess')
   return (
     <div className={`reasoning-block${open ? ' open' : ''}`}>
       <button className="reasoning-head" onClick={() => setOpen((o) => !o)}>
-        <Icon name="sparkles" size={13} />
-        <span>{tr(appLanguage, 'chat.thoughtProcess')}</span>
+        <Icon name="bulb" size={13} />
+        <span>{label}</span>
         <span className="spacer" />
         <Icon name={open ? 'chevronDown' : 'chevronRight'} size={13} />
       </button>
@@ -226,9 +241,13 @@ function AssistantMarkdown({ text }: { text: string }): JSX.Element {
 
 function isCopilotAuthError(m: ChatMessage): boolean {
   if (m.role !== 'assistant') return false
+  if (m.provider !== undefined && m.provider !== 'copilot') return false
+  // Older persisted WProvider messages predate the structured provider field.
+  if (m.provider === undefined && /\sWeb$/i.test(m.model ?? '')) return false
   const haystack = `${m.model ?? ''}\n${m.text}`
+  const looksLikeCopilot = m.provider === 'copilot' || /copilot/i.test(haystack)
   return (
-    /copilot/i.test(haystack) &&
+    looksLikeCopilot &&
     /(No authentication information found|Authentication token found but could not be validated|Bad credentials|copilot login|gh auth login|COPILOT_GITHUB_TOKEN|GH_TOKEN|GITHUB_TOKEN)/i.test(
       m.text
     )
@@ -238,14 +257,22 @@ function isCopilotAuthError(m: ChatMessage): boolean {
 function isClaudeAuthError(m: ChatMessage): boolean {
   if (m.role !== 'assistant') return false
   if (m.errorCode === 'claude_oauth_expired') return true
-  if (/oauth session expired|oauth token.*expired|could not be refreshed/i.test(m.text)) return true
-  const looksLikeClaude = /claude/i.test(`${m.model ?? ''}\n${m.text}`)
+  if (m.provider !== undefined && m.provider !== 'claude') return false
+  if (m.provider === undefined && /\sWeb$/i.test(m.model ?? '')) return false
+  const looksLikeClaude = m.provider === 'claude' || /claude/i.test(`${m.model ?? ''}\n${m.text}`)
   return (
     looksLikeClaude &&
     /(failed to authenticate|oauth session expired|oauth token.*expired|authentication session.*expired|could not be refreshed)/i.test(
       m.text
     )
   )
+}
+
+/** Hide site-native tool payloads that older builds persisted as WProvider answers. */
+function isLeakedWProviderToolCall(m: ChatMessage): boolean {
+  if (m.role !== 'assistant' || m.kind !== 'text') return false
+  const fromWProvider = m.provider === 'wprovider' || /\sWeb$/i.test(m.model ?? '')
+  return fromWProvider && /^(?:```tool_call\b|tool_call\s*\{)/i.test(m.text.trimStart())
 }
 
 function TextMessage({ m }: { m: ChatMessage }): JSX.Element {
@@ -390,10 +417,10 @@ function Messages({ messages }: { messages: ChatMessage[] }): JSX.Element {
   return (
     <>
       {messages.map((m) =>
-        m.kind === 'tool' ? (
+        isLeakedWProviderToolCall(m) ? null : m.kind === 'tool' ? (
           <ToolCard key={m.id} m={m} />
         ) : m.reasoning ? (
-          <ReasoningBlock key={m.id} text={m.text} />
+          <ReasoningBlock key={m.id} text={m.text} durationMs={m.reasoningDurationMs} />
         ) : (
           <TextMessage key={m.id} m={m} />
         )

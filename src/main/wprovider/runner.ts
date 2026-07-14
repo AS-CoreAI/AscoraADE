@@ -57,6 +57,10 @@ const START_TIMEOUT_MS = 25_000
 const RENDERED_START_TIMEOUT_MS = 60_000
 /** Some services do not expose a stable OpenAI-style stream; wait for rendered markdown to stop changing. */
 const RENDERED_DOM_STABLE_MS = 4000
+/** A reasoning pane keeps a turn alive even without DOM changes (Grok can show
+ *  a static "Thinking" label for minutes) — but only this long since the pane
+ *  last changed, so a dead page still times out. */
+const THINKING_STALL_TIMEOUT_MS = 5 * 60_000
 /** Abort a generation when the stream goes silent for this long. */
 const INACTIVITY_TIMEOUT_MS = 180_000
 /** Absolute cap on a single turn. */
@@ -88,6 +92,10 @@ interface ActiveOp {
   sseBuffer: string
   content: string
   thinking: string
+  /** When the provider's visible/streamed reasoning started (0 = none seen). */
+  thinkingStartedAt: number
+  /** Reasoning duration, stamped when the first answer token arrives. */
+  thinkingMs: number
   /** Where a bare DeepSeek `{"v": "token"}` frame appends (patch-protocol cursor). */
   dsCursor: DeepSeekPhase
   started: boolean
@@ -95,6 +103,8 @@ interface ActiveOp {
   openStreams: number
   aborted: boolean
   onDelta: (delta: string) => void
+  /** Streams the full accumulated reasoning text to the renderer as it grows. */
+  onThinking?: (thinking: string) => void
   finish: (result: ChatResult) => void
   touch: () => void
 }
@@ -510,8 +520,13 @@ function consumeSse(op: ActiveOp, text: string): void {
       const json = JSON.parse(data) as Record<string, unknown>
       for (const delta of extractDeltas(op, json)) {
         if (delta.phase === 'think') {
+          if (!op.thinkingStartedAt) op.thinkingStartedAt = Date.now()
           op.thinking += delta.text
+          op.onThinking?.(op.thinking)
         } else if (delta.text) {
+          if (op.thinkingStartedAt && !op.thinkingMs) {
+            op.thinkingMs = Date.now() - op.thinkingStartedAt
+          }
           op.content += delta.text
           op.onDelta(delta.text)
         }
@@ -674,12 +689,14 @@ function finalizeActiveOp(error?: string): void {
   const op = activeOp
   if (!op) return
   activeOp = null
+  const thinking = op.thinking || undefined
+  const thinkingMs = op.thinkingMs || undefined
   if (op.aborted) {
-    op.finish({ ok: true, content: op.content, aborted: true })
+    op.finish({ ok: true, content: op.content, aborted: true, thinking, thinkingMs })
   } else if (error && !op.content) {
     op.finish({ ok: false, content: '', error })
   } else {
-    op.finish({ ok: true, content: op.content })
+    op.finish({ ok: true, content: op.content, thinking, thinkingMs })
   }
 }
 
@@ -1677,6 +1694,67 @@ async function clickSendButton(win: BrowserWindow): Promise<string> {
 interface AssistantSnapshot {
   count: number
   text: string
+  /** Ordered rendered message parts; populated for Mistral's agentic /work UI. */
+  parts: string[]
+  /** Rendered reasoning text (e.g. Grok's thinking pane), toggle button stripped. */
+  thinking: string
+  /** The thinking toggle's label ("Thought for 2m") — its ticking timer signals activity. */
+  thinkingLabel: string
+}
+
+const EMPTY_SNAPSHOT: AssistantSnapshot = { count: 0, text: '', parts: [], thinking: '', thinkingLabel: '' }
+
+/**
+ * Where the service renders in-progress reasoning. Only Grok shows a rendered
+ * pane; DeepSeek/Qwen deliver thinking through their private stream instead.
+ */
+function thinkingPaneSelector(service: WProviderService): string {
+  return service === 'grok' ? '.thinking-container' : ''
+}
+
+function assistantSnapshotJs(service: WProviderService): string {
+  const selector = assistantMessageSelector(service)
+  const thinkingSelector = thinkingPaneSelector(service)
+  return `(() => {
+      const service = ${JSON.stringify(service)};
+      const thinkingSelector = ${JSON.stringify(thinkingSelector)};
+      let nodes = Array.from(document.querySelectorAll(${JSON.stringify(selector)}))
+        .filter((node) => !(thinkingSelector && node.closest && node.closest(thinkingSelector)));
+      if (service === 'mistral') {
+        const typed = Array.from(document.querySelectorAll('[data-message-part-type]'));
+        const candidates = typed.length ? typed : nodes;
+        // The fallback selectors can match both a part container and its nested
+        // prose node; keep only the outer match so one part is never duplicated.
+        nodes = candidates.filter((node) =>
+          !candidates.some((other) => other !== node && other.contains && other.contains(node))
+        );
+      }
+      const clean = (node) => {
+        const clone = node.cloneNode(true);
+        clone.querySelectorAll?.('button, .thinking-container, .CodeBlock-HeaderActions, .CodeBlock-StickyWrapper, .CodeBlock-Stopper, .MessageBubble-CollapserOverlay').forEach((el) => el.remove());
+        return (clone.innerText || clone.textContent || '').replace(/\\n{3,}/g, '\\n\\n').trim();
+      };
+      const parts = nodes.map(clean);
+      const texts = parts.filter(Boolean);
+      let thinking = '';
+      let thinkingLabel = '';
+      if (thinkingSelector) {
+        const panes = Array.from(document.querySelectorAll(thinkingSelector));
+        const pane = panes[panes.length - 1];
+        if (pane) {
+          const toggle = pane.querySelector('button');
+          thinkingLabel = ((toggle && (toggle.innerText || toggle.textContent)) || '').replace(/\\s+/g, ' ').trim();
+          thinking = clean(pane);
+        }
+      }
+      return {
+        count: nodes.length,
+        text: texts[texts.length - 1] || '',
+        parts: service === 'mistral' ? parts : [],
+        thinking,
+        thinkingLabel
+      };
+    })()`
 }
 
 function looksLikePromptEcho(text: string, prompt: string): boolean {
@@ -1686,6 +1764,49 @@ function looksLikePromptEcho(text: string, prompt: string): boolean {
   // in the instruction (for example: “Answer only: ГОТОВО”).
   const substantialEchoLength = Math.max(24, Math.floor(prompt.length * 0.7))
   return text.length >= substantialEchoLength && prompt.includes(text)
+}
+
+/**
+ * Mistral /work renders prose and every following tool event as sibling message
+ * parts. Read all parts added after the pre-send baseline; taking only the last
+ * one makes a tool card replace the prose that preceded it.
+ */
+function renderedAnswerText(
+  service: WProviderService,
+  before: AssistantSnapshot,
+  snapshot: AssistantSnapshot,
+  prompt: string
+): string {
+  if (service !== 'mistral') {
+    const text =
+      snapshot.count > before.count || (snapshot.text && snapshot.text !== before.text)
+        ? snapshot.text
+        : ''
+    return text && !looksLikePromptEcho(text, prompt) ? text : ''
+  }
+
+  const parts = snapshot.parts ?? []
+  const beforeParts = before.parts ?? []
+  let current: string[] = []
+  if (snapshot.count > before.count && parts.length >= snapshot.count) {
+    current = parts.slice(before.count)
+  } else if (parts.length > beforeParts.length) {
+    current = parts.slice(beforeParts.length)
+  } else if (snapshot.text && snapshot.text !== before.text) {
+    // Covers virtualized/replaced message lists where node counts do not grow.
+    current = [snapshot.text]
+  }
+
+  return current
+    .map((part) => part.trim())
+    .filter((part) => part && !looksLikePromptEcho(part, prompt))
+    .join('\n\n')
+}
+
+function preserveMistralParts(service: WProviderService, previous: string, current: string): string {
+  if (service !== 'mistral' || !previous || !current || current.startsWith(previous)) return current
+  if (previous.includes(current)) return previous
+  return `${previous}\n\n${current}`
 }
 
 function assistantMessageSelector(service: WProviderService): string {
@@ -1726,20 +1847,7 @@ function assistantMessageSelector(service: WProviderService): string {
 }
 
 async function readAssistantSnapshot(win: BrowserWindow, service: WProviderService): Promise<AssistantSnapshot> {
-  const selector = assistantMessageSelector(service)
-  return runJs<AssistantSnapshot>(
-    win,
-    `(() => {
-      const nodes = Array.from(document.querySelectorAll(${JSON.stringify(selector)}));
-      const clean = (node) => {
-        const clone = node.cloneNode(true);
-        clone.querySelectorAll?.('button, .CodeBlock-HeaderActions, .CodeBlock-StickyWrapper, .CodeBlock-Stopper, .MessageBubble-CollapserOverlay').forEach((el) => el.remove());
-        return (clone.innerText || clone.textContent || '').replace(/\\n{3,}/g, '\\n\\n').trim();
-      };
-      const texts = nodes.map(clean).filter(Boolean);
-      return { count: nodes.length, text: texts[texts.length - 1] || '' };
-    })()`
-  ).catch(() => ({ count: 0, text: '' }))
+  return runJs<AssistantSnapshot>(win, assistantSnapshotJs(service)).catch(() => EMPTY_SNAPSHOT)
 }
 
 async function readLastAssistantMessage(win: BrowserWindow, service: WProviderService): Promise<string> {
@@ -1753,29 +1861,59 @@ async function waitForRenderedAssistant(
   prompt: string,
   id: string
 ): Promise<string> {
-  const startDeadline = Date.now() + RENDERED_START_TIMEOUT_MS
+  let startDeadline = Date.now() + RENDERED_START_TIMEOUT_MS
   let lastText = ''
   let emitted = ''
   let lastChange = Date.now()
   let nextSendAttempt = 0
+  let lastThinking = before.thinking
+  let lastThinkingLabel = before.thinkingLabel
+  let lastThinkingChangeAt = 0
 
   for (;;) {
     if (activeOp?.id !== id) return ''
     await throwIfProviderBlocked(win, service)
 
     const snapshot = await readAssistantSnapshot(win, service)
-    let text =
-      snapshot.count > before.count || (snapshot.text && snapshot.text !== before.text)
-        ? snapshot.text
-        : ''
 
-    if (text && looksLikePromptEcho(text, prompt)) text = ''
+    // Extended reasoning (Grok) can run for minutes before the first answer
+    // token renders — stream the thoughts to the UI as they grow.
+    if (snapshot.thinking !== lastThinking || snapshot.thinkingLabel !== lastThinkingLabel) {
+      const grewText = snapshot.thinking.length > 0 && snapshot.thinking !== lastThinking
+      lastThinking = snapshot.thinking
+      lastThinkingLabel = snapshot.thinkingLabel
+      lastThinkingChangeAt = Date.now()
+      const op = activeOp
+      if (op?.id === id && grewText) {
+        if (!op.thinkingStartedAt) op.thinkingStartedAt = Date.now()
+        op.thinking = snapshot.thinking
+        op.onThinking?.(snapshot.thinking)
+      }
+    }
+    // A reasoning pane that differs from the pre-send baseline proves the
+    // provider took the prompt and is working — Grok may show only a static
+    // "Thinking" label while the thoughts live in a side panel. Hold both the
+    // no-answer deadline and the inactivity abort while the pane is fresh.
+    const paneActive =
+      (snapshot.thinking !== before.thinking || snapshot.thinkingLabel !== before.thinkingLabel) &&
+      Boolean(snapshot.thinking || snapshot.thinkingLabel)
+    if (paneActive && Date.now() - lastThinkingChangeAt < THINKING_STALL_TIMEOUT_MS) {
+      startDeadline = Date.now() + RENDERED_START_TIMEOUT_MS
+      const op = activeOp
+      if (op?.id === id) op.touch()
+    }
+
+    let text = renderedAnswerText(service, before, snapshot, prompt)
+    text = preserveMistralParts(service, lastText, text)
 
     if (text && text !== lastText) {
       lastText = text
       lastChange = Date.now()
       const op = activeOp
       if (op?.id === id) {
+        if (op.thinkingStartedAt && !op.thinkingMs) {
+          op.thinkingMs = Date.now() - op.thinkingStartedAt
+        }
         op.started = true
         op.content = text
         op.touch()
@@ -2097,21 +2235,7 @@ async function externalAssistantSnapshot(
   page: ExternalDriverPage,
   service: WProviderService
 ): Promise<AssistantSnapshot> {
-  const selector = assistantMessageSelector(service)
-  return page
-    .evaluate<AssistantSnapshot>(
-      `(() => {
-        const nodes = Array.from(document.querySelectorAll(${JSON.stringify(selector)}));
-        const clean = (node) => {
-          const clone = node.cloneNode(true);
-          clone.querySelectorAll?.('button, .CodeBlock-HeaderActions, .CodeBlock-StickyWrapper, .CodeBlock-Stopper, .MessageBubble-CollapserOverlay').forEach((el) => el.remove());
-          return (clone.innerText || clone.textContent || '').replace(/\\n{3,}/g, '\\n\\n').trim();
-        };
-        const texts = nodes.map(clean).filter(Boolean);
-        return { count: nodes.length, text: texts[texts.length - 1] || '' };
-      })()`
-    )
-    .catch(() => ({ count: 0, text: '' }))
+  return page.evaluate<AssistantSnapshot>(assistantSnapshotJs(service)).catch(() => EMPTY_SNAPSHOT)
 }
 
 async function externalTypePrompt(page: ExternalDriverPage, text: string): Promise<void> {
@@ -2208,6 +2332,31 @@ async function externalClickSendButton(page: ExternalDriverPage): Promise<string
   return target.selector
 }
 
+/**
+ * Relays the growing reasoning text to the renderer, throttled: the full text
+ * is resent on every change, so unthrottled emits would grow quadratically on
+ * long thinking runs. The final text still travels in the ChatResult.
+ */
+function thinkingEmitter(sender: WebContents | undefined, id: string): (thinking: string) => void {
+  let lastSent = 0
+  let pending: NodeJS.Timeout | null = null
+  let latest = ''
+  const send = (): void => {
+    pending = null
+    lastSent = Date.now()
+    if (sender && !sender.isDestroyed()) {
+      sender.send(IPC.wprovider.chunk, { id, delta: '', thinking: latest })
+    }
+  }
+  return (thinking) => {
+    latest = thinking
+    if (pending) return
+    const wait = 300 - (Date.now() - lastSent)
+    if (wait <= 0) send()
+    else pending = setTimeout(send, wait)
+  }
+}
+
 async function runExternalChatTurn(
   id: string,
   service: WProviderService,
@@ -2262,6 +2411,8 @@ async function runExternalChatTurn(
     sseBuffer: '',
     content: '',
     thinking: '',
+    thinkingStartedAt: 0,
+    thinkingMs: 0,
     dsCursor: 'skip',
     started: false,
     doneStreams: 0,
@@ -2271,6 +2422,7 @@ async function runExternalChatTurn(
       if (sender && !sender.isDestroyed()) sender.send(IPC.wprovider.chunk, { id, delta })
       onDelta?.(delta)
     },
+    onThinking: thinkingEmitter(sender, id),
     finish: (result) => {
       abortedResult = result
     },
@@ -2281,12 +2433,15 @@ async function runExternalChatTurn(
   activeOp = op
 
   const startedAt = Date.now()
-  const startDeadline = startedAt + RENDERED_START_TIMEOUT_MS
+  let startDeadline = startedAt + RENDERED_START_TIMEOUT_MS
   let lastText = ''
   let emitted = ''
   let lastChange = Date.now()
   let nextSendAttempt = 0
   let submissionAttempted = false
+  let lastThinking = before.thinking
+  let lastThinkingLabel = before.thinkingLabel
+  let lastThinkingChangeAt = 0
   try {
     if (activeOp !== op || cancelledOps.has(id)) {
       return abortedResult ?? { ok: true, content: op.content, aborted: true }
@@ -2305,13 +2460,40 @@ async function runExternalChatTurn(
         return abortedResult ?? { ok: true, content: op.content, aborted: true }
       }
       const snapshot = await externalAssistantSnapshot(page, service)
-      let text =
-        snapshot.count > before.count || (snapshot.text && snapshot.text !== before.text)
-          ? snapshot.text
-          : ''
-      if (text && looksLikePromptEcho(text, prompt)) text = ''
+
+      // Extended reasoning (Grok) can run for minutes before the first answer
+      // token renders — stream the thoughts to the UI as they grow.
+      if (snapshot.thinking !== lastThinking || snapshot.thinkingLabel !== lastThinkingLabel) {
+        const grewText = snapshot.thinking.length > 0 && snapshot.thinking !== lastThinking
+        lastThinking = snapshot.thinking
+        lastThinkingLabel = snapshot.thinkingLabel
+        lastThinkingChangeAt = Date.now()
+        if (grewText) {
+          if (!op.thinkingStartedAt) op.thinkingStartedAt = Date.now()
+          op.thinking = snapshot.thinking
+          op.onThinking?.(snapshot.thinking)
+        }
+      }
+      // A reasoning pane that differs from the pre-send baseline proves the
+      // provider took the prompt and is working — Grok may show only a static
+      // "Thinking" label while the thoughts live in a side panel. Hold both
+      // the no-answer deadline and the inactivity abort while the pane is
+      // fresh; the stall cap only fires if the page stops changing entirely.
+      const paneActive =
+        (snapshot.thinking !== before.thinking || snapshot.thinkingLabel !== before.thinkingLabel) &&
+        Boolean(snapshot.thinking || snapshot.thinkingLabel)
+      if (paneActive && Date.now() - lastThinkingChangeAt < THINKING_STALL_TIMEOUT_MS) {
+        startDeadline = Date.now() + RENDERED_START_TIMEOUT_MS
+        op.touch()
+      }
+
+      let text = renderedAnswerText(service, before, snapshot, prompt)
+      text = preserveMistralParts(service, lastText, text)
 
       if (text && text !== lastText) {
+        if (op.thinkingStartedAt && !op.thinkingMs) {
+          op.thinkingMs = Date.now() - op.thinkingStartedAt
+        }
         lastText = text
         op.content = text
         op.started = true
@@ -2350,7 +2532,12 @@ async function runExternalChatTurn(
     const url = await page.getUrl().catch(() => '')
     if (url && isProviderChatUrl(service, url)) sess.chatUrl = url
     sess.sent = params.messages.length
-    return { ok: true, content: lastText }
+    return {
+      ok: true,
+      content: lastText,
+      thinking: op.thinking || undefined,
+      thinkingMs: op.thinkingMs || undefined
+    }
   } finally {
     // Once Enter submission has been attempted, an abort must advance the site
     // cursor: the provider may continue processing after the driver page is
@@ -2417,8 +2604,14 @@ async function runChatTurn(
       const op = activeOp
       cleanup()
       // Salvage whatever streamed before the stall instead of dropping it.
-      if (op && op.content) resolve({ ok: true, content: op.content })
-      else reject(new WProviderError(message))
+      if (op && op.content) {
+        resolve({
+          ok: true,
+          content: op.content,
+          thinking: op.thinking || undefined,
+          thinkingMs: op.thinkingMs || undefined
+        })
+      } else reject(new WProviderError(message))
     }
     const touch = (): void => {
       clearTimeout(inactivity)
@@ -2435,6 +2628,8 @@ async function runChatTurn(
       sseBuffer: '',
       content: '',
       thinking: '',
+      thinkingStartedAt: 0,
+      thinkingMs: 0,
       dsCursor: 'skip',
       started: false,
       doneStreams: 0,
@@ -2444,6 +2639,7 @@ async function runChatTurn(
         if (sender && !sender.isDestroyed()) sender.send(IPC.wprovider.chunk, { id, delta })
         onDelta?.(delta)
       },
+      onThinking: thinkingEmitter(sender, id),
       finish: (r) => {
         cleanup()
         resolve(r)
@@ -2462,7 +2658,7 @@ async function runChatTurn(
         const text = await waitForRenderedAssistant(
           win,
           service,
-          renderedBefore ?? { count: 0, text: '' },
+          renderedBefore ?? EMPTY_SNAPSHOT,
           prompt,
           id
         )

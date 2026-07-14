@@ -167,7 +167,8 @@ export const IPC = {
     writeFile: 'agent:writeFile',
     editFile: 'agent:editFile',
     search: 'agent:search',
-    runCommand: 'agent:runCommand'
+    runCommand: 'agent:runCommand',
+    runTypescript: 'agent:runTypescript'
   },
   web: {
     fetch: 'web:fetch',
@@ -246,8 +247,12 @@ export interface TaskMessage {
   /** Display name of the model that produced this assistant turn, stamped at
    *  creation so a mid-chat model switch leaves earlier messages untouched. */
   model?: string
+  /** Backend that produced this assistant turn. Used for provider-specific UI actions. */
+  provider?: LlmProvider
   /** True for a `text` message that holds the agent's reasoning/thinking. */
   reasoning?: boolean
+  /** How long the model reasoned, for the "Thought for 2m" header. */
+  reasoningDurationMs?: number
   tool?: string
   args?: Record<string, unknown>
   status?: 'awaiting' | 'running' | 'done' | 'rejected' | 'error'
@@ -825,6 +830,8 @@ export interface ChatParams {
 export interface ChatChunkPayload {
   id: string
   delta: string
+  /** Full reasoning text captured so far, sent whenever it grows (WProvider). */
+  thinking?: string
 }
 
 /** Token counts for a single turn, when the backend reports them. */
@@ -842,6 +849,10 @@ export interface ChatResult {
   finishReason?: string
   /** Token usage for the turn, if the server returned it. */
   usage?: TokenUsage
+  /** Reasoning/thinking text the provider produced before the answer. */
+  thinking?: string
+  /** How long the provider visibly reasoned before answering. */
+  thinkingMs?: number
   error?: string
   aborted?: boolean
 }

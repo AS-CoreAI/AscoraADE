@@ -45,7 +45,9 @@ import {
 } from '@shared/ipc'
 import {
   WPROVIDER_TOOL_NAMES,
+  hasWProviderToolCallIntent,
   parseWProviderTextToolCall as parseTextToolCall,
+  wrapWProviderTypescript,
   type WProviderToolName
 } from '@shared/wprovider-tools'
 import { api } from '@/lib/api'
@@ -60,6 +62,7 @@ export type Connection = 'unknown' | 'connecting' | 'connected' | 'error'
 export type ThemePreference = 'dark' | 'light' | 'system'
 export type ResolvedTheme = 'dark' | 'light'
 export type AppLanguage = LanguageCode
+export type LiveOpenTarget = 'ascora' | 'browser'
 
 export interface OpenFile {
   path: string
@@ -352,6 +355,19 @@ const TOOLS: ToolDef[] = [
   {
     type: 'function',
     function: {
+      name: 'run_typescript',
+      description:
+        'Run a TypeScript program in the workspace root. Define async function main(); Ascora invokes it once and returns stdout/stderr. One-shot, non-interactive.',
+      parameters: {
+        type: 'object',
+        properties: { code: { type: 'string', description: 'TypeScript source defining a main() function.' } },
+        required: ['code']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
       name: 'web_fetch',
       description:
         'Fetch a URL over HTTP(S) and return its readable text (HTML is stripped to plain text). ' +
@@ -412,6 +428,7 @@ function buildSystemPrompt(sshHost?: string, sshRoot?: string): string {
     '- write_file(path, content): create or fully overwrite a file',
     '- edit_file(path, old_string, new_string, [replace_all]): change part of a file in place',
     '- run_command(command): run a shell command in the project root and read its output',
+    '- run_typescript(code): run TypeScript that defines async function main() in the project root',
     '- web_search(query): search the web for a ranked list of results',
     '- web_fetch(url, [max_chars]): fetch a URL and read its text (HTML stripped)',
     '',
@@ -423,7 +440,7 @@ function buildSystemPrompt(sshHost?: string, sshRoot?: string): string {
     ...(sshHost
       ? [
           `An SSH session to ${sshHost} is connected and is your working context: EVERY tool ` +
-            'operates on that REMOTE host. run_command runs in its shell, and the file tools ' +
+            'operates on that REMOTE host. run_command and run_typescript run there, and the file tools ' +
             '(list_dir/read_file/search_files/write_file/edit_file) act on its filesystem, with ' +
             `relative paths resolved against the active remote root (${sshRoot || '$HOME'}). There is no separate local ` +
             'project here — work directly on the remote host and do not assume any local files.'
@@ -544,6 +561,18 @@ function utf8ToBase64(text: string): string {
     binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000))
   }
   return btoa(binary)
+}
+
+/** Build a self-cleaning Node launcher for run_typescript on an active SSH host. */
+function remoteTypescriptCommand(code: string): string {
+  const encoded = utf8ToBase64(wrapWProviderTypescript(code))
+  const launcher =
+    `const fs=require('node:fs'),os=require('node:os'),path=require('node:path'),cp=require('node:child_process');` +
+    `const p=path.join(os.tmpdir(),'ascora-'+process.pid+'-'+Date.now()+'.ts');` +
+    `try{fs.writeFileSync(p,Buffer.from('${encoded}','base64'));` +
+    `const r=cp.spawnSync(process.execPath,['--no-warnings','--experimental-transform-types',p],{stdio:'inherit'});` +
+    `process.exitCode=r.status??1;}finally{try{fs.unlinkSync(p)}catch{}}`
+  return `node -e ${shq(launcher)}`
 }
 
 /** True when a remote command failed (transport error or non-zero exit). */
@@ -1329,8 +1358,8 @@ interface AppState {
   /** Run a runnable file (e.g. Python) in the built-in terminal, PyCharm-style. */
   runFile: (node: TreeNode) => void
 
-  /** Start (or reuse) the Live Server and show the active HTML file docked. */
-  goLive: () => Promise<void>
+  /** Start (or reuse) the Live Server and open the active HTML file in the selected target. */
+  goLive: (target?: LiveOpenTarget) => Promise<void>
   /** Stop the Live Server and close the preview (docked or windowed). */
   stopLive: () => Promise<void>
   /** Close the preview (the server keeps running). */
@@ -2502,7 +2531,7 @@ export const useApp = create<AppState>((set, get) => {
     }))
   },
 
-  async goLive() {
+  async goLive(target = 'ascora') {
     const { active, activeSsh, openFiles, activeFile, liveUrl, liveRoot } = get()
     if (!active || activeSsh) return
     const file = openFiles.find((f) => f.path === activeFile)
@@ -2526,9 +2555,15 @@ export const useApp = create<AppState>((set, get) => {
       ? full.slice(root.length + 1)
       : (full.split('/').pop() ?? '')
     const encoded = rel.split('/').map(encodeURIComponent).join('/')
-    // The status bar "Live" button always brings the preview back docked.
+    const previewUrl = `${base}/${encoded}`
     const wasWindow = get().previewMode === 'window'
-    set({ previewUrl: `${base}/${encoded}`, previewMode: 'docked' })
+    if (target === 'browser') {
+      set({ previewUrl: null, previewMode: 'docked' })
+      if (wasWindow) await api.live.closeWindow()
+      await api.live.openExternal(previewUrl)
+      return
+    }
+    set({ previewUrl, previewMode: 'docked' })
     if (wasWindow) void api.live.closeWindow()
   },
 
@@ -3405,7 +3440,9 @@ export const useApp = create<AppState>((set, get) => {
     const patch = (id: string, p: Partial<ChatMessage>): void =>
       writeRun(taskId, (r) => ({ messages: r.messages.map((m) => (m.id === id ? { ...m, ...p } : m)) }))
     const addMsg = (m: ChatMessage): void =>
-      writeRun(taskId, (r) => ({ messages: [...r.messages, m] }))
+      writeRun(taskId, (r) => ({
+        messages: [...r.messages, m.role === 'assistant' ? { ...m, provider } : m]
+      }))
     const removeMsg = (id: string): void =>
       writeRun(taskId, (r) => ({ messages: r.messages.filter((m) => m.id !== id) }))
     const pushConvo = (m: LlmMessage): void =>
@@ -3744,6 +3781,34 @@ export const useApp = create<AppState>((set, get) => {
             messages: r.messages.map((m) => (m.id === replyId ? { ...m, text: m.text + delta } : m))
           }))
         }
+        // Providers with visible reasoning (Grok's thinking pane, DeepSeek's
+        // think phase) stream it separately; render it as a collapsible block
+        // ABOVE the answer bubble, mirroring the provider's own UI.
+        let wpThinkingId: string | null = null
+        let wpThinkingStartedAt = 0
+        const onWpThinking = (thinking: string): void => {
+          if (!thinking.trim()) return
+          if (!wpThinkingId) {
+            const thinkingId = crypto.randomUUID()
+            wpThinkingId = thinkingId
+            wpThinkingStartedAt = Date.now()
+            writeRun(taskId, (r) => {
+              const idx = r.messages.findIndex((m) => m.id === replyId)
+              const msg: ChatMessage = {
+                id: thinkingId,
+                role: 'assistant',
+                kind: 'text',
+                reasoning: true,
+                text: thinking
+              }
+              const list = [...r.messages]
+              list.splice(idx < 0 ? list.length : idx, 0, msg)
+              return { messages: list }
+            })
+          } else {
+            patch(wpThinkingId, { text: thinking })
+          }
+        }
         // WProvider relays the turn through the provider's web chat in a hidden
         // browser (the site keeps its own history, so only new messages travel).
         // The chat request id doubles as this bubble's id so stopStreaming's
@@ -3752,7 +3817,10 @@ export const useApp = create<AppState>((set, get) => {
           ? await api.wprovider.chat(
               replyId,
               { sessionKey: taskId, service: wproviderService, messages },
-              onDelta
+              (delta, thinking) => {
+                if (thinking !== undefined) onWpThinking(thinking)
+                if (delta) onDelta(delta)
+              }
             )
           : await api.llm.chat(
               crypto.randomUUID(),
@@ -3760,6 +3828,20 @@ export const useApp = create<AppState>((set, get) => {
               onDelta
             )
         writeRun(taskId, { streamId: null, thinking: false })
+        // Settle the reasoning block: the ChatResult carries the definitive
+        // text (chunks are throttled) and the measured duration for the header.
+        if (isWProvider) {
+          const finalThinking = (result.thinking ?? '').trim()
+          if (finalThinking && !wpThinkingId) onWpThinking(finalThinking)
+          if (wpThinkingId) {
+            patch(wpThinkingId, {
+              ...(finalThinking ? { text: finalThinking } : {}),
+              reasoningDurationMs:
+                result.thinkingMs ??
+                (wpThinkingStartedAt ? Date.now() - wpThinkingStartedAt : undefined)
+            })
+          }
+        }
         if (result.aborted || aborted()) {
           const partial = readRun(taskId)?.messages.find((message) => message.id === replyId)?.text ?? ''
           if (!partial.trim()) removeMsg(replyId)
@@ -3807,6 +3889,7 @@ export const useApp = create<AppState>((set, get) => {
         const native = !!(result.toolCalls && result.toolCalls.length > 0)
         let calls: ParsedCall[] = []
         let displayText = result.content
+        let invalidTextToolCall = false
 
         if (native) {
           calls = result.toolCalls!.map((c, i) => ({
@@ -3828,16 +3911,49 @@ export const useApp = create<AppState>((set, get) => {
           if (parsed) {
             calls = [parsed.call]
             displayText = result.content.replace(parsed.block, '').trim()
+          } else if (isWProvider && hasWProviderToolCallIntent(result.content)) {
+            // Web models sometimes invoke a site-native/unsupported tool (for
+            // example a provider-only artifact tool) or emit truncated JSON. Do not
+            // persist that potentially enormous payload as the final answer;
+            // send a compact protocol correction and let the next turn retry.
+            invalidTextToolCall = true
+            displayText = ''
           }
-          pushConvo({ role: 'assistant', content: result.content })
+          pushConvo({
+            role: 'assistant',
+            content: invalidTextToolCall ? '[invalid tool_call omitted]' : result.content
+          })
         }
 
         // Tidy the bubble: keep prose, drop it if the turn was tool-only.
         if (displayText.trim()) patch(replyId, { text: displayText.trim() })
-        else if (calls.length > 0) removeMsg(replyId)
+        else if (calls.length > 0 || invalidTextToolCall) removeMsg(replyId)
         else patch(replyId, { text: '_(no content returned)_' })
 
-        if (calls.length === 0) break // final answer — done
+        if (calls.length === 0) {
+          if (invalidTextToolCall) {
+            const available = WPROVIDER_TOOL_NAMES.join(', ')
+            const note = `Unsupported tool name or malformed tool_call. Available tools: ${available}.`
+            addMsg({
+              id: crypto.randomUUID(),
+              role: 'assistant',
+              kind: 'tool',
+              tool: 'invalid tool_call',
+              args: {},
+              status: 'error',
+              error: note,
+              text: ''
+            })
+            pushConvo({
+              role: 'user',
+              content:
+                `Tool request error: ${note} ` +
+                'Retry with exactly one valid fenced ```tool_call block and no surrounding prose.'
+            })
+            continue
+          }
+          break // final answer — done
+        }
 
         const appendResult = (call: ParsedCall, content: string): void =>
           pushConvo(
@@ -3862,7 +3978,10 @@ export const useApp = create<AppState>((set, get) => {
 
           const cardId = crypto.randomUUID()
           const mutating =
-            call.name === 'write_file' || call.name === 'edit_file' || call.name === 'run_command'
+            call.name === 'write_file' ||
+            call.name === 'edit_file' ||
+            call.name === 'run_command' ||
+            call.name === 'run_typescript'
           // The SSH target (if any) was captured for this run at submit time.
 
           // For file changes, read the current file first so the card can show a diff.
@@ -4099,12 +4218,16 @@ export const useApp = create<AppState>((set, get) => {
                 : `Error: ${r.error}`
             )
           } else {
-            const command = asStr(call.args.command)
+            const isTypescript = call.name === 'run_typescript'
+            const source = asStr(call.args.code)
+            const command = isTypescript ? remoteTypescriptCommand(source) : asStr(call.args.command)
             // When an SSH session is open, type the command into the visible
             // remote console; otherwise run locally (Workspaces — unchanged).
             const r = sshId
               ? await api.ssh.run(sshId, command)
-              : await api.agent.runCommand(root, command)
+              : isTypescript
+                ? await api.agent.runTypescript(root, source)
+                : await api.agent.runCommand(root, command)
             const timedOut = 'timedOut' in r ? r.timedOut === true : false
             patch(cardId, {
               status: r.ok ? 'done' : 'error',

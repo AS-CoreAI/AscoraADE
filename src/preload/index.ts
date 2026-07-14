@@ -355,14 +355,15 @@ const api = {
     login: (): Promise<WProviderLoginResult> => ipcRenderer.invoke(IPC.wprovider.login),
     /** Clear the web session (cookies + storage) and forget site chats. */
     logout: (): Promise<WProviderCheckResult> => ipcRenderer.invoke(IPC.wprovider.logout),
-    /** Runs one turn through the hidden web chat; `onChunk` fires per answer delta. */
+    /** Runs one turn through the hidden web chat; `onChunk` fires per answer
+     *  delta and also carries the full reasoning text whenever it grows. */
     chat: (
       id: string,
       params: WProviderChatParams,
-      onChunk: (delta: string) => void
+      onChunk: (delta: string, thinking?: string) => void
     ): Promise<ChatResult> => {
       const listener = (_e: IpcRendererEvent, payload: ChatChunkPayload): void => {
-        if (payload.id === id) onChunk(payload.delta)
+        if (payload.id === id) onChunk(payload.delta, payload.thinking)
       }
       ipcRenderer.on(IPC.wprovider.chunk, listener)
       return ipcRenderer
@@ -455,7 +456,9 @@ const api = {
     search: (root: string, query: string, options?: AgentSearchOptions): Promise<AgentSearchResult> =>
       ipcRenderer.invoke(IPC.agent.search, root, query, options),
     runCommand: (root: string, command: string): Promise<AgentRunResult> =>
-      ipcRenderer.invoke(IPC.agent.runCommand, root, command)
+      ipcRenderer.invoke(IPC.agent.runCommand, root, command),
+    runTypescript: (root: string, code: string): Promise<AgentRunResult> =>
+      ipcRenderer.invoke(IPC.agent.runTypescript, root, code)
   },
   web: {
     fetch: (url: string, maxChars?: number): Promise<WebFetchResult> =>

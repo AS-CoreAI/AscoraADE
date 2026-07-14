@@ -972,8 +972,6 @@ function WProviderPanel(): JSX.Element {
           <div className="wprovider-auth-empty">
             {t('settings.wproviderAuthorizationsLoading')}
           </div>
-        ) : authorizedServices.length === 0 ? (
-          <div className="wprovider-auth-empty">{t('settings.wproviderNoAuthorizedModels')}</div>
         ) : (
           <table className="wprovider-auth-table">
             <thead>
@@ -983,9 +981,10 @@ function WProviderPanel(): JSX.Element {
               </tr>
             </thead>
             <tbody>
-              {authorizedServices.map((service) => {
+              {WPROVIDER_SERVICES.map((service) => {
                 const info = WPROVIDER_SERVICE_INFO[service]
                 const selected = service === wproviderService
+                const authorized = authorizedServices.includes(service)
                 return (
                   <tr key={service} className={selected ? 'selected' : undefined}>
                     <th scope="row">
@@ -1001,9 +1000,15 @@ function WProviderPanel(): JSX.Element {
                       </button>
                     </th>
                     <td>
-                      <span className="wprovider-auth-status">
-                        <span aria-hidden="true">✓</span> {t('settings.wproviderAuthorized')}
-                      </span>
+                      {authorized ? (
+                        <span className="wprovider-auth-status">
+                          <span aria-hidden="true">✓</span> {t('settings.wproviderAuthorized')}
+                        </span>
+                      ) : (
+                        <span className="wprovider-auth-status unauthorized">
+                          <span aria-hidden="true">✗</span> {t('settings.wproviderUnauthorized')}
+                        </span>
+                      )}
                     </td>
                   </tr>
                 )

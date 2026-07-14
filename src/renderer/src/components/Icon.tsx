@@ -39,6 +39,7 @@ type IconName =
   | 'stop'
   | 'users'
   | 'clock'
+  | 'bulb'
   | 'telegram'
   | 'webhook'
   | 'list'
@@ -233,6 +234,13 @@ const paths: Record<IconName, JSX.Element> = {
     <>
       <circle cx="12" cy="12" r="9" />
       <polyline points="12 7 12 12 16 14" />
+    </>
+  ),
+  bulb: (
+    <>
+      <path d="M12 3a6 6 0 0 0-3.9 10.6c.7.6 1.3 1.4 1.5 2.4h4.8c.2-1 .8-1.8 1.5-2.4A6 6 0 0 0 12 3z" />
+      <line x1="9.6" y1="19" x2="14.4" y2="19" />
+      <line x1="10.5" y1="21.5" x2="13.5" y2="21.5" />
     </>
   ),
   telegram: (
