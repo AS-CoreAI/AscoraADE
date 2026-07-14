@@ -65,7 +65,7 @@ export const en = {
   'rail.agentBackendSettings': 'Agent backend settings',
   'rail.appearanceSettings': 'Appearance settings',
   'rail.about': 'About Ascora ADE',
-  'rail.version': 'Version 1.2.3',
+  'rail.version': 'Version 1.2.4',
   'rail.createdAt': 'Created at AS CORE AI',
   'rail.author': 'Author & developer: Artur Strazewicz',
   'rail.website': 'Website:',
@@ -245,6 +245,19 @@ export const en = {
   'settings.providerGlm': 'GLM / ZCode (Zhipu coding agent)',
   'settings.providerWProvider': 'Ascora WProvider (web chat, no API key)',
   'settings.wproviderService': 'Web service',
+  'settings.wproviderAuthorizedModels': 'Authorized models',
+  'settings.wproviderNoAuthorizedModels': 'No confirmed authorizations yet.',
+  'settings.wproviderAuthorizationsLoading': 'Loading authorizations…',
+  'settings.wproviderAuthorizationsUnavailable': 'Could not load authorizations.',
+  'settings.wproviderCheckingAll': 'Checked {completed} of {total} · now {name}',
+  'settings.wproviderCheckingAllExternal':
+    'Checked {completed} of {total} · now {name} in the real browser',
+  'settings.wproviderCheckingAllFailed': 'errors: {count}',
+  'settings.wproviderCheckAllFinishedWithErrors':
+    '{count} of {total} services could not be checked.',
+  'settings.wproviderRetryAll': 'Retry all',
+  'settings.wproviderStatus': 'Status',
+  'settings.wproviderAuthorized': 'Authorized',
   'settings.wproviderHint':
     "Drives the provider's own web chat in a hidden browser window. Sign in once with your regular account — no API key needed.",
   'settings.wproviderSignedIn': 'Signed in to {name}',

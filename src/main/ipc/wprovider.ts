@@ -4,6 +4,7 @@ import {
   DEFAULT_LLM_CONFIG,
   WPROVIDER_SERVICES,
   type ChatResult,
+  type WProviderAuthorization,
   type WProviderChatParams,
   type WProviderCheckResult,
   type WProviderLoginResult,
@@ -14,6 +15,7 @@ import {
   abortWProvider,
   chatWProvider,
   checkWProvider,
+  listWProviderAuthorizations,
   loginWProvider,
   logoutWProvider
 } from '../wprovider/runner'
@@ -25,6 +27,10 @@ function configuredService(): WProviderService {
 }
 
 export function registerWProviderHandlers(): void {
+  ipcMain.handle(
+    IPC.wprovider.authorizations,
+    (): WProviderAuthorization[] => listWProviderAuthorizations()
+  )
   ipcMain.handle(
     IPC.wprovider.check,
     (_e, service?: WProviderService): Promise<WProviderCheckResult> =>

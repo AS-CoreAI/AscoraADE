@@ -2,20 +2,34 @@ import { BrowserWindow, ipcMain, session, type Session, type WebContents } from 
 import { join } from 'node:path'
 import {
   IPC,
+  WPROVIDER_SERVICES,
   WPROVIDER_SERVICE_INFO,
   type ChatResult,
+  type WProviderAuthorization,
   type WProviderChatParams,
   type WProviderCheckResult,
   type WProviderLoginResult,
   type WProviderService
 } from '@shared/ipc'
+import {
+  closeActiveBrowser,
+  ensureExternalWProviderPage,
+  importExternalCookies,
+  reloadActiveExternalPage,
+  runExternalWProviderLogin,
+  type ExternalAuthPage,
+  type ExternalAuthStorage,
+  type ExternalDriverPage
+} from './external-auth'
+import { getStore } from '../store'
 
 /**
  * Ascora WProvider — an "API emulator" that drives a provider's web chat
  * inside an offscreen Electron BrowserWindow:
  *
- *  1. The user signs in once in a VISIBLE window; the login lives in a
- *     persistent session partition, so the hidden window inherits it.
+ *  1. The user signs in on the provider's page in a real installed browser.
+ *     Portable provider state is copied into WProvider's persistent Electron
+ *     partition; device-bound sessions stay in that browser as a fallback.
  *  2. Each agent turn is typed into the site's own composer (React-safe value
  *     setter + input event + Enter), so the page itself builds and signs the
  *     request exactly like a human user would.
@@ -39,6 +53,8 @@ const UI_READY_TIMEOUT_MS = 45_000
 const DEEPSEEK_PROMPT_STABLE_MS = 2500
 /** How long after "send" to wait for the completion request to start. */
 const START_TIMEOUT_MS = 25_000
+/** Rendered-DOM providers can show a queued/thinking turn before any answer text exists. */
+const RENDERED_START_TIMEOUT_MS = 60_000
 /** Some services do not expose a stable OpenAI-style stream; wait for rendered markdown to stop changing. */
 const RENDERED_DOM_STABLE_MS = 4000
 /** Abort a generation when the stream goes silent for this long. */
@@ -95,27 +111,142 @@ const sessions = new Map<string, ChatSession>()
 const cancelledOps = new Set<string>()
 let netListenerInstalled = false
 let sessionHeadersInstalled = false
+let externalLoginActive = false
+const externalDriverServices = new Set<WProviderService>()
+const EXTERNAL_DRIVER_SERVICES_SETTING = 'wprovider.externalDriverServices'
+const AUTHORIZATIONS_SETTING = 'wprovider.authorizations'
+let externalDriverServicesLoaded = false
+let authorizationsLoaded = false
+const authorizations = new Map<WProviderService, WProviderAuthorization>()
 
-/**
- * The single identity WProvider presents everywhere — every provider, every
- * hidden driver window, every sign-in redirect. We spoof Firefox rather than
- * Chrome because Electron is Chromium: a Chrome UA is contradicted by the
- * Chromium-only JS surface (navigator.userAgentData never carries the "Google
- * Chrome" brand) and Google's sign-in rejects that mismatch as an insecure
- * embedded browser. Firefox has no Client Hints and no such probes, so it is
- * the one mainstream identity Electron can present coherently once the
- * Chromium-only globals are stripped (see the wprovider preloads). Bump the
- * version when providers start flagging it as outdated.
- */
-function firefoxUserAgent(): string {
-  const version = '140.0'
-  if (process.platform === 'win32') {
-    return `Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:${version}) Gecko/20100101 Firefox/${version}`
+function isWProviderService(value: unknown): value is WProviderService {
+  return (
+    typeof value === 'string' &&
+    Object.prototype.hasOwnProperty.call(WPROVIDER_SERVICE_INFO, value)
+  )
+}
+
+function loadExternalDriverServices(): void {
+  if (externalDriverServicesLoaded) return
+  externalDriverServicesLoaded = true
+  const saved = getStore().getSetting<unknown>(EXTERNAL_DRIVER_SERVICES_SETTING)
+  if (!Array.isArray(saved)) return
+  for (const value of saved) {
+    if (isWProviderService(value)) externalDriverServices.add(value)
   }
-  if (process.platform === 'darwin') {
-    return `Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:${version}) Gecko/20100101 Firefox/${version}`
+}
+
+function usesExternalDriver(service: WProviderService): boolean {
+  loadExternalDriverServices()
+  return externalDriverServices.has(service)
+}
+
+function setExternalDriver(service: WProviderService, enabled: boolean): boolean {
+  loadExternalDriverServices()
+  let changed: boolean
+  if (enabled) {
+    changed = !externalDriverServices.has(service)
+    if (changed) externalDriverServices.add(service)
+  } else {
+    changed = externalDriverServices.delete(service)
   }
-  return `Mozilla/5.0 (X11; Linux x86_64; rv:${version}) Gecko/20100101 Firefox/${version}`
+  if (changed) {
+    getStore().setSetting(EXTERNAL_DRIVER_SERVICES_SETTING, [...externalDriverServices])
+  }
+  return changed
+}
+
+function authorizationSnapshot(): WProviderAuthorization[] {
+  return WPROVIDER_SERVICES.flatMap((service) => {
+    const authorization = authorizations.get(service)
+    return authorization ? [{ ...authorization }] : []
+  })
+}
+
+function persistAuthorizations(): void {
+  try {
+    getStore().setSetting(AUTHORIZATIONS_SETTING, authorizationSnapshot())
+  } catch (err) {
+    // This list is UI metadata. A persistence failure must never turn a
+    // successful provider login, check or chat response into an error.
+    console.warn('[wprovider] Could not persist authorization registry:', err)
+  }
+}
+
+function notifyAuthorizationsChanged(): void {
+  const snapshot = authorizationSnapshot()
+  for (const win of BrowserWindow.getAllWindows()) {
+    try {
+      win.webContents.send(IPC.wprovider.authorizationsChanged, snapshot)
+    } catch {
+      // A window may disappear between getAllWindows() and send().
+    }
+  }
+}
+
+function loadAuthorizations(): void {
+  if (authorizationsLoaded) return
+  authorizationsLoaded = true
+  const saved = getStore().getSetting<unknown>(AUTHORIZATIONS_SETTING)
+  if (Array.isArray(saved)) {
+    for (const value of saved) {
+      if (!value || typeof value !== 'object') continue
+      const candidate = value as Partial<WProviderAuthorization>
+      if (
+        !isWProviderService(candidate.service) ||
+        (candidate.driver !== 'electron' && candidate.driver !== 'external') ||
+        typeof candidate.verifiedAt !== 'number' ||
+        !Number.isFinite(candidate.verifiedAt)
+      ) {
+        continue
+      }
+      authorizations.set(candidate.service, {
+        service: candidate.service,
+        driver: candidate.driver,
+        verifiedAt: candidate.verifiedAt
+      })
+    }
+  }
+
+  // External-driver markers were persisted before the authorization registry
+  // existed. They were created only after a completed OAuth flow, so they are
+  // safe positive migration seeds and require no browser navigation here. A
+  // zero timestamp means the exact confirmation time predates this registry.
+  loadExternalDriverServices()
+  let migrated = false
+  for (const service of externalDriverServices) {
+    if (authorizations.has(service)) continue
+    authorizations.set(service, {
+      service,
+      driver: 'external',
+      verifiedAt: 0
+    })
+    migrated = true
+  }
+  if (migrated) persistAuthorizations()
+}
+
+function confirmAuthorization(
+  service: WProviderService,
+  driver: WProviderAuthorization['driver']
+): void {
+  loadAuthorizations()
+  authorizations.set(service, { service, driver, verifiedAt: Date.now() })
+  persistAuthorizations()
+  notifyAuthorizationsChanged()
+}
+
+function forgetAuthorization(service: WProviderService): void {
+  loadAuthorizations()
+  if (!authorizations.delete(service)) return
+  persistAuthorizations()
+  notifyAuthorizationsChanged()
+}
+
+/** Cheap persisted snapshot for settings UI; never drives or opens a browser. */
+export function listWProviderAuthorizations(): WProviderAuthorization[] {
+  loadAuthorizations()
+  return authorizationSnapshot()
 }
 
 function enqueueWProviderOp<T>(run: () => Promise<T>): Promise<T> {
@@ -129,6 +260,14 @@ function enqueueWProviderOp<T>(run: () => Promise<T>): Promise<T> {
 
 function serviceOrigin(service: WProviderService): string {
   return WPROVIDER_SERVICE_INFO[service].origin
+}
+
+function urlOnService(url: string, service: WProviderService): boolean {
+  try {
+    return new URL(url).origin === serviceOrigin(service)
+  } catch {
+    return false
+  }
 }
 
 function serviceChatUrl(service: WProviderService): string {
@@ -145,6 +284,32 @@ function serviceLoginUrl(service: WProviderService): string {
   return serviceChatUrl(service)
 }
 
+/**
+ * Cookie domains that can establish a session for each provider after a login
+ * completed in the dedicated real-browser profile. Keep this allowlist narrow:
+ * the broker must never copy unrelated browsing cookies into Electron.
+ */
+function serviceAuthCookieDomains(service: WProviderService): string[] {
+  switch (service) {
+    case 'qwen':
+      return ['qwen.ai']
+    case 'deepseek':
+      return ['deepseek.com']
+    case 'alice':
+      return ['yandex.ru']
+    case 'mistral':
+      return ['mistral.ai']
+    case 'claude':
+      return ['claude.ai']
+    case 'grok':
+      return ['grok.com', 'x.ai', 'x.com', 'twitter.com']
+    case 'gemini':
+      return ['google.com', 'youtube.com']
+    case 'chatgpt':
+      return ['chatgpt.com', 'openai.com']
+  }
+}
+
 function usesRenderedDomCapture(service: WProviderService): boolean {
   return (
     service === 'alice' ||
@@ -158,26 +323,38 @@ function usesRenderedDomCapture(service: WProviderService): boolean {
 
 function wpSession(): Session {
   const ses = session.fromPartition(PARTITION)
-  // One coherent Firefox identity for every provider and every redirect in the
-  // persistent WProvider session (including Google OAuth).
-  const ua = firefoxUserAgent()
+  // Provider pages still run in Electron after a portable login succeeds, but
+  // Google authentication itself never does. Keep the real Chromium identity
+  // and remove only Electron/application product tokens that needlessly trip
+  // generic embedded-browser filters.
+  const ua = ses
+    .getUserAgent()
+    .replace(/\sElectron\/[\d.]+/i, '')
+    .replace(/\sascora-ade\/[\d.]+/i, '')
   if (ua !== ses.getUserAgent()) ses.setUserAgent(ua)
   if (!sessionHeadersInstalled) {
     sessionHeadersInstalled = true
+    const chromeMajor = /Chrome\/(\d+)/i.exec(ua)?.[1] ?? '150'
     ses.webRequest.onBeforeSendHeaders(
-      { urls: ['https://*/*'] },
+      { urls: ['https://grok.com/*', 'https://*.grok.com/*', 'https://*.x.ai/*'] },
       (details, callback) => {
-        // Force the Firefox UA on every request — main frame, subresources, and
-        // the service-worker/background fetches a per-window override misses —
-        // and strip the Chromium-only User-Agent Client Hints entirely, since
-        // real Firefox sends none. A mixed identity is what Google's sign-in
-        // rejects as an insecure browser.
         const headers = { ...details.requestHeaders }
-        for (const existing of Object.keys(headers)) {
-          const lower = existing.toLowerCase()
-          if (lower === 'user-agent' || lower.startsWith('sec-ch-ua')) delete headers[existing]
+        const setHeader = (name: string, value: string): void => {
+          for (const existing of Object.keys(headers)) {
+            if (existing.toLowerCase() === name.toLowerCase()) delete headers[existing]
+          }
+          headers[name] = value
         }
-        headers['User-Agent'] = ua
+        setHeader('User-Agent', ua)
+        setHeader(
+          'Sec-CH-UA',
+          `"Google Chrome";v="${chromeMajor}", "Chromium";v="${chromeMajor}", "Not_A Brand";v="24"`
+        )
+        setHeader('Sec-CH-UA-Mobile', '?0')
+        setHeader(
+          'Sec-CH-UA-Platform',
+          process.platform === 'win32' ? '"Windows"' : process.platform === 'darwin' ? '"macOS"' : '"Linux"'
+        )
         callback({ requestHeaders: headers })
       }
     )
@@ -205,6 +382,23 @@ async function clearStaleGoogleAuthCookies(): Promise<void> {
       )
     )
   }
+  // A rejected embedded attempt can also leave a registered service worker and
+  // cached storage. Clear only Electron's obsolete copy; the dedicated real
+  // browser profile intentionally keeps its valid Google SSO state.
+  for (const origin of [
+    'https://accounts.google.com',
+    'https://google.com',
+    'https://gemini.google.com'
+  ]) {
+    try {
+      await ses.clearStorageData({
+        origin,
+        storages: ['localstorage', 'indexdb', 'serviceworkers', 'cachestorage']
+      })
+    } catch {
+      /* best effort — a missing origin is fine */
+    }
+  }
 }
 
 async function clearStaleGrokChallengeCookies(): Promise<void> {
@@ -226,11 +420,8 @@ async function clearStaleGrokChallengeCookies(): Promise<void> {
  *  - `plain`: visible sign-in window kept as close to a stock, sandboxed
  *    Chromium tab as possible — no preload, no Node. (DeepSeek's login modal
  *    closed itself into a "verifying" challenge when a preload was present.)
- *  - `google`: visible Google sign-in window. Its UA is spoofed to Firefox, so
- *    it needs a preload (contextIsolation off) to strip the Chromium-only JS
- *    surface that would otherwise contradict that UA. No fetch tap.
  */
-type WindowVariant = 'tap' | 'plain' | 'google'
+type WindowVariant = 'tap' | 'plain'
 
 function createWindow(show: boolean, variant: WindowVariant = 'tap'): BrowserWindow {
   wpSession() // make sure the partition exists with the cleaned UA
@@ -247,10 +438,7 @@ function createWindow(show: boolean, variant: WindowVariant = 'tap'): BrowserWin
         }
       : {
           partition: PARTITION,
-          preload: join(
-            __dirname,
-            variant === 'google' ? '../preload/wprovider-google.js' : '../preload/wprovider.js'
-          ),
+          preload: join(__dirname, '../preload/wprovider.js'),
           // The preload must patch the PAGE's globals, so no isolation here.
           // Nothing is exposed to the page — ipcRenderer stays in the preload's
           // closure — and the window only ever navigates to the provider's site.
@@ -929,7 +1117,7 @@ async function loadChat(win: BrowserWindow, service: WProviderService, url: stri
 
 function windowOnService(win: BrowserWindow | null, service: WProviderService): boolean {
   if (!win || win.isDestroyed()) return false
-  return win.webContents.getURL().startsWith(serviceOrigin(service))
+  return urlOnService(win.webContents.getURL(), service)
 }
 
 async function readDeepSeekToken(win: BrowserWindow): Promise<string> {
@@ -983,15 +1171,17 @@ async function checkDeepSeekLoggedIn(): Promise<boolean> {
 }
 
 /**
- * Services whose page shows a usable-looking composer even when signed out —
- * ChatGPT lets anonymous visitors type into the real composer, and Mistral's
- * login screen carries a stray textarea that composerLookupJs picks up. Claude
- * also passes through challenge and login surfaces on the chat origin. For
- * these services, composer presence alone must never count as "signed in".
+ * Services where a composer alone is not reliable proof of authentication —
+ * some expose anonymous input, retain a covered composer on login/challenge
+ * screens, or A/B-test that behavior. For these services we also require the
+ * absence of visible login UI (and use a structural account marker where one
+ * is stable).
  */
 const COMPOSER_NOT_ENOUGH_SERVICES: ReadonlySet<WProviderService> = new Set([
+  'qwen',
   'mistral',
   'claude',
+  'grok',
   'gemini',
   'chatgpt'
 ])
@@ -1004,7 +1194,8 @@ const COMPOSER_NOT_ENOUGH_SERVICES: ReadonlySet<WProviderService> = new Set([
  * component renders once the workspace/account is loaded.
  */
 const SIGNED_IN_MARKER_SELECTORS: Partial<Record<WProviderService, string>> = {
-  mistral: '[data-sidebar="menu-button"]'
+  mistral: '[data-sidebar="menu-button"]',
+  gemini: 'img.mavatar-image, [data-test-id="mavatar-footer-settings-button"]'
 }
 
 /** Structural UI that Gemini renders only for anonymous visitors. */
@@ -1020,8 +1211,8 @@ function isAuthPageUrl(url: string): boolean {
   }
 }
 
-/** TEMP DEBUG: reports which signed-out-UI check fired, if any. */
-function signedOutUiDebugJs(): string {
+/** Detect visible sign-in controls without depending on the page locale. */
+function signedOutUiJs(): string {
   return `(() => {
     const isVisible = (el) => {
       if (!el) return false;
@@ -1035,26 +1226,22 @@ function signedOutUiDebugJs(): string {
         style.opacity !== '0'
       );
     };
-    const describe = (el) => {
-      const rect = el.getBoundingClientRect();
-      return (el.outerHTML || '').slice(0, 200) + ' @ (' + Math.round(rect.left) + ',' + Math.round(rect.top) + ' ' + Math.round(rect.width) + 'x' + Math.round(rect.height) + ')';
-    };
     const explicit = document.querySelectorAll(
       '[data-testid="login-button"], [data-testid="signup-button"], [data-testid="mobile-login-button"], [data-testid="mobile-signup-button"]'
     );
     const hitExplicit = Array.from(explicit).find(isVisible);
-    if (hitExplicit) return { signedOut: true, reason: 'explicit-testid', el: describe(hitExplicit) };
+    if (hitExplicit) return true;
     // Contains, not exact-match: real buttons read "Log in to Mistral", "Continue with Google", etc.
     const loginText = /log\\s?in|sign\\s?in|sign\\s?up|create\\s+account|continue\\s+with\\s+(google|apple|microsoft|email)|zaloguj(\\s+się)?|załóż\\s+konto|se\\s+connecter|anmelden|войти|зарегистрироваться/i;
     const loginHref = /\\/auth\\/log-?in|\\/log-?in(?:[/?#]|$)|\\/sign-?in(?:[/?#]|$)|auth\\.openai\\.com/i;
     for (const el of Array.from(document.querySelectorAll('a, button'))) {
       if (!isVisible(el)) continue;
       const text = (el.innerText || el.textContent || '').trim();
-      if (text && text.length <= 40 && loginText.test(text)) return { signedOut: true, reason: 'text:' + text, el: describe(el) };
+      if (text && text.length <= 40 && loginText.test(text)) return true;
       const href = typeof el.getAttribute === 'function' ? el.getAttribute('href') || '' : '';
-      if (href && loginHref.test(href)) return { signedOut: true, reason: 'href:' + href, el: describe(el) };
+      if (href && loginHref.test(href)) return true;
     }
-    return { signedOut: false };
+    return false;
   })()`
 }
 
@@ -1062,9 +1249,16 @@ function signedOutUiDebugJs(): string {
  * "Composer present" plus, for COMPOSER_NOT_ENOUGH_SERVICES, "and the page is
  * not an auth screen and shows no visible login/signup controls".
  */
-async function serviceComposerSignedIn(win: BrowserWindow, service: WProviderService): Promise<boolean> {
-  if (win.isDestroyed() || !windowOnService(win, service)) return false
-  if (!(await hasComposer(win))) return false
+type JsEvaluator = <T>(code: string) => Promise<T>
+
+async function serviceComposerSignedInWith(
+  url: string,
+  service: WProviderService,
+  evaluate: JsEvaluator
+): Promise<boolean> {
+  if (!urlOnService(url, service)) return false
+  const composerPresent = await evaluate<boolean>(`!!${composerLookupJs()}`).catch(() => false)
+  if (!composerPresent) return false
   if (!COMPOSER_NOT_ENOUGH_SERVICES.has(service)) return true
 
   const signedOutMarker = SIGNED_OUT_MARKER_SELECTORS[service]
@@ -1072,48 +1266,31 @@ async function serviceComposerSignedIn(win: BrowserWindow, service: WProviderSer
     // The selector targets component identity rather than translated button
     // text, so it works for every Gemini locale. Probe failures deliberately
     // count as signed out to avoid closing the login window prematurely.
-    const isSignedOut = await runJs<boolean>(
-      win,
+    const isSignedOut = await evaluate<boolean>(
       `!!document.querySelector(${JSON.stringify(signedOutMarker)})`
-    ).catch((err) => {
-      console.log(`[wprovider debug] ${service}: signed-out marker probe failed: ${String(err)}`)
-      return true
-    })
-    if (isSignedOut) {
-      console.log(`[wprovider debug] ${service}: signed-out marker (${signedOutMarker}) found`)
-      return false
-    }
+    ).catch(() => true)
+    if (isSignedOut) return false
   }
 
   const marker = SIGNED_IN_MARKER_SELECTORS[service]
   if (marker) {
-    const hasMarker = await runJs<boolean>(win, `!!document.querySelector(${JSON.stringify(marker)})`).catch(
-      (err) => {
-        console.log(`[wprovider debug] ${service}: signed-in marker probe failed: ${String(err)}`)
-        return false
-      }
-    )
-    if (!hasMarker) console.log(`[wprovider debug] ${service}: signed-in marker (${marker}) not found yet`)
-    return hasMarker
+    return evaluate<boolean>(`!!document.querySelector(${JSON.stringify(marker)})`).catch(() => false)
   }
 
-  if (isAuthPageUrl(win.webContents.getURL())) {
-    console.log(`[wprovider debug] ${service}: treated as auth page, url=${win.webContents.getURL()}`)
-    return false
-  }
+  if (isAuthPageUrl(url)) return false
   // On probe failure err on "signed out": a false "signed in" closes the login
   // window under the user's cursor, which is the failure mode being avoided.
-  const debug = await runJs<{ signedOut: boolean; reason?: string; el?: string }>(
-    win,
-    signedOutUiDebugJs()
-  ).catch((err) => {
-    console.log(`[wprovider debug] ${service}: signedOutUi probe failed: ${String(err)}`)
-    return { signedOut: true } as { signedOut: boolean; reason?: string; el?: string }
-  })
-  if (debug.signedOut) {
-    console.log(`[wprovider debug] ${service}: signed-out UI detected (${debug.reason}) ${debug.el ?? ''}`)
-  }
-  return !debug.signedOut
+  const signedOut = await evaluate<boolean>(signedOutUiJs()).catch(() => true)
+  return !signedOut
+}
+
+async function serviceComposerSignedIn(win: BrowserWindow, service: WProviderService): Promise<boolean> {
+  if (win.isDestroyed()) return false
+  return serviceComposerSignedInWith(
+    win.webContents.getURL(),
+    service,
+    <T>(code: string): Promise<T> => runJs<T>(win, code)
+  )
 }
 
 async function waitForServiceComposerReady(
@@ -1158,6 +1335,48 @@ function aliceAuthStateJs(): string {
     if (document.body && (document.body.innerText || '').trim()) return 'logged-in';
     return 'unknown';
   })()`
+}
+
+async function externalPageSignedIn(
+  page: ExternalAuthPage,
+  service: WProviderService
+): Promise<boolean> {
+  if (!urlOnService(page.url, service)) return false
+  if (service === 'alice') {
+    const state = await page.evaluate<string>(aliceAuthStateJs()).catch(() => 'unknown')
+    return state === 'logged-in'
+  }
+  if (service === 'deepseek') {
+    if (isDeepSeekSignInUrl(page.url)) return false
+    return page
+      .evaluate<boolean>(
+        `(() => {
+          const token = String(window.localStorage?.getItem(${JSON.stringify(DEEPSEEK_AUTH_STORAGE_KEY)}) || '');
+          return token.length > 8 && Boolean(${composerLookupJs()});
+        })()`
+      )
+      .catch(() => false)
+  }
+  return serviceComposerSignedInWith(
+    page.url,
+    service,
+    <T>(code: string): Promise<T> => page.evaluate<T>(code)
+  )
+}
+
+async function restoreExternalStorage(
+  win: BrowserWindow,
+  storage: ExternalAuthStorage
+): Promise<void> {
+  const local = JSON.stringify(storage.local)
+  const sessionValues = JSON.stringify(storage.session)
+  await runJs(
+    win,
+    `(() => {
+      for (const [key, value] of Object.entries(${local})) window.localStorage.setItem(key, String(value));
+      for (const [key, value] of Object.entries(${sessionValues})) window.sessionStorage.setItem(key, String(value));
+    })()`
+  )
 }
 
 async function readAliceAuthState(win: BrowserWindow): Promise<AliceAuthState> {
@@ -1460,6 +1679,15 @@ interface AssistantSnapshot {
   text: string
 }
 
+function looksLikePromptEcho(text: string, prompt: string): boolean {
+  if (text === prompt) return true
+  // Broad DOM selectors can briefly pick up a truncated user bubble. Do not
+  // reject a short legitimate answer merely because that word also appeared
+  // in the instruction (for example: “Answer only: ГОТОВО”).
+  const substantialEchoLength = Math.max(24, Math.floor(prompt.length * 0.7))
+  return text.length >= substantialEchoLength && prompt.includes(text)
+}
+
 function assistantMessageSelector(service: WProviderService): string {
   // Alice's "MarkdownText" bubble class from earlier UI builds is gone in the
   // current Futuris-based redesign (confirmed via live diagnostics: assistant
@@ -1525,7 +1753,7 @@ async function waitForRenderedAssistant(
   prompt: string,
   id: string
 ): Promise<string> {
-  const startDeadline = Date.now() + START_TIMEOUT_MS
+  const startDeadline = Date.now() + RENDERED_START_TIMEOUT_MS
   let lastText = ''
   let emitted = ''
   let lastChange = Date.now()
@@ -1541,9 +1769,7 @@ async function waitForRenderedAssistant(
         ? snapshot.text
         : ''
 
-    if (text && (text === prompt || prompt.includes(text) || text.includes(prompt.slice(0, 200)))) {
-      text = ''
-    }
+    if (text && looksLikePromptEcho(text, prompt)) text = ''
 
     if (text && text !== lastText) {
       lastText = text
@@ -1586,7 +1812,7 @@ async function waitForRenderedAssistant(
 }
 
 function isProviderChatUrl(service: WProviderService, url: string): boolean {
-  if (!url.startsWith(serviceOrigin(service))) return false
+  if (!urlOnService(url, service)) return false
   if (service === 'gemini') return /\/app\/[^/?#]+\/?/.test(url)
   if (service === 'claude') return /\/chat\/[^/?#]+\/?/.test(url)
   if (service === 'deepseek') return /\/a\/chat\/s\//.test(url)
@@ -1601,8 +1827,28 @@ function sleep(ms: number): Promise<void> {
 
 // ---------------- public surface ----------------
 
+async function checkExternalDriverLoggedIn(service: WProviderService): Promise<boolean> {
+  const page = await ensureExternalWProviderPage(serviceChatUrl(service))
+  const deadline = Date.now() + 12_000
+  for (;;) {
+    const url = await page.getUrl().catch(() => '')
+    if (urlOnService(url, service)) {
+      const current: ExternalAuthPage = {
+        url,
+        evaluate: <T>(code: string): Promise<T> => page.evaluate<T>(code)
+      }
+      if (await externalPageSignedIn(current, service)) return true
+    }
+    if (Date.now() >= deadline) return false
+    await sleep(500)
+  }
+}
+
 async function checkWProviderNow(service: WProviderService): Promise<WProviderCheckResult> {
   try {
+    if (usesExternalDriver(service)) {
+      return { ok: true, service, loggedIn: await checkExternalDriverLoggedIn(service) }
+    }
     if (service === 'alice') {
       return { ok: true, service, loggedIn: await checkAliceLoggedIn() }
     }
@@ -1635,93 +1881,130 @@ async function checkWProviderNow(service: WProviderService): Promise<WProviderCh
 }
 
 export function checkWProvider(service: WProviderService): Promise<WProviderCheckResult> {
-  return enqueueWProviderOp(() => checkWProviderNow(service))
+  return enqueueWProviderOp(async () => {
+    const result = { ...(await checkWProviderNow(service)), checkedAt: Date.now() }
+    if (result.loggedIn) {
+      confirmAuthorization(service, usesExternalDriver(service) ? 'external' : 'electron')
+    }
+    return result
+  })
+}
+
+async function probeLoginReady(win: BrowserWindow, service: WProviderService): Promise<boolean> {
+  if (service === 'alice') return (await waitForAliceAuthState(win, 8000)) === 'logged-in'
+  if (service === 'deepseek') return isDeepSeekPromptReady(win, 8000)
+  if (
+    service === 'mistral' ||
+    service === 'claude' ||
+    service === 'grok' ||
+    service === 'gemini' ||
+    service === 'chatgpt'
+  ) {
+    return waitForServiceComposerReady(win, service, 10_000)
+  }
+  // Probe the Electron window we have just populated. Calling the global
+  // checker here can accidentally validate a still-active external fallback
+  // and then make us close it even though this imported session is unusable.
+  return serviceComposerSignedIn(win, service)
 }
 
 /**
- * Open a visible window on the provider's site so the user can sign in, and
- * resolve once credentials are usable by the chat composer (or the user closes
- * the window).
+ * Complete the provider's whole interactive sign-in flow in a real installed
+ * browser. Starting at the provider (instead of opening a captured Google URL)
+ * preserves popup opener/state/PKCE behavior for every "Continue with Google"
+ * implementation. Once the real browser reaches a usable composer, its
+ * provider-scoped session is copied into WProvider's private partition and
+ * verified again inside the hidden Electron driver.
  */
-export async function loginWProvider(service: WProviderService): Promise<WProviderLoginResult> {
-  if (authWin && !authWin.isDestroyed()) {
-    authWin.focus()
-    return { ok: true, loggedIn: (await checkWProvider(service)).loggedIn }
-  }
-  // A cancelled/expired Turnstile attempt can leave cf_chl_* cookies that make
-  // the next Grok login immediately re-enter the same challenge. Preserve the
-  // valid cf_clearance/auth cookies, but discard only those transient attempts.
-  if (service === 'grok') await clearStaleGrokChallengeCookies()
-  if (service === 'gemini') await clearStaleGoogleAuthCookies()
-  // The whole session already presents Firefox (UA + no Client Hints). Google
-  // sign-in additionally needs the page's JS surface to match, so Gemini's
-  // window uses the 'google' preload that strips the Chromium-only globals
-  // (navigator.userAgentData, window.chrome, …); see wprovider-google.ts.
-  authWin = createWindow(true, service === 'gemini' ? 'google' : 'plain')
-  const win = authWin
-  win.on('closed', () => {
-    authWin = null
-  })
-  try {
-    await loadURLBestEffort(win, serviceLoginUrl(service), 15_000)
-  } catch {
-    /* keep the window open anyway — the user may retry inside it */
-  }
-
-  return new Promise<WProviderLoginResult>((resolve) => {
-    let settled = false
-    let probing = false
-    const settle = (result: WProviderLoginResult): void => {
-      if (settled) return
-      settled = true
-      clearInterval(timer)
-      resolve(result)
+async function loginWProviderNow(service: WProviderService): Promise<WProviderLoginResult> {
+  if (externalLoginActive) {
+    return {
+      ok: false,
+      loggedIn: false,
+      error: 'Another WProvider sign-in is already open in the real browser.'
     }
-    const timer = setInterval(() => {
-      if (probing) return
-      probing = true
-      void (async () => {
-        try {
-          if (win.isDestroyed()) {
-            settle({ ok: true, loggedIn: (await checkWProvider(service)).loggedIn })
-            return
-          }
-          const loggedIn =
-            service === 'alice'
-              ? (await waitForAliceAuthState(win, 8000)) === 'logged-in'
-              : service === 'deepseek'
-              ? await isDeepSeekPromptReady(win, 8000)
-              : service === 'mistral' ||
-                  service === 'claude' ||
-                  service === 'grok' ||
-                  service === 'gemini' ||
-                  service === 'chatgpt'
-                ? await waitForServiceComposerReady(win, service, 8000)
-                : (await checkWProvider(service)).loggedIn
-          if (loggedIn) {
-            if (service !== 'deepseek' && !win.isDestroyed()) win.close()
-            settle({ ok: true, loggedIn: true })
-          }
-        } finally {
-          probing = false
-        }
-      })()
-    }, 1500)
-    win.on('closed', () => {
-      void checkWProvider(service).then((r) => settle({ ok: true, loggedIn: r.loggedIn }))
+  }
+  externalLoginActive = true
+  try {
+    // Clean only Electron's rejected/half-established state. The dedicated real
+    // browser profile deliberately keeps Google SSO between provider logins.
+    if (service === 'grok') await clearStaleGrokChallengeCookies()
+    if (service === 'gemini') await clearStaleGoogleAuthCookies()
+
+    const external = await runExternalWProviderLogin({
+      startUrl: serviceLoginUrl(service),
+      providerLabel: WPROVIDER_SERVICE_INFO[service].label,
+      cookieDomains: serviceAuthCookieDomains(service),
+      isSignedIn: (page) => externalPageSignedIn(page, service)
     })
-    // Don't hold the IPC promise hostage forever.
-    setTimeout(() => settle({ ok: true, loggedIn: false }), 10 * 60_000)
-  })
+    const imported = await importExternalCookies(wpSession(), external.cookies)
+    if (imported.imported === 0) {
+      setExternalDriver(service, true)
+      confirmAuthorization(service, 'external')
+      return { ok: true, loggedIn: true }
+    }
+
+    // Validate inside the actual hidden chat driver, not a disposable window.
+    // sessionStorage is per-window; validating elsewhere and then closing that
+    // window can turn a seemingly successful hand-off into an immediate logout.
+    const win = ensureHiddenWindow()
+    await loadURLBestEffort(win, serviceChatUrl(service), 20_000)
+    if (!win.isDestroyed() && windowOnService(win, service)) {
+      await restoreExternalStorage(win, external.storage).catch(() => undefined)
+      win.webContents.reload()
+      await sleep(1200)
+    }
+    let loggedIn = !win.isDestroyed() && (await probeLoginReady(win, service))
+    if (loggedIn) {
+      // Device-bound/rotating cookies can make the imported page look signed
+      // in for a moment before the provider rejects it. Require a delayed
+      // second proof before closing the known-good real browser.
+      await sleep(service === 'gemini' ? 5000 : 1500)
+      loggedIn = !win.isDestroyed() && (await probeLoginReady(win, service))
+    }
+    if (!loggedIn) {
+      // OAuth succeeded, but this provider tied additional state to the real
+      // browser (DBSC/IndexedDB/service worker/etc.). Keep that browser as the
+      // canonical WProvider driver rather than reporting a false login failure.
+      setExternalDriver(service, true)
+      confirmAuthorization(service, 'external')
+      return { ok: true, loggedIn: true }
+    }
+    setExternalDriver(service, false)
+    await closeActiveBrowser()
+    confirmAuthorization(service, 'electron')
+    return { ok: true, loggedIn: true }
+  } catch (err) {
+    await closeActiveBrowser()
+    return {
+      ok: false,
+      loggedIn: false,
+      error: err instanceof Error ? err.message : String(err)
+    }
+  } finally {
+    const win = authWin
+    authWin = null
+    if (win && !win.isDestroyed()) win.close()
+    externalLoginActive = false
+  }
+}
+
+export function loginWProvider(service: WProviderService): Promise<WProviderLoginResult> {
+  // Login, checks and chat turns all share the same private Electron session
+  // and (only for a non-portable session) the same external browser. Keep the
+  // lifecycle serialized so a background check cannot close or replace the
+  // browser while the user is finishing OAuth.
+  return enqueueWProviderOp(() => loginWProviderNow(service))
 }
 
 async function logoutWProviderNow(service: WProviderService): Promise<WProviderCheckResult> {
   try {
+    if (setExternalDriver(service, false)) await closeActiveBrowser()
     const origin = serviceOrigin(service)
     if (
       hiddenWin &&
       !hiddenWin.isDestroyed() &&
-      hiddenWin.webContents.getURL().startsWith(origin)
+      urlOnService(hiddenWin.webContents.getURL(), service)
     ) {
       hiddenWin.destroy()
       hiddenWin = null
@@ -1731,8 +2014,23 @@ async function logoutWProviderNow(service: WProviderService): Promise<WProviderC
     }
     const ses = wpSession()
     await ses.clearStorageData({ origin })
-    const cookies = await ses.cookies.get({ url: origin })
-    await Promise.all(cookies.map((cookie) => ses.cookies.remove(origin, cookie.name)))
+    // Imported OAuth sessions can span sibling domains (for example
+    // google.com for Gemini or openai.com for ChatGPT). Clear the same narrow
+    // allowlist used during import, not only cookies visible at the chat URL.
+    for (const domain of serviceAuthCookieDomains(service)) {
+      const cookies = await ses.cookies.get({ domain })
+      await Promise.all(
+        cookies.map((cookie) => {
+          const host = cookie.domain?.replace(/^\./, '') || domain
+          return ses.cookies.remove(
+            `${cookie.secure === false ? 'http' : 'https'}://${host}${cookie.path || '/'}`,
+            cookie.name
+          )
+        })
+      )
+    }
+    await ses.cookies.flushStore()
+    forgetAuthorization(service)
     return { ok: true, service, loggedIn: false }
   } catch (err) {
     return { ok: false, service, loggedIn: false, error: err instanceof Error ? err.message : String(err) }
@@ -1751,8 +2049,15 @@ export function abortWProvider(id: string): void {
   // Reloading the page tears down the site's fetch, which stops our tap too;
   // finalize immediately so the renderer isn't left waiting.
   finalizeActiveOp()
-  if (hiddenWin && !hiddenWin.isDestroyed()) {
+  if (
+    op.webContentsId !== -1 &&
+    hiddenWin &&
+    !hiddenWin.isDestroyed() &&
+    hiddenWin.webContents.id === op.webContentsId
+  ) {
     hiddenWin.webContents.reload()
+  } else if (op.webContentsId === -1) {
+    void reloadActiveExternalPage()
   }
 }
 
@@ -1774,12 +2079,287 @@ export function chatWProvider(
     return runChatTurn(id, service, params, sender, onDelta)
   })
   return turn
+    .then((result) => {
+      if (result.ok && !result.aborted) {
+        confirmAuthorization(service, usesExternalDriver(service) ? 'external' : 'electron')
+      }
+      return result
+    })
     .catch((err) => ({
       ok: false,
       content: '',
       error: err instanceof Error ? err.message : String(err)
     }))
     .finally(() => cancelledOps.delete(id))
+}
+
+async function externalAssistantSnapshot(
+  page: ExternalDriverPage,
+  service: WProviderService
+): Promise<AssistantSnapshot> {
+  const selector = assistantMessageSelector(service)
+  return page
+    .evaluate<AssistantSnapshot>(
+      `(() => {
+        const nodes = Array.from(document.querySelectorAll(${JSON.stringify(selector)}));
+        const clean = (node) => {
+          const clone = node.cloneNode(true);
+          clone.querySelectorAll?.('button, .CodeBlock-HeaderActions, .CodeBlock-StickyWrapper, .CodeBlock-Stopper, .MessageBubble-CollapserOverlay').forEach((el) => el.remove());
+          return (clone.innerText || clone.textContent || '').replace(/\\n{3,}/g, '\\n\\n').trim();
+        };
+        const texts = nodes.map(clean).filter(Boolean);
+        return { count: nodes.length, text: texts[texts.length - 1] || '' };
+      })()`
+    )
+    .catch(() => ({ count: 0, text: '' }))
+}
+
+async function externalTypePrompt(page: ExternalDriverPage, text: string): Promise<void> {
+  const focusResult = await page.evaluate<string>(
+    `(() => {
+      const el = ${composerLookupJs()};
+      if (!el) return 'no-composer';
+      el.focus();
+      if (el.isContentEditable) {
+        const selection = window.getSelection();
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        selection?.removeAllRanges();
+        selection?.addRange(range);
+        document.execCommand('delete');
+        el.dispatchEvent(new InputEvent('input', { bubbles: true, cancelable: true, inputType: 'deleteContentBackward' }));
+        return 'ok';
+      }
+      const proto = Object.getPrototypeOf(el);
+      const desc = Object.getOwnPropertyDescriptor(proto, 'value') ||
+        Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value');
+      if (desc?.set) desc.set.call(el, ''); else el.value = '';
+      el.dispatchEvent(new InputEvent('input', { bubbles: true, cancelable: true, inputType: 'deleteContentBackward' }));
+      return 'ok';
+    })()`
+  )
+  if (focusResult === 'no-composer') throw new WProviderError('Could not find the message box on the chat page.')
+
+  await page.insertText(text)
+  await sleep(150)
+  let result = await page.evaluate<string>(
+    `(() => {
+      const el = ${composerLookupJs()};
+      if (!el) return 'no-composer';
+      const value = el.isContentEditable ? (el.innerText || el.textContent || '').trim() : (el.value || '');
+      return value.length > 0 ? 'ok' : 'empty';
+    })()`
+  )
+  if (result === 'empty') {
+    result = await page.evaluate<string>(
+      `(() => {
+        const el = ${composerLookupJs()};
+        if (!el) return 'no-composer';
+        el.focus();
+        if (el.isContentEditable) {
+          el.textContent = ${JSON.stringify(text)};
+          el.dispatchEvent(new InputEvent('input', { bubbles: true, cancelable: true, inputType: 'insertText', data: ${JSON.stringify(text)} }));
+          el.dispatchEvent(new Event('change', { bubbles: true }));
+          return (el.innerText || el.textContent || '').trim().length > 0 ? 'ok' : 'empty';
+        }
+        const proto = Object.getPrototypeOf(el);
+        const desc = Object.getOwnPropertyDescriptor(proto, 'value') ||
+          Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value');
+        if (desc?.set) desc.set.call(el, ${JSON.stringify(text)}); else el.value = ${JSON.stringify(text)};
+        el.dispatchEvent(new InputEvent('input', { bubbles: true, cancelable: true, inputType: 'insertText', data: ${JSON.stringify(text)} }));
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+        return el.value.length > 0 ? 'ok' : 'empty';
+      })()`
+    )
+  }
+  if (result !== 'ok') throw new WProviderError('Could not type the prompt into the real-browser chat page.')
+}
+
+async function externalClickSendButton(page: ExternalDriverPage): Promise<string> {
+  const target = await page.evaluate<{ selector: string; x: number; y: number } | null>(
+    `(() => {
+      const composer = ${composerLookupJs()};
+      if (composer) {
+        const pending = composer.isContentEditable
+          ? (composer.innerText || composer.textContent || '').trim()
+          : (composer.value || '').trim();
+        if (!pending) return null;
+      }
+      const selectors = ${JSON.stringify(SEND_BUTTON_SELECTORS)};
+      for (const sel of selectors) {
+        const el = document.querySelector(sel);
+        if (!el) continue;
+        const rect = el.getBoundingClientRect();
+        const style = window.getComputedStyle(el);
+        const disabled = Boolean(el.disabled || el.getAttribute('aria-disabled') === 'true' || el.classList.contains('ds-button--disabled'));
+        const visible = rect.width > 0 && rect.height > 0 && style.display !== 'none' &&
+          style.visibility !== 'hidden' && style.pointerEvents !== 'none';
+        if (!disabled && visible) {
+          el.scrollIntoView({ block: 'center', inline: 'center' });
+          const next = el.getBoundingClientRect();
+          return { selector: sel, x: Math.round(next.left + next.width / 2), y: Math.round(next.top + next.height / 2) };
+        }
+      }
+      return null;
+    })()`
+  )
+  if (!target) return 'none'
+  await page.click(target.x, target.y)
+  return target.selector
+}
+
+async function runExternalChatTurn(
+  id: string,
+  service: WProviderService,
+  params: WProviderChatParams,
+  sender?: WebContents,
+  onDelta?: (delta: string) => void
+): Promise<ChatResult> {
+  const cancelledResult = (): ChatResult => ({ ok: true, content: '', aborted: true })
+  if (cancelledOps.has(id)) return cancelledResult()
+  if (!(await checkExternalDriverLoggedIn(service))) {
+    throw new WProviderError(
+      `Not signed in to ${WPROVIDER_SERVICE_INFO[service].label} in the real WProvider browser.`
+    )
+  }
+  if (cancelledOps.has(id)) return cancelledResult()
+
+  const siteSessionKey = `${service}:${params.sessionKey}`
+  const sess = sessions.get(siteSessionKey) ?? { chatUrl: null, sent: 0 }
+  sessions.set(siteSessionKey, sess)
+  const prompt = params.messages
+    .slice(sess.sent)
+    .filter((message) => message.role === 'system' || message.role === 'user')
+    .map((message) => (message.content ?? '').trim())
+    .filter(Boolean)
+    .join('\n\n')
+  if (!prompt) throw new WProviderError('Nothing new to send to the web chat.')
+  if (cancelledOps.has(id)) return cancelledResult()
+
+  const page = await ensureExternalWProviderPage(sess.chatUrl ?? serviceChatUrl(service))
+  if (cancelledOps.has(id)) return cancelledResult()
+  if (sess.chatUrl && (await page.getUrl()) !== sess.chatUrl) await page.navigate(sess.chatUrl)
+  if (cancelledOps.has(id)) return cancelledResult()
+  const readyDeadline = Date.now() + UI_READY_TIMEOUT_MS
+  for (;;) {
+    if (cancelledOps.has(id)) return cancelledResult()
+    if (await page.evaluate<boolean>(`!!${composerLookupJs()}`).catch(() => false)) break
+    if (Date.now() >= readyDeadline) throw new WProviderError('The real-browser chat composer did not become ready.')
+    await sleep(500)
+  }
+
+  const before = await externalAssistantSnapshot(page, service)
+  if (cancelledOps.has(id)) return cancelledResult()
+  await externalTypePrompt(page, prompt)
+  if (cancelledOps.has(id)) return cancelledResult()
+
+  let abortedResult: ChatResult | null = null
+  let lastActivity = Date.now()
+  const op: ActiveOp = {
+    id,
+    service,
+    webContentsId: -1,
+    sseBuffer: '',
+    content: '',
+    thinking: '',
+    dsCursor: 'skip',
+    started: false,
+    doneStreams: 0,
+    openStreams: 0,
+    aborted: false,
+    onDelta: (delta) => {
+      if (sender && !sender.isDestroyed()) sender.send(IPC.wprovider.chunk, { id, delta })
+      onDelta?.(delta)
+    },
+    finish: (result) => {
+      abortedResult = result
+    },
+    touch: () => {
+      lastActivity = Date.now()
+    }
+  }
+  activeOp = op
+
+  const startedAt = Date.now()
+  const startDeadline = startedAt + RENDERED_START_TIMEOUT_MS
+  let lastText = ''
+  let emitted = ''
+  let lastChange = Date.now()
+  let nextSendAttempt = 0
+  let submissionAttempted = false
+  try {
+    if (activeOp !== op || cancelledOps.has(id)) {
+      return abortedResult ?? { ok: true, content: op.content, aborted: true }
+    }
+    submissionAttempted = true
+    try {
+      await page.pressEnter()
+    } catch (err) {
+      if (activeOp !== op || op.aborted || cancelledOps.has(id)) {
+        return abortedResult ?? { ok: true, content: op.content, aborted: true }
+      }
+      throw err
+    }
+    for (;;) {
+      if (activeOp !== op || cancelledOps.has(id)) {
+        return abortedResult ?? { ok: true, content: op.content, aborted: true }
+      }
+      const snapshot = await externalAssistantSnapshot(page, service)
+      let text =
+        snapshot.count > before.count || (snapshot.text && snapshot.text !== before.text)
+          ? snapshot.text
+          : ''
+      if (text && looksLikePromptEcho(text, prompt)) text = ''
+
+      if (text && text !== lastText) {
+        lastText = text
+        op.content = text
+        op.started = true
+        op.touch()
+        lastChange = Date.now()
+        if (text.startsWith(emitted)) {
+          const delta = text.slice(emitted.length)
+          emitted = text
+          if (delta) op.onDelta(delta)
+        } else if (!emitted) {
+          emitted = text
+          op.onDelta(text)
+        } else {
+          emitted = text
+        }
+      }
+
+      if (lastText && Date.now() - lastChange >= RENDERED_DOM_STABLE_MS) break
+      if (!lastText && Date.now() >= startDeadline) {
+        throw new WProviderError(
+          `The prompt was typed but ${WPROVIDER_SERVICE_INFO[service].label} did not render an answer in the real browser.`
+        )
+      }
+      if (Date.now() - lastActivity >= INACTIVITY_TIMEOUT_MS) {
+        if (op.content) break
+        throw new WProviderError('The real-browser web chat stopped responding.')
+      }
+      if (Date.now() - startedAt >= HARD_TIMEOUT_MS) throw new WProviderError('The web chat took too long to answer.')
+      if (!lastText && Date.now() >= nextSendAttempt) {
+        await externalClickSendButton(page).catch(() => 'none')
+        nextSendAttempt = Date.now() + 1000
+      }
+      await sleep(500)
+    }
+
+    const url = await page.getUrl().catch(() => '')
+    if (url && isProviderChatUrl(service, url)) sess.chatUrl = url
+    sess.sent = params.messages.length
+    return { ok: true, content: lastText }
+  } finally {
+    // Once Enter submission has been attempted, an abort must advance the site
+    // cursor: the provider may continue processing after the driver page is
+    // reloaded. Leaving the old cursor would resend the same prompt next turn.
+    if (submissionAttempted && (op.aborted || cancelledOps.has(id))) {
+      sess.sent = params.messages.length
+    }
+    if (activeOp === op) activeOp = null
+  }
 }
 
 async function runChatTurn(
@@ -1789,6 +2369,9 @@ async function runChatTurn(
   sender?: WebContents,
   onDelta?: (delta: string) => void
 ): Promise<ChatResult> {
+  if (usesExternalDriver(service)) {
+    return runExternalChatTurn(id, service, params, sender, onDelta)
+  }
   if (cancelledOps.has(id)) return { ok: true, content: '', aborted: true }
   const { loggedIn } = await checkWProviderNow(service)
   if (cancelledOps.has(id)) return { ok: true, content: '', aborted: true }

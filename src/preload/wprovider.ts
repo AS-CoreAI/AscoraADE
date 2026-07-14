@@ -16,28 +16,6 @@ import { ipcRenderer } from 'electron'
 
 const NET_CHANNEL = 'wprovider:net'
 
-// The whole WProvider session spoofs a Firefox user agent (see runner.ts). Keep
-// the JS surface coherent with it here too: remove the Chromium-only globals a
-// genuine Firefox never exposes, so a provider that fingerprints the browser
-// can't spot the Firefox-UA/Chromium-engine mismatch. Runs before page scripts.
-{
-  const nav = (globalThis as unknown as { Navigator?: { prototype: Record<string, unknown> } })
-    .Navigator
-  const win = globalThis as unknown as Record<string, unknown>
-  const drop = (obj: Record<string, unknown> | undefined, key: string): void => {
-    if (!obj) return
-    try {
-      delete obj[key]
-    } catch {
-      /* non-configurable on this build — leave it */
-    }
-  }
-  drop(nav?.prototype, 'userAgentData')
-  drop(nav?.prototype, 'connection')
-  drop(nav?.prototype, 'deviceMemory')
-  drop(win, 'chrome')
-}
-
 /** Chat-completion endpoints across Qwen / DeepSeek / Open-WebUI-style backends. */
 const COMPLETION_PATHS = [
   /\/chat\/completions(?:[/?#]|$)/i,

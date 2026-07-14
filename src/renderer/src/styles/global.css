@@ -3128,6 +3128,15 @@ button.changes-badge:hover {
   flex-direction: column;
   gap: 16px;
 }
+.connection-settings-modal {
+  display: flex;
+  max-height: calc(100vh - 32px);
+  flex-direction: column;
+}
+.connection-settings-modal .modal-body {
+  min-height: 0;
+  overflow-y: auto;
+}
 .modal-copilot-auth {
   width: min(560px, 92%);
 }
@@ -3393,6 +3402,126 @@ button.changes-badge:hover {
 }
 .conn-line.unknown {
   color: var(--text-muted);
+}
+.wprovider-auth-card {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-input);
+}
+.wprovider-auth-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.wprovider-auth-count {
+  min-width: 20px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--bg-hover);
+  color: var(--text-faint);
+  font-size: 10.5px;
+  line-height: 1.5;
+  text-align: center;
+}
+.wprovider-auth-empty {
+  padding: 10px;
+  color: var(--text-faint);
+  font-size: 12px;
+}
+.wprovider-auth-scan {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  color: var(--blue);
+  font-size: 11.5px;
+}
+.wprovider-auth-scan::before {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 16%, transparent);
+  content: '';
+}
+.wprovider-auth-scan.error {
+  color: var(--danger);
+}
+.wprovider-auth-retry {
+  margin-left: auto;
+  padding: 2px 6px;
+  border: 1px solid color-mix(in srgb, currentColor 35%, transparent);
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
+  font-size: 10.5px;
+  white-space: nowrap;
+}
+.wprovider-auth-retry:hover {
+  background: color-mix(in srgb, currentColor 10%, transparent);
+}
+.wprovider-auth-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.wprovider-auth-table thead th {
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-faint);
+  font-size: 10.5px;
+  font-weight: 500;
+  text-align: left;
+}
+.wprovider-auth-table tbody th,
+.wprovider-auth-table tbody td {
+  padding: 0;
+  border-bottom: 1px solid var(--border);
+  font-weight: 400;
+  text-align: left;
+}
+.wprovider-auth-table tbody tr:last-child th,
+.wprovider-auth-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+.wprovider-auth-table tbody tr.selected {
+  background: var(--bg-active);
+}
+.wprovider-auth-model {
+  display: grid;
+  width: 100%;
+  gap: 1px;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: var(--text);
+  text-align: left;
+}
+.wprovider-auth-model:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+.wprovider-auth-model small {
+  color: var(--text-faint);
+  font-size: 10.5px;
+  font-weight: 400;
+}
+.wprovider-auth-table tbody td {
+  padding: 7px 10px;
+  white-space: nowrap;
+}
+.wprovider-auth-status {
+  color: var(--accent);
+  font-weight: 600;
 }
 
 /* ---------- Agent tool cards ---------- */

@@ -38,6 +38,7 @@ import type {
 import {
   DEFAULT_LLM_CONFIG,
   EXCLUDED_DIRS,
+  WPROVIDER_SERVICES,
   WPROVIDER_SERVICE_INFO,
   isSshCapableProvider,
   normalizeOpenRouterApiKey
@@ -1245,6 +1246,19 @@ interface AppState {
   /** Last known sign-in state per web service, so the quick-switch picker can grey out unsigned-in ones. */
   wproviderChecks: Partial<Record<WProviderService, WProviderCheckResult>>
   wproviderChecking: boolean
+  wproviderCheckingAll: boolean
+  wproviderCheckProgress: {
+    completed: number
+    total: number
+    failed: number
+    service: WProviderService
+    external: boolean
+  } | null
+  wproviderCheckSummary: {
+    total: number
+    failed: number
+    finishedAt: number
+  } | null
   /** True while the visible WProvider sign-in window is open. */
   wproviderLoggingIn: boolean
   settingsOpen: boolean
@@ -1387,6 +1401,9 @@ interface AppState {
   checkGlm: () => Promise<void>
   setWProviderService: (service: WProviderService) => Promise<void>
   checkWProvider: (service?: WProviderService, opts?: { force?: boolean }) => Promise<void>
+  checkAllWProviders: (opts?: { force?: boolean }) => Promise<void>
+  startWProviderAutoCheck: () => void
+  stopWProviderAutoCheck: () => void
   wproviderLogin: () => Promise<void>
   wproviderLogout: () => Promise<void>
   /** Save the current backend selection against the active workspace. */
@@ -1613,6 +1630,12 @@ export const useApp = create<AppState>((set, get) => {
     else await get().refreshModels()
   }
 
+  let wproviderCheckRequest = 0
+  let wproviderCheckAllPromise: Promise<void> | null = null
+  let wproviderScanCooldownUntil = 0
+  let wproviderScanConsumers = 0
+  let wproviderStopAfterCurrent = false
+
   return {
   view: 'home',
   workspaces: [],
@@ -1699,6 +1722,9 @@ export const useApp = create<AppState>((set, get) => {
   wproviderCheck: null,
   wproviderChecks: {},
   wproviderChecking: false,
+  wproviderCheckingAll: false,
+  wproviderCheckProgress: null,
+  wproviderCheckSummary: null,
   wproviderLoggingIn: false,
   settingsOpen: false,
   usageOpen: false,
@@ -3005,10 +3031,18 @@ export const useApp = create<AppState>((set, get) => {
 
   async setWProviderService(wproviderService) {
     if (get().wproviderService === wproviderService) return
-    set({ wproviderService, wproviderCheck: null })
-    await api.llm.setConfig({ wproviderService })
-    get().persistWorkspaceLlm()
-    if (get().provider === 'wprovider') await get().checkWProvider()
+    const shouldCheck = get().provider === 'wprovider'
+    if (shouldCheck && (get().wproviderChecking || get().wproviderLoggingIn)) {
+      return
+    }
+    set({ wproviderService, wproviderCheck: null, wproviderChecking: shouldCheck })
+    try {
+      await api.llm.setConfig({ wproviderService })
+      get().persistWorkspaceLlm()
+      if (shouldCheck) await get().checkWProvider()
+    } catch {
+      if (shouldCheck) set({ wproviderChecking: false })
+    }
   },
 
   async checkWProvider(service, opts) {
@@ -3017,12 +3051,17 @@ export const useApp = create<AppState>((set, get) => {
     // needlessly re-verify (and always hit Qwen first). Results accumulate in
     // `wproviderChecks` so the composer picker can still grey out signed-out ones.
     const target = service ?? get().wproviderService
+    const request = ++wproviderCheckRequest
     const cached = get().wproviderChecks[target]
     // Reuse a prior result on ordinary provider/chat switches so we don't
     // re-drive the browser every time. Sign-in and the explicit Re-check
     // button pass { force } to refresh.
     if (!opts?.force && cached) {
-      if (get().wproviderService === target) set({ wproviderCheck: cached })
+      if (request !== wproviderCheckRequest) return
+      set((s) => ({
+        wproviderCheck: get().wproviderService === target ? cached : s.wproviderCheck,
+        wproviderChecking: false
+      }))
       return
     }
     set({ wproviderChecking: true })
@@ -3031,9 +3070,11 @@ export const useApp = create<AppState>((set, get) => {
         ok: false,
         service: target,
         loggedIn: false,
+        checkedAt: Date.now(),
         error: err instanceof Error ? err.message : String(err)
       })
     )
+    if (request !== wproviderCheckRequest) return
     set((s) => ({
       wproviderChecks: { ...s.wproviderChecks, [target]: result },
       wproviderCheck: get().wproviderService === target ? result : s.wproviderCheck,
@@ -3041,15 +3082,154 @@ export const useApp = create<AppState>((set, get) => {
     }))
   },
 
+  async checkAllWProviders(opts) {
+    if (wproviderCheckAllPromise) return wproviderCheckAllPromise
+    if (!opts?.force && Date.now() < wproviderScanCooldownUntil) return
+
+    const selected = get().wproviderService
+    wproviderStopAfterCurrent = false
+    wproviderCheckAllPromise = (async () => {
+      set({
+        wproviderCheckingAll: true,
+        wproviderCheckProgress: {
+          completed: 0,
+          total: WPROVIDER_SERVICES.length,
+          failed: 0,
+          service: selected,
+          external: false
+        },
+        wproviderCheckSummary: null
+      })
+      let completed = 0
+      let failed = 0
+      let total = WPROVIDER_SERVICES.length
+      try {
+        const savedAuthorizations = await api.wprovider.authorizations().catch(() => [])
+        const drivers = new Map(
+          savedAuthorizations.map((authorization) => [authorization.service, authorization.driver])
+        )
+        const remaining = WPROVIDER_SERVICES.filter((service) => service !== selected)
+        const services = [
+          selected,
+          ...remaining.filter((service) => drivers.get(service) === 'electron'),
+          ...remaining.filter((service) => !drivers.has(service)),
+          ...remaining.filter((service) => drivers.get(service) === 'external')
+        ]
+        total = services.length
+        for (let index = 0; index < services.length; index += 1) {
+          if (wproviderStopAfterCurrent) break
+          const service = services[index]
+          set({
+            wproviderCheckProgress: {
+              completed: index,
+              total: services.length,
+              failed,
+              service,
+              external: drivers.get(service) === 'external'
+            }
+          })
+          // Keep exactly one outstanding invoke. Each check enters the same
+          // main-process queue as chat/login/logout, so user operations can
+          // run between providers instead of waiting behind the whole batch.
+          const result = await api.wprovider.check(service).catch(
+            (err): WProviderCheckResult => ({
+              ok: false,
+              service,
+              loggedIn: false,
+              checkedAt: Date.now(),
+              error: err instanceof Error ? err.message : String(err)
+            })
+          )
+          if (!result.ok) failed += 1
+          completed = index + 1
+          set((s) => ({
+            wproviderChecks: { ...s.wproviderChecks, [service]: result },
+            wproviderCheck:
+              get().wproviderService === service ? result : s.wproviderCheck,
+            wproviderCheckProgress: {
+              completed,
+              total: services.length,
+              failed,
+              service,
+              external: drivers.get(service) === 'external'
+            }
+          }))
+        }
+        if (completed === total) {
+          const finishedAt = Date.now()
+          // A clean scan need not repeat on every close/open. Failed scans get
+          // only a brief cooldown and can always be retried explicitly.
+          wproviderScanCooldownUntil = finishedAt + (failed > 0 ? 10_000 : 60_000)
+          set({ wproviderCheckSummary: { total, failed, finishedAt } })
+        } else {
+          wproviderScanCooldownUntil = 0
+        }
+      } finally {
+        set({
+          wproviderCheckingAll: false,
+          wproviderCheckProgress: null
+        })
+      }
+    })().finally(() => {
+      wproviderCheckAllPromise = null
+    })
+    return wproviderCheckAllPromise
+  },
+
+  startWProviderAutoCheck() {
+    wproviderScanConsumers += 1
+    wproviderStopAfterCurrent = false
+    void get().checkAllWProviders()
+  },
+
+  stopWProviderAutoCheck() {
+    wproviderScanConsumers = Math.max(0, wproviderScanConsumers - 1)
+    if (wproviderScanConsumers === 0) wproviderStopAfterCurrent = true
+  },
+
   async wproviderLogin() {
     if (get().wproviderLoggingIn) return
     set({ wproviderLoggingIn: true })
+    const service = get().wproviderService
+    let loginResult: Awaited<ReturnType<typeof api.wprovider.login>>
     try {
-      await api.wprovider.login()
+      loginResult = await api.wprovider.login()
+    } catch (err) {
+      loginResult = {
+        ok: false,
+        loggedIn: false,
+        error: err instanceof Error ? err.message : String(err)
+      }
     } finally {
       set({ wproviderLoggingIn: false })
     }
-    await get().checkWProvider(undefined, { force: true })
+    if (!loginResult.ok || !loginResult.loggedIn) {
+      const result: WProviderCheckResult = {
+        ok: loginResult.ok,
+        service,
+        loggedIn: false,
+        checkedAt: Date.now(),
+        error: loginResult.error
+      }
+      set((s) => ({
+        wproviderCheck: get().wproviderService === service ? result : s.wproviderCheck,
+        wproviderChecks: { ...s.wproviderChecks, [service]: result }
+      }))
+      return
+    }
+    const result: WProviderCheckResult = {
+      ok: true,
+      service,
+      loggedIn: true,
+      checkedAt: Date.now()
+    }
+    // The main process has already verified the provider composer before it
+    // resolves login(). A second immediate probe can race page settling and
+    // incorrectly overwrite the confirmed result with "not signed in".
+    set((s) => ({
+      wproviderCheck: get().wproviderService === service ? result : s.wproviderCheck,
+      wproviderChecks: { ...s.wproviderChecks, [service]: result }
+    }))
   },
 
   async wproviderLogout() {

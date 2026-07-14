@@ -67,7 +67,7 @@ const ru: Translation = {
   'rail.agentBackendSettings': 'Настройки бэкенда агента',
   'rail.appearanceSettings': 'Настройки внешнего вида',
   'rail.about': 'О Ascora ADE',
-  'rail.version': 'Версия 1.2.3',
+  'rail.version': 'Версия 1.2.4',
   'rail.createdAt': 'Создано в AS CORE AI',
   'rail.author': 'Автор и разработчик: Artur Strazewicz',
   'rail.website': 'Сайт:',
@@ -247,6 +247,19 @@ const ru: Translation = {
   'settings.providerGlm': 'GLM / ZCode (кодинговый агент Zhipu)',
   'settings.providerWProvider': 'Ascora WProvider (веб-чат, без API-ключа)',
   'settings.wproviderService': 'Веб-сервис',
+  'settings.wproviderAuthorizedModels': 'Авторизованные модели',
+  'settings.wproviderNoAuthorizedModels': 'Подтверждённых авторизаций пока нет.',
+  'settings.wproviderAuthorizationsLoading': 'Загрузка авторизаций…',
+  'settings.wproviderAuthorizationsUnavailable': 'Не удалось загрузить авторизации.',
+  'settings.wproviderCheckingAll': 'Проверено {completed} из {total} · сейчас {name}',
+  'settings.wproviderCheckingAllExternal':
+    'Проверено {completed} из {total} · сейчас {name} в реальном браузере',
+  'settings.wproviderCheckingAllFailed': 'ошибок: {count}',
+  'settings.wproviderCheckAllFinishedWithErrors':
+    'Не удалось проверить сервисов: {count} из {total}.',
+  'settings.wproviderRetryAll': 'Повторить все',
+  'settings.wproviderStatus': 'Статус',
+  'settings.wproviderAuthorized': 'Авторизован',
   'settings.wproviderHint':
     'Работает через веб-чат провайдера в скрытом окне браузера. Войдите один раз под своим обычным аккаунтом — API-ключ не нужен.',
   'settings.wproviderSignedIn': 'Выполнен вход в {name}',

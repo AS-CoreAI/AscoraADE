@@ -38,6 +38,7 @@ import {
   type GeminiApprovalMode,
   type GlmMode,
   type LlmProvider,
+  type WProviderAuthorization,
   type WProviderService
 } from '@shared/ipc'
 
@@ -854,19 +855,164 @@ function GlmPanel(): JSX.Element {
 function WProviderPanel(): JSX.Element {
   const t = useT()
   const check = useApp((s) => s.wproviderCheck)
+  const checks = useApp((s) => s.wproviderChecks)
   const checking = useApp((s) => s.wproviderChecking)
+  const checkingAll = useApp((s) => s.wproviderCheckingAll)
+  const checkProgress = useApp((s) => s.wproviderCheckProgress)
+  const checkSummary = useApp((s) => s.wproviderCheckSummary)
   const loggingIn = useApp((s) => s.wproviderLoggingIn)
   const wproviderService = useApp((s) => s.wproviderService)
   const setWProviderService = useApp((s) => s.setWProviderService)
   const checkWProvider = useApp((s) => s.checkWProvider)
+  const checkAllWProviders = useApp((s) => s.checkAllWProviders)
+  const startWProviderAutoCheck = useApp((s) => s.startWProviderAutoCheck)
+  const stopWProviderAutoCheck = useApp((s) => s.stopWProviderAutoCheck)
   const wproviderLogin = useApp((s) => s.wproviderLogin)
   const wproviderLogout = useApp((s) => s.wproviderLogout)
+  const [authorizations, setAuthorizations] = useState<WProviderAuthorization[] | null>(null)
+  const [authorizationLoadFailed, setAuthorizationLoadFailed] = useState(false)
   const selectedInfo = WPROVIDER_SERVICE_INFO[wproviderService]
   const checkedInfo = check ? WPROVIDER_SERVICE_INFO[check.service] : selectedInfo
   const selectedHost = selectedInfo.origin.replace(/^https?:\/\//, '')
+  const confirmed = new Map(
+    (authorizations ?? []).map((authorization) => [authorization.service, authorization])
+  )
+  const authorizedServices = WPROVIDER_SERVICES.filter((service) => {
+    const liveCheck = checks[service]
+    const authorization = confirmed.get(service)
+    if (!liveCheck) return Boolean(authorization)
+    if (liveCheck.loggedIn) return true
+    // Transport/probe failures are unknown, not proof of logout. For a real
+    // negative result, a later successful chat/login confirmation wins over
+    // the older cached check.
+    if (!liveCheck.ok) return Boolean(authorization)
+    return Boolean(
+      authorization && authorization.verifiedAt > (liveCheck.checkedAt ?? 0)
+    )
+  })
+
+  useEffect(() => {
+    let cancelled = false
+    let changedSinceRequest = false
+    const unsubscribe = api.wprovider.onAuthorizationsChanged((next) => {
+      if (cancelled) return
+      changedSinceRequest = true
+      setAuthorizationLoadFailed(false)
+      setAuthorizations(next)
+    })
+    void api.wprovider
+      .authorizations()
+      .then((next) => {
+        if (!cancelled && !changedSinceRequest) setAuthorizations(next)
+      })
+      .catch(() => {
+        if (!cancelled) setAuthorizationLoadFailed(true)
+      })
+    return () => {
+      cancelled = true
+      unsubscribe()
+    }
+  }, [])
+
+  useEffect(() => {
+    startWProviderAutoCheck()
+    return stopWProviderAutoCheck
+  }, [startWProviderAutoCheck, stopWProviderAutoCheck])
 
   return (
     <>
+      <section className="wprovider-auth-card" aria-label={t('settings.wproviderAuthorizedModels')}>
+        <div className="wprovider-auth-heading">
+          <span>{t('settings.wproviderAuthorizedModels')}</span>
+          <span className="wprovider-auth-count">
+            {authorizations === null && !authorizationLoadFailed ? '…' : authorizedServices.length}
+          </span>
+        </div>
+        {checkingAll && checkProgress ? (
+          <div className="wprovider-auth-scan" role="status" aria-live="polite">
+            {t(
+              checkProgress.external
+                ? 'settings.wproviderCheckingAllExternal'
+                : 'settings.wproviderCheckingAll',
+              {
+                completed: checkProgress.completed,
+                total: checkProgress.total,
+                name: WPROVIDER_SERVICE_INFO[checkProgress.service].label
+              }
+            )}
+            {checkProgress.failed > 0
+              ? ` · ${t('settings.wproviderCheckingAllFailed', {
+                  count: checkProgress.failed
+                })}`
+              : ''}
+          </div>
+        ) : null}
+        {!checkingAll && checkSummary && checkSummary.failed > 0 ? (
+          <div className="wprovider-auth-scan error" role="alert">
+            <span>
+              {t('settings.wproviderCheckAllFinishedWithErrors', {
+                count: checkSummary.failed,
+                total: checkSummary.total
+              })}
+            </span>
+            <button
+              type="button"
+              className="wprovider-auth-retry"
+              onClick={() => void checkAllWProviders({ force: true })}
+            >
+              {t('settings.wproviderRetryAll')}
+            </button>
+          </div>
+        ) : null}
+        {authorizationLoadFailed && authorizedServices.length === 0 ? (
+          <div className="wprovider-auth-empty">
+            {t('settings.wproviderAuthorizationsUnavailable')}
+          </div>
+        ) : authorizations === null && authorizedServices.length === 0 ? (
+          <div className="wprovider-auth-empty">
+            {t('settings.wproviderAuthorizationsLoading')}
+          </div>
+        ) : authorizedServices.length === 0 ? (
+          <div className="wprovider-auth-empty">{t('settings.wproviderNoAuthorizedModels')}</div>
+        ) : (
+          <table className="wprovider-auth-table">
+            <thead>
+              <tr>
+                <th scope="col">{t('common.model')}</th>
+                <th scope="col">{t('settings.wproviderStatus')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {authorizedServices.map((service) => {
+                const info = WPROVIDER_SERVICE_INFO[service]
+                const selected = service === wproviderService
+                return (
+                  <tr key={service} className={selected ? 'selected' : undefined}>
+                    <th scope="row">
+                      <button
+                        type="button"
+                        className="wprovider-auth-model"
+                        aria-current={selected ? 'true' : undefined}
+                        disabled={checking || loggingIn}
+                        onClick={() => void setWProviderService(service)}
+                      >
+                        <span>{info.label}</span>
+                        <small>{info.origin.replace(/^https?:\/\//, '')}</small>
+                      </button>
+                    </th>
+                    <td>
+                      <span className="wprovider-auth-status">
+                        <span aria-hidden="true">✓</span> {t('settings.wproviderAuthorized')}
+                      </span>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        )}
+      </section>
+
       <label className="field">
         <span className="field-label">{t('settings.wproviderService')}</span>
         <select
@@ -1122,7 +1268,7 @@ export function ConnectionSettings(): JSX.Element | null {
 
   return (
     <div className="modal-backdrop" onClick={() => setOpen(false)}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+      <div className="modal connection-settings-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           {t('settings.agentBackend')}
           <button className="modal-close" onClick={() => setOpen(false)} title={t('common.close')}>

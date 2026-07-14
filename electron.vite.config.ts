@@ -23,11 +23,8 @@ export default defineConfig({
         input: {
           index: resolve(__dirname, 'src/preload/index.ts'),
           // Injected into the WProvider (hidden web-chat) windows to tap the
-          // site's streaming responses; see src/main/wprovider/qwen.ts.
-          wprovider: resolve(__dirname, 'src/preload/wprovider.ts'),
-          // Injected only into the visible Google sign-in window to make the
-          // page's JS surface match the spoofed Firefox user agent.
-          'wprovider-google': resolve(__dirname, 'src/preload/wprovider-google.ts')
+          // site's streaming responses; see src/main/wprovider/runner.ts.
+          wprovider: resolve(__dirname, 'src/preload/wprovider.ts')
         }
       }
     },

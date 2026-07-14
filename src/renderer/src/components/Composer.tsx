@@ -821,7 +821,7 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
               const result = wproviderChecks[service]
               // Only grey out services we've actually probed and found signed-out;
               // leave un-probed ones selectable so picking one runs its own check.
-              const knownSignedOut = result !== undefined && !result.loggedIn
+              const knownSignedOut = result?.ok === true && !result.loggedIn
               return (
                 <option
                   key={service}

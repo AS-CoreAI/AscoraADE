@@ -69,7 +69,7 @@ const de: Translation = {
   'rail.agentBackendSettings': 'Einstellungen für Agenten-Backend',
   'rail.appearanceSettings': 'Darstellungseinstellungen',
   'rail.about': 'Über Ascora ADE',
-  'rail.version': 'Version 1.2.3',
+  'rail.version': 'Version 1.2.4',
   'rail.createdAt': 'Erstellt bei AS CORE AI',
   'rail.author': 'Autor und Entwickler: Artur Strazewicz',
   'rail.website': 'Website:',
@@ -243,6 +243,19 @@ const de: Translation = {
   'settings.providerGlm': 'GLM / ZCode (Codierungsagent von Zhipu)',
   'settings.providerWProvider': 'Ascora WProvider (Web-Chat, kein API-Schlüssel)',
   'settings.wproviderService': 'Webdienst',
+  'settings.wproviderAuthorizedModels': 'Autorisierte Modelle',
+  'settings.wproviderNoAuthorizedModels': 'Noch keine bestätigten Anmeldungen.',
+  'settings.wproviderAuthorizationsLoading': 'Autorisierungen werden geladen…',
+  'settings.wproviderAuthorizationsUnavailable': 'Autorisierungen konnten nicht geladen werden.',
+  'settings.wproviderCheckingAll': '{completed} von {total} geprüft · jetzt {name}',
+  'settings.wproviderCheckingAllExternal':
+    '{completed} von {total} geprüft · jetzt {name} im echten Browser',
+  'settings.wproviderCheckingAllFailed': 'Fehler: {count}',
+  'settings.wproviderCheckAllFinishedWithErrors':
+    '{count} von {total} Diensten konnten nicht geprüft werden.',
+  'settings.wproviderRetryAll': 'Alle erneut prüfen',
+  'settings.wproviderStatus': 'Status',
+  'settings.wproviderAuthorized': 'Autorisiert',
   'settings.wproviderHint':
     'Steuert den eigenen Web-Chat des Anbieters in einem ausgeblendeten Browserfenster. Melden Sie sich einmal mit Ihrem regulären Konto an – kein API-Schlüssel erforderlich.',
   'settings.wproviderSignedIn': 'Bei {name} angemeldet',

@@ -34,6 +34,7 @@ import {
   type GlmRunParams,
   type GlmCaptchaConfigResult,
   type WProviderChatParams,
+  type WProviderAuthorization,
   type WProviderCheckResult,
   type WProviderLoginResult,
   type WProviderService,
@@ -335,6 +336,18 @@ const api = {
     abort: (id: string): Promise<void> => ipcRenderer.invoke(IPC.glm.abort, id)
   },
   wprovider: {
+    /** Cheap persisted list of web services whose authorization was confirmed. */
+    authorizations: (): Promise<WProviderAuthorization[]> =>
+      ipcRenderer.invoke(IPC.wprovider.authorizations),
+    /** Keep settings in sync when login, logout, a check or a chat confirms authorization. */
+    onAuthorizationsChanged: (
+      cb: (authorizations: WProviderAuthorization[]) => void
+    ): (() => void) => {
+      const listener = (_e: IpcRendererEvent, authorizations: WProviderAuthorization[]): void =>
+        cb(authorizations)
+      ipcRenderer.on(IPC.wprovider.authorizationsChanged, listener)
+      return () => ipcRenderer.removeListener(IPC.wprovider.authorizationsChanged, listener)
+    },
     /** Probe the persisted web session for a signed-in state (defaults to the configured service). */
     check: (service?: WProviderService): Promise<WProviderCheckResult> =>
       ipcRenderer.invoke(IPC.wprovider.check, service),

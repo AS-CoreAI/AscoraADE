@@ -117,6 +117,8 @@ export const IPC = {
     event: 'glm:event'
   },
   wprovider: {
+    authorizations: 'wprovider:authorizations',
+    authorizationsChanged: 'wprovider:authorizations-changed',
     check: 'wprovider:check',
     login: 'wprovider:login',
     logout: 'wprovider:logout',
@@ -460,6 +462,8 @@ export interface WProviderCheckResult {
   service: WProviderService
   /** True when the persisted browser session holds a login for the service. */
   loggedIn: boolean
+  /** Local timestamp used to order this probe against later authorization confirmations. */
+  checkedAt?: number
   error?: string
 }
 
@@ -467,6 +471,13 @@ export interface WProviderLoginResult {
   ok: boolean
   loggedIn: boolean
   error?: string
+}
+
+/** Last confirmed usable WProvider authorization; contains no cookies or tokens. */
+export interface WProviderAuthorization {
+  service: WProviderService
+  verifiedAt: number
+  driver: 'electron' | 'external'
 }
 
 export interface WProviderChatParams {
