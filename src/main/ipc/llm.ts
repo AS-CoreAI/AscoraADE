@@ -20,6 +20,7 @@ import {
 } from '@shared/ipc'
 import { getStore } from '../store'
 import { LmStudioClient, LmStudioError } from '../llm/client'
+import { getOmnirouteBaseUrl, startOmniroute } from '../omniroute/runner'
 
 let client: LmStudioClient | null = null
 /** In-flight chat requests, keyed by the renderer-supplied request id. */
@@ -74,7 +75,11 @@ function readConfig(): LlmConfig {
     wproviderService:
       savedWProviderService && WPROVIDER_SERVICES.includes(savedWProviderService)
         ? savedWProviderService
-        : DEFAULT_LLM_CONFIG.wproviderService
+        : DEFAULT_LLM_CONFIG.wproviderService,
+    omnirouteModel:
+      store.getSetting<string>('omniroute.model') ?? DEFAULT_LLM_CONFIG.omnirouteModel,
+    // Runtime-only: never persist a stale port/base URL.
+    omnirouteBaseUrl: getOmnirouteBaseUrl()
   }
 }
 
@@ -95,7 +100,14 @@ export function registerLlmHandlers(): void {
 
   ipcMain.handle(IPC.llm.setConfig, (_e, patch: Partial<LlmConfig>) => {
     const store = getStore()
-    if (typeof patch.provider === 'string') store.setSetting('llm.provider', patch.provider)
+    if (typeof patch.provider === 'string') {
+      store.setSetting('llm.provider', patch.provider)
+      if (patch.provider === 'omniroute') {
+        void startOmniroute().catch(() => {
+          /* the sidecar status carries the failure */
+        })
+      }
+    }
     if (typeof patch.baseUrl === 'string') store.setSetting('llm.baseUrl', patch.baseUrl.trim())
     if (typeof patch.model === 'string') store.setSetting('llm.model', patch.model)
     if (typeof patch.ollamaBaseUrl === 'string') {
@@ -129,6 +141,9 @@ export function registerLlmHandlers(): void {
     if (typeof patch.glmMode === 'string') store.setSetting('glm.mode', patch.glmMode)
     if (typeof patch.wproviderService === 'string' && WPROVIDER_SERVICES.includes(patch.wproviderService)) {
       store.setSetting('wprovider.service', patch.wproviderService)
+    }
+    if (typeof patch.omnirouteModel === 'string') {
+      store.setSetting('omniroute.model', patch.omnirouteModel.trim())
     }
     getClient() // refresh the cached client with the new config
   })

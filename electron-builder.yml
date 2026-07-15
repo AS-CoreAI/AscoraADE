@@ -25,6 +25,14 @@ files:
   - "!node_modules/@xterm/**"
   - "!node_modules/zustand/**"
 
+# The bundled OmniRoute gateway (vendored by scripts/omniroute/vendor.mjs) is
+# a plain-JS npm tree that runs as a child process via ELECTRON_RUN_AS_NODE —
+# it lives outside the asar so Node can resolve its modules normally.
+extraResources:
+  - from: .build/omniroute
+    to: omniroute
+  - THIRD_PARTY_NOTICES.md
+
 win:
   icon: build/icon.png
   # Never publish an unsigned Windows artifact. Release/CI must provide an
@@ -55,6 +63,9 @@ nsis:
 
 portable:
   artifactName: Ascora-ADE-Portable-${version}.${ext}
+  # Stable unpack dir so the ~1.2 GB uncompressed OmniRoute resource tree is not
+  # re-extracted on every portable launch.
+  unpackDirName: ascora-ade
 
 linux:
   icon: build/icon.png

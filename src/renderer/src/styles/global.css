@@ -3475,6 +3475,76 @@ button.changes-badge:hover {
 .conn-line.unknown {
   color: var(--text-muted);
 }
+.conn-line.stopped {
+  color: var(--text-muted);
+}
+.omniroute-providers {
+  display: grid;
+  gap: 10px;
+  padding-top: 4px;
+  border-top: 1px solid var(--border);
+}
+.omniroute-section-title {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.omniroute-provider-list {
+  display: grid;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-input);
+}
+.omniroute-provider-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.omniroute-provider-row:last-child {
+  border-bottom: 0;
+}
+.omniroute-provider-row .btn {
+  padding: 5px 9px;
+  font-size: 11.5px;
+}
+.omniroute-provider-meta {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+.omniroute-provider-meta strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 12.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.omniroute-provider-meta span {
+  color: var(--text-faint);
+  font-size: 10.5px;
+}
+.omniroute-delete {
+  color: var(--danger);
+}
+.omniroute-add-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.omniroute-add-form .omniroute-section-title,
+.omniroute-add-form .btn {
+  grid-column: 1 / -1;
+}
+.omniroute-add-form .btn {
+  justify-self: start;
+}
+.omniroute-message {
+  overflow-wrap: anywhere;
+}
 .wprovider-auth-card {
   overflow: hidden;
   border: 1px solid var(--border);

@@ -1,3 +1,12 @@
+## Ascora ADE 1.3.0
+What's new?
+
+### Changed
+- **Version bump to 1.3.0** — package metadata and the About section now report version 1.3.0.
+- **Bundled OmniRoute gateway** — OmniRoute 3.8.48 now ships as a zero-install, managed sidecar with automatic startup, health monitoring, crash recovery, persistent configuration, and clean shutdown.
+- **Native multi-provider setup** — configure and test OmniRoute upstream providers and API keys directly in Ascora ADE without opening the upstream dashboard.
+- **OmniRoute chat backend** — select routed models from the composer, use native tool calls, and track OmniRoute turns in Analytics.
+
 ## Ascora ADE 1.2.4
 What's new?
 

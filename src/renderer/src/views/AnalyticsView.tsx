@@ -18,6 +18,7 @@ const PROVIDER_LABEL: Record<string, string> = {
   lmstudio: 'LM Studio',
   ollama: 'Ollama',
   openrouter: 'OpenRouter',
+  omniroute: 'OmniRoute',
   codex: 'Codex',
   claude: 'Claude Code',
   gemini: 'Gemini CLI',

@@ -1,8 +1,9 @@
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, type Event } from 'electron'
 import { createMainWindow } from './window'
 import { registerIpc } from './ipc'
 import { getStore, closeStore } from './store'
 import { stopLiveServer } from './ipc/live'
+import { stopOmniroute } from './omniroute/runner'
 import { startPresence, stopPresence } from './presence'
 import { stopAllBlueprints } from './blueprint/runner'
 
@@ -54,10 +55,20 @@ if (!app.requestSingleInstanceLock()) {
     if (process.platform !== 'darwin') app.quit()
   })
 
-  app.on('before-quit', () => {
+  let quitCleanupStarted = false
+  app.on('before-quit', (event: Event) => {
+    // OmniRoute owns a worker process beneath its CLI process. Keep Electron
+    // alive until taskkill/signals have reaped the complete tree and released
+    // its port; otherwise a quick relaunch can collide with an orphan.
+    if (quitCleanupStarted) return
+    event.preventDefault()
+    quitCleanupStarted = true
     stopAllBlueprints()
     stopPresence()
     stopLiveServer()
-    closeStore()
+    void stopOmniroute().finally(() => {
+      closeStore()
+      app.quit()
+    })
   })
 }

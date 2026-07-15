@@ -33,7 +33,8 @@ import type {
   AgentDirEntry,
   AgentSearchMatch,
   WProviderCheckResult,
-  WProviderService
+  WProviderService,
+  OmnirouteStatus
 } from '@shared/ipc'
 import {
   DEFAULT_LLM_CONFIG,
@@ -864,6 +865,7 @@ function modelLabel(s: {
   claudeModel: string
   geminiModel: string
   wproviderService: WProviderService
+  omnirouteModel: string
 }): string {
   switch (s.provider) {
     case 'lmstudio':
@@ -884,6 +886,8 @@ function modelLabel(s: {
       return 'GLM'
     case 'wprovider':
       return `${WPROVIDER_SERVICE_INFO[s.wproviderService].label} Web`
+    case 'omniroute':
+      return s.omnirouteModel || 'OmniRoute auto'
     default:
       return 'Assistant'
   }
@@ -1009,6 +1013,8 @@ interface WorkspaceLlm {
   geminiPermission: GeminiApprovalMode
   glmMode: GlmMode
   wproviderService: WProviderService
+  /** Optional for compatibility with workspace/task snapshots from pre-1.3.0. */
+  omnirouteModel?: string
 }
 
 /** Snapshot the active backend selection for persisting against a workspace. */
@@ -1029,6 +1035,7 @@ function snapshotLlm(s: {
   geminiPermission: GeminiApprovalMode
   glmMode: GlmMode
   wproviderService: WProviderService
+  omnirouteModel: string
 }): WorkspaceLlm {
   return {
     provider: s.provider,
@@ -1046,7 +1053,8 @@ function snapshotLlm(s: {
     geminiModel: s.geminiModel,
     geminiPermission: s.geminiPermission,
     glmMode: s.glmMode,
-    wproviderService: s.wproviderService
+    wproviderService: s.wproviderService,
+    omnirouteModel: s.omnirouteModel
   }
 }
 
@@ -1290,6 +1298,9 @@ interface AppState {
   } | null
   /** True while the visible WProvider sign-in window is open. */
   wproviderLoggingIn: boolean
+  // Bundled OmniRoute OpenAI-compatible sidecar
+  omnirouteModel: string
+  omnirouteStatus: OmnirouteStatus
   settingsOpen: boolean
   /** Whether the Claude usage breakdown modal is open. */
   usageOpen: boolean
@@ -1435,6 +1446,10 @@ interface AppState {
   stopWProviderAutoCheck: () => void
   wproviderLogin: () => Promise<void>
   wproviderLogout: () => Promise<void>
+  setOmnirouteModel: (model: string) => void
+  startOmniroute: () => Promise<void>
+  stopOmniroute: () => Promise<void>
+  ensureOmniroute: () => Promise<OmnirouteStatus>
   /** Save the current backend selection against the active workspace. */
   persistWorkspaceLlm: () => void
   /** Load a workspace's saved backend selection and re-check the connection. */
@@ -1489,6 +1504,7 @@ async function probeLocalServers(): Promise<void> {
 }
 
 let localServerProbeTimer: ReturnType<typeof setInterval> | null = null
+let omnirouteStatusUnsubscribe: (() => void) | null = null
 
 export const useApp = create<AppState>((set, get) => {
   /** Snapshot the foreground (active task) state as a RunState. */
@@ -1621,7 +1637,8 @@ export const useApp = create<AppState>((set, get) => {
         geminiModel: saved.geminiModel ?? DEFAULT_LLM_CONFIG.geminiModel,
         geminiPermission: saved.geminiPermission ?? DEFAULT_LLM_CONFIG.geminiPermission,
         glmMode: saved.glmMode,
-        wproviderService: saved.wproviderService ?? DEFAULT_LLM_CONFIG.wproviderService
+        wproviderService: saved.wproviderService ?? DEFAULT_LLM_CONFIG.wproviderService,
+        omnirouteModel: saved.omnirouteModel ?? DEFAULT_LLM_CONFIG.omnirouteModel
       })
     }
     const provider = get().provider
@@ -1648,7 +1665,8 @@ export const useApp = create<AppState>((set, get) => {
       geminiModel: get().geminiModel,
       geminiPermission: get().geminiPermission,
       glmMode: get().glmMode,
-      wproviderService: get().wproviderService
+      wproviderService: get().wproviderService,
+      omnirouteModel: get().omnirouteModel
     })
     if (provider === 'codex') await get().checkCodex()
     else if (provider === 'copilot') await get().checkCopilot()
@@ -1656,6 +1674,10 @@ export const useApp = create<AppState>((set, get) => {
     else if (provider === 'gemini') await get().checkGemini()
     else if (provider === 'glm') await get().checkGlm()
     else if (provider === 'wprovider') await get().checkWProvider()
+    else if (provider === 'omniroute') {
+      await get().ensureOmniroute()
+      if (get().omnirouteStatus.state === 'ready') await get().refreshModels()
+    }
     else await get().refreshModels()
   }
 
@@ -1755,6 +1777,14 @@ export const useApp = create<AppState>((set, get) => {
   wproviderCheckProgress: null,
   wproviderCheckSummary: null,
   wproviderLoggingIn: false,
+  omnirouteModel: DEFAULT_LLM_CONFIG.omnirouteModel,
+  omnirouteStatus: {
+    state: 'stopped',
+    port: null,
+    baseUrl: null,
+    version: null,
+    logsPath: ''
+  },
   settingsOpen: false,
   usageOpen: false,
   themePreference: 'dark',
@@ -1774,6 +1804,23 @@ export const useApp = create<AppState>((set, get) => {
   thinkingStartedAt: null,
 
   async init() {
+    if (!omnirouteStatusUnsubscribe) {
+      omnirouteStatusUnsubscribe = api.omniroute.onStatusChanged((status) => {
+        const previous = get().omnirouteStatus
+        const active = get().provider === 'omniroute'
+        set({
+          omnirouteStatus: status,
+          ...(active && status.state === 'starting' ? { connection: 'connecting' as const } : {}),
+          ...(active && status.state === 'error'
+            ? { connection: 'error' as const, connectionError: status.error }
+            : {})
+        })
+        if (active && previous.state !== 'ready' && status.state === 'ready') {
+          void get().refreshModels()
+        }
+      })
+    }
+    const omnirouteStatusPromise = api.omniroute.status().catch(() => get().omnirouteStatus)
     const [
       workspaces,
       cfg,
@@ -1799,6 +1846,7 @@ export const useApp = create<AppState>((set, get) => {
         api.settings.get<Skill[]>('skills'),
         api.settings.get<SshConnection[]>('ssh.connections')
       ])
+    const omnirouteStatus = await omnirouteStatusPromise
     const workspaceOrder = Array.isArray(savedOrder) ? savedOrder : []
     const collapsedWorkspaces =
       savedCollapsed && typeof savedCollapsed === 'object' ? savedCollapsed : {}
@@ -1855,6 +1903,8 @@ export const useApp = create<AppState>((set, get) => {
       glmPath: cfg.glmPath,
       glmMode: cfg.glmMode,
       wproviderService: cfg.wproviderService,
+      omnirouteModel: cfg.omnirouteModel,
+      omnirouteStatus,
       themePreference,
       resolvedTheme,
       appLanguage
@@ -2774,10 +2824,20 @@ export const useApp = create<AppState>((set, get) => {
     const res = await api.llm.listModels()
     const isOpenRouter = get().provider === 'openrouter'
     const isOllama = get().provider === 'ollama'
+    const isOmniroute = get().provider === 'omniroute'
     if (res.ok) {
       const models = (res.models ?? []).map((m) => m.id)
+      const configuredModel = isOpenRouter
+        ? get().openRouterModel
+        : isOllama
+          ? get().ollamaModel
+          : isOmniroute
+            ? get().omnirouteModel
+            : get().model
       const selected =
-        (isOpenRouter ? get().openRouterModel : isOllama ? get().ollamaModel : get().model) ||
+        (configuredModel && models.includes(configuredModel) ? configuredModel : '') ||
+        (isOmniroute ? models.find((model) => model === 'auto') : '') ||
+        (isOmniroute ? models.find((model) => model.startsWith('combo:')) : '') ||
         models[0] ||
         ''
       set(
@@ -2785,7 +2845,9 @@ export const useApp = create<AppState>((set, get) => {
           ? { models, connection: 'connected', openRouterModel: selected }
           : isOllama
             ? { models, connection: 'connected', ollamaModel: selected, ollamaReachable: true }
-            : { models, connection: 'connected', model: selected, lmStudioReachable: true }
+            : isOmniroute
+              ? { models, connection: 'connected', omnirouteModel: selected }
+              : { models, connection: 'connected', model: selected, lmStudioReachable: true }
       )
       if (selected) {
         void api.llm.setConfig(
@@ -2793,7 +2855,9 @@ export const useApp = create<AppState>((set, get) => {
             ? { openRouterModel: selected }
             : isOllama
               ? { ollamaModel: selected }
-              : { model: selected }
+              : isOmniroute
+                ? { omnirouteModel: selected }
+                : { model: selected }
         )
       }
     } else {
@@ -2804,7 +2868,7 @@ export const useApp = create<AppState>((set, get) => {
         connectionError: res.error,
         models: [],
         ...(isOllama ? { ollamaReachable: false } : {}),
-        ...(!isOpenRouter && !isOllama ? { lmStudioReachable: false } : {})
+        ...(get().provider === 'lmstudio' ? { lmStudioReachable: false } : {})
       })
     }
   },
@@ -2844,6 +2908,10 @@ export const useApp = create<AppState>((set, get) => {
     else if (provider === 'gemini') await get().checkGemini()
     else if (provider === 'glm') await get().checkGlm()
     else if (provider === 'wprovider') await get().checkWProvider()
+    else if (provider === 'omniroute') {
+      await get().ensureOmniroute()
+      if (get().omnirouteStatus.state === 'ready') await get().refreshModels()
+    }
     else await get().refreshModels()
   },
 
@@ -3277,6 +3345,44 @@ export const useApp = create<AppState>((set, get) => {
     }))
   },
 
+  setOmnirouteModel(omnirouteModel) {
+    set({ omnirouteModel })
+    void api.llm.setConfig({ omnirouteModel })
+    get().persistWorkspaceLlm()
+  },
+
+  async ensureOmniroute() {
+    const known = get().omnirouteStatus
+    if (known.state === 'ready') return known
+    set({ connection: 'connecting', connectionError: undefined })
+    const status = await api.omniroute.start()
+    set({
+      omnirouteStatus: status,
+      ...(status.state === 'error'
+        ? { connection: 'error' as const, connectionError: status.error }
+        : {})
+    })
+    return status
+  },
+
+  async startOmniroute() {
+    const status = await get().ensureOmniroute()
+    if (status.state === 'ready' && get().provider === 'omniroute') {
+      await get().refreshModels()
+    }
+  },
+
+  async stopOmniroute() {
+    const status = await api.omniroute.stop()
+    set({
+      omnirouteStatus: status,
+      models: get().provider === 'omniroute' ? [] : get().models,
+      ...(get().provider === 'omniroute'
+        ? { connection: 'unknown' as const, connectionError: undefined }
+        : {})
+    })
+  },
+
   persistWorkspaceLlm() {
     const snapshot = snapshotLlm(get())
     const id = get().active?.id
@@ -3422,6 +3528,7 @@ export const useApp = create<AppState>((set, get) => {
     const geminiPermission = get().geminiPermission
     const glmMode = get().glmMode
     const wproviderService = get().wproviderService
+    const omnirouteModel = get().omnirouteModel
     const sshConn = get().sshConnections.find((c) => c.id === sshId)
     const sshHost = sshConn ? `${sshConn.username}@${sshConn.host}` : undefined
     runProviders.set(taskId, provider)
@@ -3756,6 +3863,7 @@ export const useApp = create<AppState>((set, get) => {
       const isOpenRouter = agentProvider === 'openrouter'
       const isOllama = agentProvider === 'ollama'
       const isWProvider = agentProvider === 'wprovider'
+      const isOmniroute = agentProvider === 'omniroute'
       for (let step = 0; step < MAX_STEPS && !aborted(); step += 1) {
         // 1) Stream one model turn into a fresh assistant bubble.
         const replyId = crypto.randomUUID()
@@ -3824,7 +3932,17 @@ export const useApp = create<AppState>((set, get) => {
             )
           : await api.llm.chat(
               crypto.randomUUID(),
-              { model: isOpenRouter ? orModel : isOllama ? ollamaModel : lmModel, messages, tools: TOOLS },
+              {
+                model: isOpenRouter
+                  ? orModel
+                  : isOllama
+                    ? ollamaModel
+                    : isOmniroute
+                      ? omnirouteModel
+                      : lmModel,
+                messages,
+                tools: TOOLS
+              },
               onDelta
             )
         writeRun(taskId, { streamId: null, thinking: false })
@@ -3869,14 +3987,24 @@ export const useApp = create<AppState>((set, get) => {
             workspaceId,
             workspaceName,
             taskId,
-            provider: isWProvider ? 'wprovider' : isOpenRouter ? 'openrouter' : isOllama ? 'ollama' : 'lmstudio',
+            provider: isWProvider
+              ? 'wprovider'
+              : isOpenRouter
+                ? 'openrouter'
+                : isOllama
+                  ? 'ollama'
+                  : isOmniroute
+                    ? 'omniroute'
+                    : 'lmstudio',
             model: isWProvider
               ? `${wproviderService}-web`
               : isOpenRouter
                 ? orModel || 'openrouter/free'
                 : isOllama
                   ? ollamaModel || 'ollama'
-                  : lmModel || 'local-model',
+                  : isOmniroute
+                    ? omnirouteModel || 'auto'
+                    : lmModel || 'local-model',
             inputTokens: usage.inputTokens,
             outputTokens: usage.outputTokens,
             userMessages: step === 0 ? 1 : 0,

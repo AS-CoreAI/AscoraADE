@@ -258,6 +258,9 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
   const wproviderChecks = useApp((s) => s.wproviderChecks)
   const wproviderChecking = useApp((s) => s.wproviderChecking)
   const wproviderLoggingIn = useApp((s) => s.wproviderLoggingIn)
+  const omnirouteModel = useApp((s) => s.omnirouteModel)
+  const setOmnirouteModel = useApp((s) => s.setOmnirouteModel)
+  const omnirouteStatus = useApp((s) => s.omnirouteStatus)
   const mode = useApp((s) => s.mode)
   const setMode = useApp((s) => s.setMode)
   const submitTask = useApp((s) => s.submitTask)
@@ -314,6 +317,7 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
           }
         ]
       : []),
+    { value: 'omniroute', label: 'OmniRoute' },
     {
       value: 'codex',
       label: 'Codex',
@@ -346,7 +350,8 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
     },
     { value: 'wprovider', label: 'Ascora WProvider' }
   ]
-  const selectedLocalModel = provider === 'ollama' ? ollamaModel : model
+  const selectedLocalModel =
+    provider === 'ollama' ? ollamaModel : provider === 'omniroute' ? omnirouteModel : model
   const modelOptions =
     provider === 'openrouter'
       ? openRouterModelOptions(models, openRouterModel)
@@ -359,6 +364,7 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
     !!active &&
     !streaming &&
     !attaching &&
+    !(provider === 'omniroute' && omnirouteStatus.state !== 'ready') &&
     !readOnly
   const canAttach = !!active && !activeSsh && !attaching && !readOnly
 
@@ -833,6 +839,18 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
                 </option>
               )
             })}
+          </select>
+        ) : provider === 'omniroute' ? (
+          <select
+            className="composer-select"
+            value={omnirouteModel || modelOptions[0]}
+            disabled={omnirouteStatus.state !== 'ready' || models.length === 0}
+            onChange={(e) => setOmnirouteModel(e.target.value)}
+            title={t('composer.modelOmniroute')}
+          >
+            {modelOptions.map((m) => (
+              <option key={m} value={m}>{m}</option>
+            ))}
           </select>
         ) : provider === 'openrouter' ? (
           <select

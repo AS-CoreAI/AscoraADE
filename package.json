@@ -1,6 +1,6 @@
 {
   "name": "ascora-ade",
-  "version": "1.2.4",
+  "version": "1.3.0",
   "description": "Ascora ADE — Agentic Development Environment for local LLMs (LM Studio)",
   "author": {
     "name": "ASCore AI",
@@ -22,8 +22,12 @@
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
     "rebuild": "electron-rebuild -f -w better-sqlite3",
     "rebuild:optional": "electron-rebuild -f -w better-sqlite3 || node -e \"console.warn('[ascora] better-sqlite3 rebuild skipped - using JSON store fallback (install C++ build tools, then run npm run rebuild)')\"",
-    "dist:win": "electron-vite build && electron-builder --win",
-    "dist:linux": "electron-vite build && electron-builder --linux",
+    "omniroute:vendor": "node scripts/omniroute/vendor.mjs",
+    "omniroute:ensure": "node scripts/omniroute/vendor.mjs --ensure",
+    "omniroute:smoke": "node scripts/omniroute/smoke.mjs",
+    "omniroute:update": "node scripts/omniroute/update.mjs",
+    "dist:win": "npm run omniroute:ensure && electron-vite build && electron-builder --win",
+    "dist:linux": "npm run omniroute:ensure && electron-vite build && electron-builder --linux",
     "postinstall": "install-electron && npm run rebuild:optional"
   },
   "dependencies": {

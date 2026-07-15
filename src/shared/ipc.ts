@@ -126,6 +126,13 @@ export const IPC = {
     chunk: 'wprovider:chunk',
     abort: 'wprovider:abort'
   },
+  omniroute: {
+    status: 'omniroute:status',
+    start: 'omniroute:start',
+    stop: 'omniroute:stop',
+    admin: 'omniroute:admin',
+    statusChanged: 'omniroute:status-changed'
+  },
   blueprint: {
     list: 'blueprint:list',
     save: 'blueprint:save',
@@ -306,11 +313,49 @@ export type LlmProvider =
   | 'gemini'
   | 'glm'
   | 'wprovider'
+  | 'omniroute'
 
-export const SSH_CAPABLE_LLM_PROVIDERS: readonly LlmProvider[] = ['lmstudio', 'wprovider']
+export const SSH_CAPABLE_LLM_PROVIDERS: readonly LlmProvider[] = ['lmstudio', 'wprovider', 'omniroute']
 
 export function isSshCapableProvider(provider: LlmProvider): boolean {
   return SSH_CAPABLE_LLM_PROVIDERS.includes(provider)
+}
+
+// ---------- OmniRoute (bundled gateway sidecar) ----------
+
+export type OmnirouteState = 'stopped' | 'starting' | 'ready' | 'error'
+
+/** Lifecycle status of the bundled OmniRoute gateway, pushed to the renderer. */
+export interface OmnirouteStatus {
+  state: OmnirouteState
+  /** Loopback port the sidecar listens on; null unless starting/ready. */
+  port: number | null
+  /** OpenAI-compatible base, e.g. http://127.0.0.1:20128/v1; null unless ready. */
+  baseUrl: string | null
+  /** Bundled OmniRoute version from the vendored package; null if not vendored. */
+  version: string | null
+  /** Folder containing the sidecar logs; safe to pass to fs.openPath. */
+  logsPath: string
+  /** Human-readable failure (with a log tail) when state === 'error'. */
+  error?: string
+  /** How long the current start attempt has been running, for slow-boot UI. */
+  startingForMs?: number
+}
+
+/** Request shape for the loopback admin API proxy (main-process fetch). */
+export interface OmnirouteAdminRequest {
+  method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE'
+  /** Path under the sidecar root; must start with /api/. */
+  path: string
+  body?: unknown
+}
+
+export interface OmnirouteAdminResponse {
+  ok: boolean
+  status: number
+  /** Parsed JSON body when the response was JSON, else null. */
+  body: unknown
+  error?: string
 }
 
 export type LlmRole = 'system' | 'user' | 'assistant' | 'tool'
@@ -788,6 +833,14 @@ export interface LlmConfig {
   glmMode: GlmMode
   /** Which web chat Ascora WProvider drives (hidden-browser backend). */
   wproviderService: WProviderService
+  /** Default model id routed through the bundled OmniRoute gateway. */
+  omnirouteModel: string
+  /**
+   * OpenAI-compatible base of the running OmniRoute sidecar, e.g.
+   * http://127.0.0.1:20128/v1. Runtime-derived from the sidecar manager —
+   * never persisted and read-only for the renderer.
+   */
+  omnirouteBaseUrl: string
 }
 
 export const DEFAULT_LLM_CONFIG: LlmConfig = {
@@ -815,7 +868,9 @@ export const DEFAULT_LLM_CONFIG: LlmConfig = {
   geminiPermission: 'yolo',
   glmPath: '',
   glmMode: 'yolo',
-  wproviderService: 'qwen'
+  wproviderService: 'qwen',
+  omnirouteModel: '',
+  omnirouteBaseUrl: ''
 }
 
 export interface ChatParams {

@@ -731,6 +731,11 @@ export function LeftRail(): JSX.Element {
                 {t('rail.website')}{' '}
                 <a onClick={() => openLink('https://ade.ascoreai.com')}>ade.ascoreai.com</a>
               </p>
+              <p>
+                <a onClick={() => openLink('https://github.com/diegosouzapw/OmniRoute')}>
+                  {t('rail.includesOmniroute')}
+                </a>
+              </p>
               <div className="about-copyright">{t('rail.copyright')}</div>
             </div>
           )}

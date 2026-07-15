@@ -25,7 +25,8 @@ interface ToolCallDelta {
 const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1'
 
 /**
- * Minimal client for OpenAI-compatible backends (LM Studio, Ollama, OpenRouter).
+ * Minimal client for OpenAI-compatible backends (LM Studio, Ollama,
+ * OpenRouter, and the bundled OmniRoute gateway).
  *
  *  - GET  {baseUrl}/models           → list available models
  *  - POST {baseUrl}/chat/completions → chat, with Server-Sent-Events streaming
@@ -60,6 +61,8 @@ function providerName(config: LlmConfig): string {
     ? 'OpenRouter'
     : config.provider === 'ollama'
       ? 'Ollama'
+      : config.provider === 'omniroute'
+        ? 'OmniRoute'
       : 'LM Studio'
 }
 
@@ -105,6 +108,7 @@ export class LmStudioClient {
   get baseUrl(): string {
     if (this.config.provider === 'openrouter') return OPENROUTER_BASE_URL
     if (this.config.provider === 'ollama') return stripTrailingSlash(this.config.ollamaBaseUrl)
+    if (this.config.provider === 'omniroute') return stripTrailingSlash(this.config.omnirouteBaseUrl)
     return stripTrailingSlash(this.config.baseUrl)
   }
 
@@ -130,16 +134,27 @@ export class LmStudioClient {
     }
   }
 
+  private requireOmniroute(): void {
+    if (this.config.provider === 'omniroute' && !this.config.omnirouteBaseUrl) {
+      throw new LmStudioError(
+        'OmniRoute is not running yet. Start it in Agent backend settings and try again.',
+        'connection'
+      )
+    }
+  }
+
   private model(params: ChatParams): string {
     if (params.model) return params.model
     if (this.config.provider === 'openrouter') return this.config.openRouterModel || 'openrouter/free'
     if (this.config.provider === 'ollama') return this.config.ollamaModel
+    if (this.config.provider === 'omniroute') return this.config.omnirouteModel || 'auto'
     return this.config.model
   }
 
   /** GET /models — never throws for empty lists, only for real failures. */
   async listModels(signal?: AbortSignal): Promise<LlmModel[]> {
     this.requireOpenRouterKey()
+    this.requireOmniroute()
     const name = this.providerName
     const url = `${this.baseUrl}/models`
     let res: Response
@@ -166,6 +181,7 @@ export class LmStudioClient {
    */
   async *streamChat(params: ChatParams, signal?: AbortSignal): AsyncGenerator<string, StreamReturn> {
     this.requireOpenRouterKey()
+    this.requireOmniroute()
     const name = this.providerName
     const url = `${this.baseUrl}/chat/completions`
     const body = JSON.stringify({

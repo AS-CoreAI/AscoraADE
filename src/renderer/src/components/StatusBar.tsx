@@ -85,6 +85,8 @@ export function StatusBar(): JSX.Element {
   const wproviderService = useApp((s) => s.wproviderService)
   const wproviderCheck = useApp((s) => s.wproviderCheck)
   const wproviderChecking = useApp((s) => s.wproviderChecking)
+  const omnirouteModel = useApp((s) => s.omnirouteModel)
+  const omnirouteStatus = useApp((s) => s.omnirouteStatus)
   const openFiles = useApp((s) => s.openFiles)
   const activeFile = useApp((s) => s.activeFile)
   const setSettingsOpen = useApp((s) => s.setSettingsOpen)
@@ -122,6 +124,7 @@ export function StatusBar(): JSX.Element {
   const isWProvider = provider === 'wprovider'
   const isOpenRouter = provider === 'openrouter'
   const isOllama = provider === 'ollama'
+  const isOmniroute = provider === 'omniroute'
   const connectionStatusLabel = (state: string): string => {
     if (state === 'connecting') return t('status.connecting')
     if (state === 'connected') return t('status.connected')
@@ -163,7 +166,24 @@ export function StatusBar(): JSX.Element {
   // Status dot color + label for the active backend.
   let dotColor: string
   let label: string
-  if (isWProvider) {
+  if (isOmniroute) {
+    dotColor =
+      omnirouteStatus.state === 'ready'
+        ? CONN_COLOR.connected
+        : omnirouteStatus.state === 'starting'
+          ? CONN_COLOR.connecting
+          : omnirouteStatus.state === 'error'
+            ? CONN_COLOR.error
+            : CONN_COLOR.unknown
+    label =
+      omnirouteStatus.state === 'ready'
+        ? `OmniRoute: ${t('status.ready')} · ${modelCount(models.length)}`
+        : omnirouteStatus.state === 'starting'
+          ? `OmniRoute: ${t('settings.omnirouteStarting')}`
+          : omnirouteStatus.state === 'error'
+            ? `OmniRoute: ${t('status.notConnected')}`
+            : `OmniRoute: ${t('settings.omnirouteStopped')}`
+  } else if (isWProvider) {
     if (wproviderChecking) {
       dotColor = CONN_COLOR.connecting
       label = `${wproviderLabel} Web: ${t('status.checking')}`
@@ -232,7 +252,9 @@ export function StatusBar(): JSX.Element {
     }
   }
 
-  const modelLabel = isWProvider
+  const modelLabel = isOmniroute
+    ? omnirouteModel || 'auto'
+    : isWProvider
     ? `${wproviderLabel} · Web`
     : isGlm
     ? 'GLM (ZCode)'

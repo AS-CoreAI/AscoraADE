@@ -9,6 +9,7 @@ import { registerClaudeHandlers } from './claude'
 import { registerGeminiHandlers } from './gemini'
 import { registerGlmHandlers } from './glm'
 import { registerWProviderHandlers } from './wprovider'
+import { registerOmnirouteHandlers } from './omniroute'
 import { registerAnalyticsHandlers } from './analytics'
 import { registerGitHandlers } from './git'
 import { registerTerminalHandlers } from './terminal'
@@ -32,6 +33,7 @@ export function registerIpc(): void {
   registerGeminiHandlers()
   registerGlmHandlers()
   registerWProviderHandlers()
+  registerOmnirouteHandlers()
   registerBlueprintHandlers()
   registerAnalyticsHandlers()
   registerGitHandlers()
