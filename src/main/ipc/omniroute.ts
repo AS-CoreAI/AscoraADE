@@ -13,7 +13,9 @@ import {
 } from '../omniroute/runner'
 import { getStore } from '../store'
 
-const ADMIN_TIMEOUT_MS = 30_000
+// Model calls made by the native Playground can legitimately take longer
+// than ordinary management requests (cold provider/model, reasoning, etc.).
+const ADMIN_TIMEOUT_MS = 120_000
 
 /** Proxy an admin REST call to the loopback sidecar from the main process
  *  (renderer fetch would trip over CORS/origin checks). */

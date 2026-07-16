@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type JSX } from 'react'
 import { createPortal } from 'react-dom'
 import type { TaskSummary, Workspace } from '@shared/ipc'
 import { Icon } from './Icon'
+import { OMNI_PAGES } from '@/lib/omniroutePages'
 import { SshRail } from './SshRail'
 import { BlueprintRail } from './BlueprintRail'
 import { useApp, type AppLanguage, type ThemePreference } from '@/state/store'
@@ -87,20 +88,24 @@ export function LeftRail(): JSX.Element {
     tr(appLanguage, key, values)
   const [themeMenuOpen, setThemeMenuOpen] = useState(false)
   const [languageMenuOpen, setLanguageMenuOpen] = useState(false)
+  const [omniMenuOpen, setOmniMenuOpen] = useState(false)
+  const openOmniroutePage = useApp((s) => s.openOmniroutePage)
   const footerMenuRef = useRef<HTMLDivElement>(null)
   const [aboutOpen, setAboutOpen] = useState(false)
 
   useEffect(() => {
-    if (!themeMenuOpen && !languageMenuOpen) return
+    if (!themeMenuOpen && !languageMenuOpen && !omniMenuOpen) return
     const close = (event: MouseEvent): void => {
       if (footerMenuRef.current?.contains(event.target as Node)) return
       setThemeMenuOpen(false)
       setLanguageMenuOpen(false)
+      setOmniMenuOpen(false)
     }
     const closeOnEscape = (event: KeyboardEvent): void => {
       if (event.key !== 'Escape') return
       setThemeMenuOpen(false)
       setLanguageMenuOpen(false)
+      setOmniMenuOpen(false)
     }
     document.addEventListener('mousedown', close)
     document.addEventListener('keydown', closeOnEscape)
@@ -108,7 +113,7 @@ export function LeftRail(): JSX.Element {
       document.removeEventListener('mousedown', close)
       document.removeEventListener('keydown', closeOnEscape)
     }
-  }, [languageMenuOpen, themeMenuOpen])
+  }, [languageMenuOpen, omniMenuOpen, themeMenuOpen])
 
   useEffect(() => {
     if (!workspaceMenu) return
@@ -638,6 +643,25 @@ export function LeftRail(): JSX.Element {
             ))}
           </div>
         )}
+        {omniMenuOpen && (
+          <div className="theme-menu omni-menu" role="menu" aria-label={t('rail.omniroute')}>
+            <div className="theme-menu-label">{t('rail.omniroute')}</div>
+            {OMNI_PAGES.map((page) => (
+              <button
+                className="theme-option omni-option"
+                key={page.path}
+                role="menuitem"
+                onClick={() => {
+                  openOmniroutePage(page.path)
+                  setOmniMenuOpen(false)
+                }}
+              >
+                <Icon name={page.icon} size={14} />
+                <span>{t(page.labelKey)}</span>
+              </button>
+            ))}
+          </div>
+        )}
         {languageMenuOpen && (
           <div className="theme-menu" role="menu" aria-label={t('app.language.label')}>
             <div className="theme-menu-label">{t('app.language.label')}</div>
@@ -667,12 +691,27 @@ export function LeftRail(): JSX.Element {
           <Icon name="barChart" size={17} />
         </button>
         <button
+          className={`rail-settings${omniMenuOpen || view === 'omniroute' ? ' active' : ''}`}
+          title={t('rail.omniroute')}
+          aria-label={t('rail.omniroute')}
+          aria-expanded={omniMenuOpen}
+          onClick={() => {
+            setThemeMenuOpen(false)
+            setLanguageMenuOpen(false)
+            setAboutOpen(false)
+            setOmniMenuOpen((open) => !open)
+          }}
+        >
+          <Icon name="route" size={17} />
+        </button>
+        <button
           className="rail-settings"
           title={t('rail.agentBackendSettings')}
           aria-label={t('rail.agentBackendSettings')}
           onClick={() => {
             setThemeMenuOpen(false)
             setLanguageMenuOpen(false)
+            setOmniMenuOpen(false)
             setAboutOpen(false)
             setSettingsOpen(true)
           }}
@@ -686,6 +725,7 @@ export function LeftRail(): JSX.Element {
           aria-expanded={themeMenuOpen}
           onClick={() => {
             setLanguageMenuOpen(false)
+            setOmniMenuOpen(false)
             setAboutOpen(false)
             setThemeMenuOpen((open) => !open)
           }}
@@ -699,6 +739,7 @@ export function LeftRail(): JSX.Element {
           aria-expanded={languageMenuOpen}
           onClick={() => {
             setThemeMenuOpen(false)
+            setOmniMenuOpen(false)
             setAboutOpen(false)
             setLanguageMenuOpen((open) => !open)
           }}
@@ -711,6 +752,7 @@ export function LeftRail(): JSX.Element {
           onMouseEnter={() => {
             setThemeMenuOpen(false)
             setLanguageMenuOpen(false)
+            setOmniMenuOpen(false)
             setAboutOpen(true)
           }}
           onMouseLeave={() => setAboutOpen(false)}
@@ -747,6 +789,7 @@ export function LeftRail(): JSX.Element {
             onClick={() => {
               setThemeMenuOpen(false)
               setLanguageMenuOpen(false)
+              setOmniMenuOpen(false)
               setAboutOpen((open) => !open)
             }}
           >

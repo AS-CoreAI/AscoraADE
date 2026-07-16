@@ -10,6 +10,7 @@ import { UsageModal } from '@/components/UsageModal'
 import { HomeView } from '@/views/HomeView'
 import { WorkspaceView } from '@/views/WorkspaceView'
 import { AnalyticsView } from '@/views/AnalyticsView'
+import { OmnirouteView } from '@/views/OmnirouteView'
 import { useApp } from '@/state/store'
 import { api } from '@/lib/api'
 
@@ -45,6 +46,8 @@ export function App(): JSX.Element {
         <div className="main">
           {view === 'analytics' ? (
             <AnalyticsView />
+          ) : view === 'omniroute' ? (
+            <OmnirouteView />
           ) : view === 'home' ? (
             <HomeView />
           ) : (

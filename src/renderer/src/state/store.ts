@@ -56,7 +56,7 @@ import { diffStat } from '@/lib/diff'
 import { solveZCodeCaptcha } from '@/lib/zcode-captcha'
 import { isLanguageCode, type LanguageCode } from '@/language'
 
-export type View = 'home' | 'workspace' | 'blueprint' | 'analytics'
+export type View = 'home' | 'workspace' | 'blueprint' | 'analytics' | 'omniroute'
 /** Agent permission mode — mirrors ZCode's "Ask before changes" control. */
 export type AgentMode = 'ask' | 'auto'
 export type Connection = 'unknown' | 'connecting' | 'connected' | 'error'
@@ -1158,6 +1158,8 @@ type RunFields = Pick<
 
 interface AppState {
   view: View
+  /** Internal route of the native OmniRoute management view. */
+  omniroutePath: string
   workspaces: Workspace[]
   /** User-arranged display order of workspace ids (persisted). */
   workspaceOrder: string[]
@@ -1343,6 +1345,8 @@ interface AppState {
   goHome: () => void
   openAnalytics: () => void
   closeAnalytics: () => void
+  openOmniroutePage: (path: string) => void
+  closeOmniroute: () => void
   toggleDir: (node: TreeNode) => Promise<void>
   refreshDirectory: (path: string) => Promise<void>
   /** Rebase the remote tree root one directory up (SSH only). */
@@ -1689,6 +1693,7 @@ export const useApp = create<AppState>((set, get) => {
 
   return {
   view: 'home',
+  omniroutePath: '/home',
   workspaces: [],
   workspaceOrder: [],
   collapsedWorkspaces: {},
@@ -2332,6 +2337,24 @@ export const useApp = create<AppState>((set, get) => {
   },
 
   closeAnalytics() {
+    set({ view: get().active ? 'workspace' : 'home' })
+  },
+
+  openOmniroutePage(path) {
+    set({ view: 'omniroute', omniroutePath: path })
+    // Boot the sidecar in the background when it is not running; the view
+    // renders progress from omnirouteStatus updates pushed by the status
+    // subscription. Deliberately not ensureOmniroute(): that would flip the
+    // global connection state of the active provider.
+    const state = get().omnirouteStatus.state
+    if (state === 'stopped' || state === 'error') {
+      void api.omniroute.start().catch(() => {
+        /* failure lands in omnirouteStatus via the subscription */
+      })
+    }
+  },
+
+  closeOmniroute() {
     set({ view: get().active ? 'workspace' : 'home' })
   },
 

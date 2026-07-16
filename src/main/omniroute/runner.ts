@@ -314,9 +314,9 @@ function sidecarEnv(port: number): NodeJS.ProcessEnv {
     REQUIRE_API_KEY: 'false',
     OMNIROUTE_SKIP_POSTINSTALL: '1',
     OMNIROUTE_NO_UPDATE_NOTIFIER: '1',
-    // The bundled Next.js dashboard is never surfaced, so its live-WS side
-    // channel stays off. Flip to '1' if an admin API flow turns out to need it.
-    OMNIROUTE_ENABLE_LIVE_WS: '0',
+    // Native Ascora pages consume Combo Studio / traffic-inspector live data
+    // from the sidecar. The socket stays loopback-only via SERVER_HOST.
+    OMNIROUTE_ENABLE_LIVE_WS: '1',
     STORAGE_ENCRYPTION_KEY: storageKey(),
     PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1',
     NODE_ENV: 'production'

@@ -1,6 +1,6 @@
 import type { JSX } from 'react'
 
-type IconName =
+export type IconName =
   | 'plus'
   | 'search'
   | 'sparkles'
@@ -43,6 +43,15 @@ type IconName =
   | 'telegram'
   | 'webhook'
   | 'list'
+  | 'route'
+  | 'home'
+  | 'plug'
+  | 'key'
+  | 'server'
+  | 'layers'
+  | 'sliders'
+  | 'activity'
+  | 'flask'
 
 const paths: Record<IconName, JSX.Element> = {
   plus: (
@@ -272,6 +281,70 @@ const paths: Record<IconName, JSX.Element> = {
       <circle cx="12" cy="12" r="9" />
       <line x1="12" y1="8" x2="12" y2="12.5" />
       <line x1="12" y1="16" x2="12" y2="16.01" />
+    </>
+  ),
+  route: (
+    <>
+      <circle cx="6" cy="19" r="3" />
+      <circle cx="18" cy="5" r="3" />
+      <path d="M9 19h6.5a3.5 3.5 0 0 0 0-7h-7a3.5 3.5 0 0 1 0-7H15" />
+    </>
+  ),
+  home: (
+    <>
+      <path d="M3 10.5 12 3l9 7.5" />
+      <path d="M5 9.8V20a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9.8" />
+    </>
+  ),
+  plug: (
+    <>
+      <line x1="9" y1="7" x2="9" y2="3" />
+      <line x1="15" y1="7" x2="15" y2="3" />
+      <path d="M6 7h12v4a6 6 0 0 1-6 6 6 6 0 0 1-6-6z" />
+      <line x1="12" y1="17" x2="12" y2="21" />
+    </>
+  ),
+  key: (
+    <>
+      <circle cx="7.5" cy="15.5" r="4.5" />
+      <path d="M10.7 12.3 21 2" />
+      <path d="M15.5 7.5 19 11" />
+    </>
+  ),
+  server: (
+    <>
+      <rect x="3" y="4" width="18" height="7" rx="1.5" />
+      <rect x="3" y="13" width="18" height="7" rx="1.5" />
+      <line x1="6.5" y1="7.5" x2="6.51" y2="7.5" />
+      <line x1="6.5" y1="16.5" x2="6.51" y2="16.5" />
+    </>
+  ),
+  layers: (
+    <>
+      <polygon points="12 2 22 7.5 12 13 2 7.5 12 2" />
+      <polyline points="2 12.5 12 18 22 12.5" />
+      <polyline points="2 17.5 12 23 22 17.5" />
+    </>
+  ),
+  sliders: (
+    <>
+      <line x1="21" y1="6" x2="14" y2="6" />
+      <line x1="10" y1="6" x2="3" y2="6" />
+      <line x1="21" y1="12" x2="12" y2="12" />
+      <line x1="8" y1="12" x2="3" y2="12" />
+      <line x1="21" y1="18" x2="16" y2="18" />
+      <line x1="12" y1="18" x2="3" y2="18" />
+      <line x1="14" y1="4" x2="14" y2="8" />
+      <line x1="8" y1="10" x2="8" y2="14" />
+      <line x1="16" y1="16" x2="16" y2="20" />
+    </>
+  ),
+  activity: <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />,
+  flask: (
+    <>
+      <path d="M10 2.5v6L4.6 17.8A2 2 0 0 0 6.4 21h11.2a2 2 0 0 0 1.8-3.2L14 8.5v-6" />
+      <line x1="8.5" y1="2.5" x2="15.5" y2="2.5" />
+      <line x1="7" y1="15" x2="17" y2="15" />
     </>
   )
 }
