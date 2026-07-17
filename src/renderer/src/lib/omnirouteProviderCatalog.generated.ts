@@ -204,7 +204,10 @@ export const OMNI_PROVIDER_CATALOG: OmniProviderCatalogEntry[] = [
     "deprecated": true,
     "deprecationReason": "Qwen OAuth free tier was discontinued on 2026-04-15. Use 'bailian-coding-plan', 'alibaba', 'alibaba-cn', or 'openrouter' provider with API key instead.",
     "passthroughModels": false,
-    "serviceKinds": [],
+    "serviceKinds": [
+      "stt",
+      "tts"
+    ],
     "logo": "./providers/qwen.svg"
   },
   {
@@ -274,7 +277,9 @@ export const OMNI_PROVIDER_CATALOG: OmniProviderCatalogEntry[] = [
     "subscriptionRisk": true,
     "deprecated": false,
     "passthroughModels": false,
-    "serviceKinds": []
+    "serviceKinds": [
+      "image"
+    ]
   },
   {
     "id": "codex",
@@ -286,7 +291,9 @@ export const OMNI_PROVIDER_CATALOG: OmniProviderCatalogEntry[] = [
     "subscriptionRisk": true,
     "deprecated": false,
     "passthroughModels": false,
-    "serviceKinds": [],
+    "serviceKinds": [
+      "image"
+    ],
     "logo": "./providers/codex.svg"
   },
   {
@@ -299,7 +306,9 @@ export const OMNI_PROVIDER_CATALOG: OmniProviderCatalogEntry[] = [
     "subscriptionRisk": false,
     "deprecated": false,
     "passthroughModels": false,
-    "serviceKinds": []
+    "serviceKinds": [
+      "embedding"
+    ]
   },
   {
     "id": "gitlab-duo",
@@ -492,7 +501,9 @@ export const OMNI_PROVIDER_CATALOG: OmniProviderCatalogEntry[] = [
     "subscriptionRisk": true,
     "deprecated": false,
     "passthroughModels": false,
-    "serviceKinds": []
+    "serviceKinds": [
+      "image"
+    ]
   },
   {
     "id": "grok-web",
@@ -695,7 +706,9 @@ export const OMNI_PROVIDER_CATALOG: OmniProviderCatalogEntry[] = [
     "subscriptionRisk": false,
     "deprecated": false,
     "passthroughModels": false,
-    "serviceKinds": []
+    "serviceKinds": [
+      "image"
+    ]
   },
   {
     "id": "yuanbao-web",
@@ -1050,7 +1063,10 @@ export const OMNI_PROVIDER_CATALOG: OmniProviderCatalogEntry[] = [
     "subscriptionRisk": false,
     "deprecated": false,
     "passthroughModels": false,
-    "serviceKinds": []
+    "serviceKinds": [
+      "video",
+      "image"
+    ]
   },
   {
     "id": "comfyui",
@@ -1066,7 +1082,11 @@ export const OMNI_PROVIDER_CATALOG: OmniProviderCatalogEntry[] = [
     "subscriptionRisk": false,
     "deprecated": false,
     "passthroughModels": false,
-    "serviceKinds": [],
+    "serviceKinds": [
+      "video",
+      "music",
+      "image"
+    ],
     "logo": "./providers/comfyui.svg"
   },
   {
@@ -1259,7 +1279,10 @@ export const OMNI_PROVIDER_CATALOG: OmniProviderCatalogEntry[] = [
     "subscriptionRisk": false,
     "deprecated": false,
     "passthroughModels": false,
-    "serviceKinds": [],
+    "serviceKinds": [
+      "stt",
+      "tts"
+    ],
     "logo": "./providers/deepgram.svg"
   },
   {
@@ -1274,7 +1297,9 @@ export const OMNI_PROVIDER_CATALOG: OmniProviderCatalogEntry[] = [
     "subscriptionRisk": false,
     "deprecated": false,
     "passthroughModels": false,
-    "serviceKinds": [],
+    "serviceKinds": [
+      "stt"
+    ],
     "logo": "./providers/assemblyai.svg"
   },
   {
@@ -1289,7 +1314,9 @@ export const OMNI_PROVIDER_CATALOG: OmniProviderCatalogEntry[] = [
     "subscriptionRisk": false,
     "deprecated": false,
     "passthroughModels": false,
-    "serviceKinds": [],
+    "serviceKinds": [
+      "tts"
+    ],
     "logo": "./providers/elevenlabs.svg"
   },
   {
@@ -1304,7 +1331,9 @@ export const OMNI_PROVIDER_CATALOG: OmniProviderCatalogEntry[] = [
     "subscriptionRisk": false,
     "deprecated": false,
     "passthroughModels": false,
-    "serviceKinds": [],
+    "serviceKinds": [
+      "tts"
+    ],
     "logo": "./providers/cartesia.svg"
   },
   {
@@ -1319,7 +1348,9 @@ export const OMNI_PROVIDER_CATALOG: OmniProviderCatalogEntry[] = [
     "subscriptionRisk": false,
     "deprecated": false,
     "passthroughModels": false,
-    "serviceKinds": [],
+    "serviceKinds": [
+      "tts"
+    ],
     "logo": "./providers/playht.svg"
   },
   {
@@ -1334,7 +1365,9 @@ export const OMNI_PROVIDER_CATALOG: OmniProviderCatalogEntry[] = [
     "subscriptionRisk": false,
     "deprecated": false,
     "passthroughModels": false,
-    "serviceKinds": [],
+    "serviceKinds": [
+      "tts"
+    ],
     "logo": "./providers/inworld.svg"
   },
   {
@@ -1350,7 +1383,9 @@ export const OMNI_PROVIDER_CATALOG: OmniProviderCatalogEntry[] = [
     "subscriptionRisk": false,
     "deprecated": false,
     "passthroughModels": false,
-    "serviceKinds": []
+    "serviceKinds": [
+      "tts"
+    ]
   },
   {
     "id": "cliproxyapi",
@@ -1490,7 +1525,10 @@ export const OMNI_PROVIDER_CATALOG: OmniProviderCatalogEntry[] = [
     "subscriptionRisk": false,
     "deprecated": false,
     "passthroughModels": true,
-    "serviceKinds": [],
+    "serviceKinds": [
+      "image",
+      "embedding"
+    ],
     "logo": "./providers/openrouter.svg"
   },
   {
@@ -1744,7 +1782,10 @@ export const OMNI_PROVIDER_CATALOG: OmniProviderCatalogEntry[] = [
     "subscriptionRisk": false,
     "deprecated": false,
     "passthroughModels": false,
-    "serviceKinds": []
+    "serviceKinds": [
+      "image",
+      "embedding"
+    ]
   },
   {
     "id": "llm7",
@@ -1824,7 +1865,9 @@ export const OMNI_PROVIDER_CATALOG: OmniProviderCatalogEntry[] = [
     "subscriptionRisk": false,
     "deprecated": false,
     "passthroughModels": false,
-    "serviceKinds": [],
+    "serviceKinds": [
+      "image"
+    ],
     "logo": "./providers/nanogpt.png"
   },
   {
@@ -2199,7 +2242,12 @@ export const OMNI_PROVIDER_CATALOG: OmniProviderCatalogEntry[] = [
     "subscriptionRisk": false,
     "deprecated": false,
     "passthroughModels": false,
-    "serviceKinds": [],
+    "serviceKinds": [
+      "stt",
+      "tts",
+      "image",
+      "embedding"
+    ],
     "logo": "./providers/openai.svg"
   },
   {
@@ -2266,7 +2314,9 @@ export const OMNI_PROVIDER_CATALOG: OmniProviderCatalogEntry[] = [
     "subscriptionRisk": false,
     "deprecated": false,
     "passthroughModels": false,
-    "serviceKinds": [],
+    "serviceKinds": [
+      "embedding"
+    ],
     "logo": "./providers/gemini.svg"
   },
   {
@@ -2282,7 +2332,9 @@ export const OMNI_PROVIDER_CATALOG: OmniProviderCatalogEntry[] = [
     "subscriptionRisk": false,
     "deprecated": false,
     "passthroughModels": false,
-    "serviceKinds": [],
+    "serviceKinds": [
+      "stt"
+    ],
     "logo": "./providers/groq.svg"
   },
   {
@@ -2313,7 +2365,9 @@ export const OMNI_PROVIDER_CATALOG: OmniProviderCatalogEntry[] = [
     "subscriptionRisk": false,
     "deprecated": false,
     "passthroughModels": false,
-    "serviceKinds": [],
+    "serviceKinds": [
+      "image"
+    ],
     "logo": "./providers/xai.svg"
   },
   {
@@ -2329,7 +2383,10 @@ export const OMNI_PROVIDER_CATALOG: OmniProviderCatalogEntry[] = [
     "subscriptionRisk": false,
     "deprecated": false,
     "passthroughModels": false,
-    "serviceKinds": [],
+    "serviceKinds": [
+      "embedding",
+      "ocr"
+    ],
     "logo": "./providers/mistral.svg"
   },
   {
@@ -2360,7 +2417,10 @@ export const OMNI_PROVIDER_CATALOG: OmniProviderCatalogEntry[] = [
     "subscriptionRisk": false,
     "deprecated": false,
     "passthroughModels": false,
-    "serviceKinds": [],
+    "serviceKinds": [
+      "stt",
+      "embedding"
+    ],
     "logo": "./providers/cohere.svg"
   },
   {
@@ -2464,7 +2524,9 @@ export const OMNI_PROVIDER_CATALOG: OmniProviderCatalogEntry[] = [
     "subscriptionRisk": false,
     "deprecated": false,
     "passthroughModels": false,
-    "serviceKinds": [],
+    "serviceKinds": [
+      "embedding"
+    ],
     "logo": "./providers/upstage.svg"
   },
   {
@@ -2545,7 +2607,13 @@ export const OMNI_PROVIDER_CATALOG: OmniProviderCatalogEntry[] = [
     "subscriptionRisk": false,
     "deprecated": false,
     "passthroughModels": false,
-    "serviceKinds": []
+    "serviceKinds": [
+      "stt",
+      "tts",
+      "video",
+      "image",
+      "embedding"
+    ]
   },
   {
     "id": "openvecta",
@@ -2576,7 +2644,10 @@ export const OMNI_PROVIDER_CATALOG: OmniProviderCatalogEntry[] = [
     "subscriptionRisk": false,
     "deprecated": false,
     "passthroughModels": false,
-    "serviceKinds": [],
+    "serviceKinds": [
+      "image",
+      "embedding"
+    ],
     "logo": "./providers/fireworks.svg"
   },
   {
@@ -2608,7 +2679,12 @@ export const OMNI_PROVIDER_CATALOG: OmniProviderCatalogEntry[] = [
     "subscriptionRisk": false,
     "deprecated": false,
     "passthroughModels": false,
-    "serviceKinds": [],
+    "serviceKinds": [
+      "stt",
+      "tts",
+      "image",
+      "embedding"
+    ],
     "logo": "./providers/nvidia.svg"
   },
   {
@@ -2624,7 +2700,10 @@ export const OMNI_PROVIDER_CATALOG: OmniProviderCatalogEntry[] = [
     "subscriptionRisk": false,
     "deprecated": false,
     "passthroughModels": false,
-    "serviceKinds": [],
+    "serviceKinds": [
+      "image",
+      "embedding"
+    ],
     "logo": "./providers/nebius.svg"
   },
   {
@@ -2670,7 +2749,10 @@ export const OMNI_PROVIDER_CATALOG: OmniProviderCatalogEntry[] = [
     "subscriptionRisk": false,
     "deprecated": false,
     "passthroughModels": false,
-    "serviceKinds": [],
+    "serviceKinds": [
+      "tts",
+      "image"
+    ],
     "logo": "./providers/hyperbolic.svg"
   },
   {
@@ -2700,7 +2782,11 @@ export const OMNI_PROVIDER_CATALOG: OmniProviderCatalogEntry[] = [
     "subscriptionRisk": false,
     "deprecated": false,
     "passthroughModels": false,
-    "serviceKinds": [],
+    "serviceKinds": [
+      "stt",
+      "tts",
+      "image"
+    ],
     "logo": "./providers/huggingface.svg"
   },
   {
@@ -2732,7 +2818,9 @@ export const OMNI_PROVIDER_CATALOG: OmniProviderCatalogEntry[] = [
     "subscriptionRisk": false,
     "deprecated": false,
     "passthroughModels": false,
-    "serviceKinds": [],
+    "serviceKinds": [
+      "embedding"
+    ],
     "logo": "./providers/deepinfra.svg"
   },
   {
@@ -3101,7 +3189,12 @@ export const OMNI_PROVIDER_CATALOG: OmniProviderCatalogEntry[] = [
     "subscriptionRisk": false,
     "deprecated": false,
     "passthroughModels": false,
-    "serviceKinds": []
+    "serviceKinds": [
+      "stt",
+      "tts",
+      "video",
+      "music"
+    ]
   },
   {
     "id": "vertex-partner",
@@ -3356,7 +3449,11 @@ export const OMNI_PROVIDER_CATALOG: OmniProviderCatalogEntry[] = [
     "subscriptionRisk": false,
     "deprecated": false,
     "passthroughModels": false,
-    "serviceKinds": [],
+    "serviceKinds": [
+      "tts",
+      "video",
+      "music"
+    ],
     "logo": "./providers/minimax.svg"
   },
   {
@@ -3416,7 +3513,9 @@ export const OMNI_PROVIDER_CATALOG: OmniProviderCatalogEntry[] = [
     "subscriptionRisk": false,
     "deprecated": false,
     "passthroughModels": false,
-    "serviceKinds": [],
+    "serviceKinds": [
+      "video"
+    ],
     "logo": "./providers/alibaba.svg"
   },
   {
@@ -3506,7 +3605,9 @@ export const OMNI_PROVIDER_CATALOG: OmniProviderCatalogEntry[] = [
     "subscriptionRisk": false,
     "deprecated": false,
     "passthroughModels": false,
-    "serviceKinds": []
+    "serviceKinds": [
+      "tts"
+    ]
   },
   {
     "id": "baidu",
@@ -3675,7 +3776,9 @@ export const OMNI_PROVIDER_CATALOG: OmniProviderCatalogEntry[] = [
     "subscriptionRisk": false,
     "deprecated": false,
     "passthroughModels": true,
-    "serviceKinds": [],
+    "serviceKinds": [
+      "image"
+    ],
     "logo": "./providers/sensenova.svg"
   },
   {
@@ -3744,7 +3847,9 @@ export const OMNI_PROVIDER_CATALOG: OmniProviderCatalogEntry[] = [
     "subscriptionRisk": false,
     "deprecated": false,
     "passthroughModels": false,
-    "serviceKinds": []
+    "serviceKinds": [
+      "video"
+    ]
   },
   {
     "id": "kie",
@@ -3758,7 +3863,13 @@ export const OMNI_PROVIDER_CATALOG: OmniProviderCatalogEntry[] = [
     "subscriptionRisk": false,
     "deprecated": false,
     "passthroughModels": false,
-    "serviceKinds": [],
+    "serviceKinds": [
+      "stt",
+      "tts",
+      "video",
+      "music",
+      "image"
+    ],
     "logo": "./providers/kie.png"
   },
   {
@@ -3774,7 +3885,12 @@ export const OMNI_PROVIDER_CATALOG: OmniProviderCatalogEntry[] = [
     "subscriptionRisk": false,
     "deprecated": false,
     "passthroughModels": false,
-    "serviceKinds": [],
+    "serviceKinds": [
+      "stt",
+      "tts",
+      "video",
+      "image"
+    ],
     "logo": "./providers/pollinations.svg"
   },
   {
@@ -3790,7 +3906,10 @@ export const OMNI_PROVIDER_CATALOG: OmniProviderCatalogEntry[] = [
     "subscriptionRisk": false,
     "deprecated": false,
     "passthroughModels": false,
-    "serviceKinds": [],
+    "serviceKinds": [
+      "video",
+      "image"
+    ],
     "logo": "./providers/haiper.svg"
   },
   {
@@ -3806,7 +3925,10 @@ export const OMNI_PROVIDER_CATALOG: OmniProviderCatalogEntry[] = [
     "subscriptionRisk": false,
     "deprecated": false,
     "passthroughModels": false,
-    "serviceKinds": [],
+    "serviceKinds": [
+      "video",
+      "image"
+    ],
     "logo": "./providers/leonardo.svg"
   },
   {
@@ -3822,7 +3944,9 @@ export const OMNI_PROVIDER_CATALOG: OmniProviderCatalogEntry[] = [
     "subscriptionRisk": false,
     "deprecated": false,
     "passthroughModels": false,
-    "serviceKinds": [],
+    "serviceKinds": [
+      "image"
+    ],
     "logo": "./providers/ideogram.svg"
   },
   {
@@ -3838,7 +3962,9 @@ export const OMNI_PROVIDER_CATALOG: OmniProviderCatalogEntry[] = [
     "subscriptionRisk": false,
     "deprecated": false,
     "passthroughModels": false,
-    "serviceKinds": [],
+    "serviceKinds": [
+      "music"
+    ],
     "logo": "./providers/suno.svg"
   },
   {
@@ -3854,7 +3980,9 @@ export const OMNI_PROVIDER_CATALOG: OmniProviderCatalogEntry[] = [
     "subscriptionRisk": false,
     "deprecated": false,
     "passthroughModels": false,
-    "serviceKinds": [],
+    "serviceKinds": [
+      "music"
+    ],
     "logo": "./providers/udio.svg"
   },
   {
@@ -3901,7 +4029,9 @@ export const OMNI_PROVIDER_CATALOG: OmniProviderCatalogEntry[] = [
     "subscriptionRisk": false,
     "deprecated": false,
     "passthroughModels": false,
-    "serviceKinds": []
+    "serviceKinds": [
+      "embedding"
+    ]
   },
   {
     "id": "jina-ai",
@@ -3917,7 +4047,9 @@ export const OMNI_PROVIDER_CATALOG: OmniProviderCatalogEntry[] = [
     "subscriptionRisk": false,
     "deprecated": false,
     "passthroughModels": false,
-    "serviceKinds": []
+    "serviceKinds": [
+      "embedding"
+    ]
   },
   {
     "id": "fal-ai",
@@ -3931,7 +4063,9 @@ export const OMNI_PROVIDER_CATALOG: OmniProviderCatalogEntry[] = [
     "subscriptionRisk": false,
     "deprecated": false,
     "passthroughModels": false,
-    "serviceKinds": []
+    "serviceKinds": [
+      "image"
+    ]
   },
   {
     "id": "stability-ai",
@@ -3945,7 +4079,9 @@ export const OMNI_PROVIDER_CATALOG: OmniProviderCatalogEntry[] = [
     "subscriptionRisk": false,
     "deprecated": false,
     "passthroughModels": false,
-    "serviceKinds": []
+    "serviceKinds": [
+      "image"
+    ]
   },
   {
     "id": "black-forest-labs",
@@ -3959,7 +4095,9 @@ export const OMNI_PROVIDER_CATALOG: OmniProviderCatalogEntry[] = [
     "subscriptionRisk": false,
     "deprecated": false,
     "passthroughModels": false,
-    "serviceKinds": []
+    "serviceKinds": [
+      "image"
+    ]
   },
   {
     "id": "recraft",
@@ -3973,7 +4111,9 @@ export const OMNI_PROVIDER_CATALOG: OmniProviderCatalogEntry[] = [
     "subscriptionRisk": false,
     "deprecated": false,
     "passthroughModels": false,
-    "serviceKinds": [],
+    "serviceKinds": [
+      "image"
+    ],
     "logo": "./providers/recraft.svg"
   },
   {
@@ -3988,7 +4128,9 @@ export const OMNI_PROVIDER_CATALOG: OmniProviderCatalogEntry[] = [
     "subscriptionRisk": false,
     "deprecated": false,
     "passthroughModels": false,
-    "serviceKinds": []
+    "serviceKinds": [
+      "image"
+    ]
   },
   {
     "id": "dify",
