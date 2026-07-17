@@ -40,6 +40,8 @@ import {
   type WProviderService,
   type OmnirouteAdminRequest,
   type OmnirouteAdminResponse,
+  type OmnirouteLiveConnectRequest,
+  type OmnirouteLiveEvent,
   type OmnirouteStatus,
   type BlueprintDefinition,
   type BlueprintEvent,
@@ -381,6 +383,15 @@ const api = {
     stop: (): Promise<OmnirouteStatus> => ipcRenderer.invoke(IPC.omniroute.stop),
     admin: (request: OmnirouteAdminRequest): Promise<OmnirouteAdminResponse> =>
       ipcRenderer.invoke(IPC.omniroute.admin, request),
+    liveConnect: (request: OmnirouteLiveConnectRequest): Promise<void> =>
+      ipcRenderer.invoke(IPC.omniroute.liveConnect, request),
+    liveDisconnect: (id: string): Promise<void> =>
+      ipcRenderer.invoke(IPC.omniroute.liveDisconnect, id),
+    onLiveEvent: (cb: (event: OmnirouteLiveEvent) => void): (() => void) => {
+      const listener = (_event: IpcRendererEvent, payload: OmnirouteLiveEvent): void => cb(payload)
+      ipcRenderer.on(IPC.omniroute.liveEvent, listener)
+      return () => ipcRenderer.removeListener(IPC.omniroute.liveEvent, listener)
+    },
     onStatusChanged: (cb: (status: OmnirouteStatus) => void): (() => void) => {
       const listener = (_event: IpcRendererEvent, status: OmnirouteStatus): void => cb(status)
       ipcRenderer.on(IPC.omniroute.statusChanged, listener)

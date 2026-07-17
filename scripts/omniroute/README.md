@@ -16,6 +16,7 @@ installer is substantially smaller because electron-builder compresses the resou
 | `npm run omniroute:vendor` | Fetch the pinned version → trim → assert → manifest → smoke test |
 | `npm run omniroute:ensure` | Same, but no-op when `.build/omniroute` already matches the pin (used by `dist:*`) |
 | `npm run omniroute:smoke` | Boot twice against one data dir and verify API + persistence exactly like production |
+| `npm run omniroute:providers -- E:\\OmniRoute` | Regenerate the native 256-provider catalog and copy provider icons from an upstream source checkout |
 | `npm run omniroute:update [-- x.y.z]` | Bump the pin (default: latest), re-vendor, smoke; **auto-reverts the pin on failure** |
 
 ## Update runbook
@@ -25,9 +26,11 @@ installer is substantially smaller because electron-builder compresses the resou
 2. Skim the upstream release notes for **env/flag renames** — their defaults drift between
    patch releases (e.g. the live-WS port move, `OMNIROUTE_DISABLE_LIVE_WS` →
    `OMNIROUTE_ENABLE_LIVE_WS`). Every env we rely on is pinned in `env.mjs`.
-3. Update the version in `THIRD_PARTY_NOTICES.md`, add a `changelog.md` entry.
-4. Commit `pin.json` (and `patches/` if touched).
-5. Do a packaged sanity run before releasing (`npm run dist:win`, install, select OmniRoute).
+3. When the upstream provider catalog changed, run `npm run omniroute:providers -- <checkout>`
+   against the same source release and review the generated catalog/icon diff.
+4. Update the version in `THIRD_PARTY_NOTICES.md`, add a `changelog.md` entry.
+5. Commit `pin.json` (and `patches/` if touched).
+6. Do a packaged sanity run before releasing (`npm run dist:win`, install, select OmniRoute).
 
 ## Env pins (single source: `env.mjs`)
 

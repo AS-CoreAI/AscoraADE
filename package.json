@@ -25,6 +25,7 @@
     "omniroute:vendor": "node scripts/omniroute/vendor.mjs",
     "omniroute:ensure": "node scripts/omniroute/vendor.mjs --ensure",
     "omniroute:smoke": "node scripts/omniroute/smoke.mjs",
+    "omniroute:providers": "node scripts/omniroute/sync-provider-catalog.mjs",
     "omniroute:update": "node scripts/omniroute/update.mjs",
     "dist:win": "npm run omniroute:ensure && electron-vite build && electron-builder --win",
     "dist:linux": "npm run omniroute:ensure && electron-vite build && electron-builder --linux",
@@ -42,6 +43,7 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "ssh2": "^1.17.0",
+    "ws": "^8.18.3",
     "zustand": "^5.0.3"
   },
   "optionalDependencies": {
@@ -54,6 +56,7 @@
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
     "@types/ssh2": "^1.15.5",
+    "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^4.3.4",
     "electron": "^43.1.0",
     "electron-builder": "^25.1.8",

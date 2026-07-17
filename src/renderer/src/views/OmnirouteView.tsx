@@ -1,5 +1,8 @@
 import {
+  useCallback,
   useEffect,
+  useMemo,
+  useRef,
   useState,
   type DependencyList,
   type FormEvent,
@@ -7,8 +10,9 @@ import {
   type ReactNode
 } from 'react'
 import { Icon, type IconName } from '@/components/Icon'
-import { OMNI_PAGES } from '@/lib/omniroutePages'
+import { OMNI_PAGE_GROUPS, OMNI_PAGES } from '@/lib/omniroutePages'
 import {
+  downloadOmniJson,
   formatOmniDate,
   formatOmniJson,
   isRecord,
@@ -17,22 +21,18 @@ import {
   omniLabel,
   omniList,
   omniNumber,
+  omniOptionalNumber,
   omniRequest,
+  omniStringList,
   omniText,
   type OmniRecord
 } from '@/lib/omnirouteApi'
 import { useApp, type AppLanguage } from '@/state/store'
 import { api } from '@/lib/api'
 import { tr, type TranslationKey } from '@/language'
+import { ProvidersPage as FullProvidersPage } from './omniroute/ProvidersPage'
 
 const FIRST_BOOT_HINT_MS = 10_000
-const DEFAULT_PROVIDER_URLS: Record<string, string> = {
-  openai: 'https://api.openai.com/v1',
-  anthropic: 'https://api.anthropic.com',
-  openrouter: 'https://openrouter.ai/api/v1',
-  ollama: 'http://127.0.0.1:11434/v1',
-  lmstudio: 'http://127.0.0.1:1234/v1'
-}
 
 function l(language: AppLanguage, ru: string, en: string): string {
   return language === 'ru' || language === 'uk' ? ru : en
@@ -143,6 +143,16 @@ function getNestedRecord(value: unknown, key: string): OmniRecord {
   return isRecord(value) && isRecord(value[key]) ? value[key] : {}
 }
 
+function splitOmniList(value: string): string[] {
+  return value.split(/[\n,]/).map((item) => item.trim()).filter(Boolean)
+}
+
+function optionalNumberInput(value: string): number | null {
+  if (!value.trim()) return null
+  const number = Number(value)
+  return Number.isFinite(number) ? number : null
+}
+
 function HomePage({ language, refreshKey }: { language: AppLanguage; refreshKey: number }): JSX.Element {
   const open = useApp((s) => s.openOmniroutePage)
   const status = useApp((s) => s.omnirouteStatus)
@@ -243,164 +253,397 @@ function EndpointsPage({ language, refreshKey }: { language: AppLanguage; refres
   )
 }
 
+interface ApiKeyDraft {
+  name: string
+  isActive: boolean
+  allowedModels: string
+  allowedCombos: string[]
+  allowedConnections: string[]
+  maxRequestsPerMinute: string
+  maxRequestsPerDay: string
+  maxSessions: string
+  usageLimitEnabled: boolean
+  dailyUsageLimitUsd: string
+  weeklyUsageLimitUsd: string
+  noLog: boolean
+  allowUsageCommand: boolean
+  autoResolve: boolean
+  streamDefaultMode: string
+}
+
+function apiKeyDraft(key: OmniRecord): ApiKeyDraft {
+  return {
+    name: omniLabel(key, ''),
+    isActive: key.isActive !== false,
+    allowedModels: omniStringList(key.allowedModels).join('\n'),
+    allowedCombos: omniStringList(key.allowedCombos),
+    allowedConnections: omniStringList(key.allowedConnections),
+    maxRequestsPerMinute: omniOptionalNumber(key.maxRequestsPerMinute)?.toString() ?? '',
+    maxRequestsPerDay: omniOptionalNumber(key.maxRequestsPerDay)?.toString() ?? '',
+    maxSessions: omniOptionalNumber(key.maxSessions)?.toString() ?? '',
+    usageLimitEnabled: omniBool(key.usageLimitEnabled),
+    dailyUsageLimitUsd: omniOptionalNumber(key.dailyUsageLimitUsd)?.toString() ?? '',
+    weeklyUsageLimitUsd: omniOptionalNumber(key.weeklyUsageLimitUsd)?.toString() ?? '',
+    noLog: omniBool(key.noLog),
+    allowUsageCommand: omniBool(key.allowUsageCommand),
+    autoResolve: omniBool(key.autoResolve),
+    streamDefaultMode: omniText(key.streamDefaultMode, 'legacy')
+  }
+}
+
 function ApiManagerPage({ language, refreshKey }: { language: AppLanguage; refreshKey: number }): JSX.Element {
   const [revision, setRevision] = useState(0)
   const [label, setLabel] = useState('')
+  const [query, setQuery] = useState('')
+  const [selectedId, setSelectedId] = useState('')
+  const [draft, setDraft] = useState<ApiKeyDraft | null>(null)
   const [busy, setBusy] = useState('')
   const [createdKey, setCreatedKey] = useState('')
   const [actionError, setActionError] = useState('')
-  const resource = useOmniResource(() => omniRequest<unknown>('GET', '/api/keys'), [refreshKey, revision])
-  const keys = omniList(resource.data, 'keys', 'data')
+  const resource = useOmniResource(
+    () => Promise.all([
+      omniRequest<unknown>('GET', '/api/keys'),
+      omniRequest<unknown>('GET', '/api/usage/analytics?range=all'),
+      omniRequest<unknown>('GET', '/api/sessions'),
+      omniRequest<unknown>('GET', '/api/quota/groups'),
+      omniRequest<unknown>('GET', '/api/quota/pools'),
+      omniRequest<unknown>('GET', '/api/combos'),
+      omniRequest<unknown>('GET', '/api/providers')
+    ]),
+    [refreshKey, revision]
+  )
+  const keys = omniList(resource.data?.[0], 'keys', 'data').filter((key) => omniLabel(key, '') !== '__ascora_live_bridge__')
+  const summary = getNestedRecord(isRecord(resource.data?.[1]) ? resource.data[1] : {}, 'summary')
+  const sessionsBody = isRecord(resource.data?.[2]) ? resource.data[2] : {}
+  const sessions = omniList(sessionsBody, 'sessions', 'data')
+  const groups = omniList(resource.data?.[3], 'groups', 'data')
+  const pools = omniList(resource.data?.[4], 'pools', 'data')
+  const combos = omniList(resource.data?.[5], 'combos', 'data')
+  const providers = omniList(resource.data?.[6], 'connections', 'providers', 'data')
+  const selectedKey = keys.find((key) => omniId(key) === selectedId) ?? null
+  const visibleKeys = keys.filter((key) => {
+    const needle = query.trim().toLowerCase()
+    return !needle || `${omniLabel(key)} ${omniText(key.key ?? key.keyPreview)} ${omniText(key.machineId)}`.toLowerCase().includes(needle)
+  })
+
+  useEffect(() => {
+    if (!selectedKey) {
+      if (selectedId) { setSelectedId(''); setDraft(null) }
+      return
+    }
+    setDraft(apiKeyDraft(selectedKey))
+  }, [selectedId, selectedKey?.id, selectedKey?.updatedAt])
+
+  const mutate = async (id: string, patch: unknown, busyKey: string): Promise<void> => {
+    setBusy(busyKey); setActionError('')
+    try { await omniRequest('PATCH', `/api/keys/${encodeURIComponent(id)}`, patch); setRevision((value) => value + 1) }
+    catch (error) { setActionError(error instanceof Error ? error.message : String(error)) }
+    finally { setBusy('') }
+  }
 
   const create = async (event: FormEvent): Promise<void> => {
     event.preventDefault()
     if (!label.trim()) return
     setBusy('create'); setActionError(''); setCreatedKey('')
     try {
-      // OmniRoute 3.8.x runtime expects `name`; older OpenAPI builds called
-      // the same field `label`, so send both for forward/backward compatibility.
       const result = await omniRequest<unknown>('POST', '/api/keys', { name: label.trim(), label: label.trim() })
       if (isRecord(result)) setCreatedKey(omniText(result.key ?? result.apiKey ?? getNestedRecord(result, 'data').key))
       setLabel(''); setRevision((value) => value + 1)
-    } catch (error) {
-      setActionError(error instanceof Error ? error.message : String(error))
-    } finally { setBusy('') }
+    } catch (error) { setActionError(error instanceof Error ? error.message : String(error)) }
+    finally { setBusy('') }
+  }
+
+  const save = async (): Promise<void> => {
+    if (!selectedKey || !draft) return
+    await mutate(omniId(selectedKey), {
+      name: draft.name.trim(),
+      isActive: draft.isActive,
+      allowedModels: splitOmniList(draft.allowedModels),
+      allowedCombos: draft.allowedCombos,
+      allowedConnections: draft.allowedConnections,
+      maxRequestsPerMinute: optionalNumberInput(draft.maxRequestsPerMinute),
+      maxRequestsPerDay: optionalNumberInput(draft.maxRequestsPerDay),
+      maxSessions: optionalNumberInput(draft.maxSessions) ?? 0,
+      usageLimitEnabled: draft.usageLimitEnabled,
+      dailyUsageLimitUsd: optionalNumberInput(draft.dailyUsageLimitUsd),
+      weeklyUsageLimitUsd: optionalNumberInput(draft.weeklyUsageLimitUsd),
+      noLog: draft.noLog,
+      allowUsageCommand: draft.allowUsageCommand,
+      autoResolve: draft.autoResolve,
+      streamDefaultMode: draft.streamDefaultMode
+    }, 'save-key')
   }
 
   const remove = async (id: string): Promise<void> => {
     if (!id || !window.confirm(l(language, 'Удалить этот ключ API?', 'Delete this API key?'))) return
     setBusy(id); setActionError('')
-    try { await omniRequest('DELETE', `/api/keys/${encodeURIComponent(id)}`); setRevision((value) => value + 1) }
+    try { await omniRequest('DELETE', `/api/keys/${encodeURIComponent(id)}`); if (selectedId === id) setSelectedId(''); setRevision((value) => value + 1) }
     catch (error) { setActionError(error instanceof Error ? error.message : String(error)) }
     finally { setBusy('') }
   }
 
-  return (
-    <div className="omni-page">
-      <PageHeader icon="key" title={tr(language, 'omni.apiManager')} subtitle={l(language, 'Ключи доступа для клиентов OmniRoute.', 'Access keys for OmniRoute clients.')} />
-      {(resource.error || actionError) && <Notice kind="error">{resource.error || actionError}</Notice>}
-      {createdKey && <Notice kind="success"><strong>{l(language, 'Новый ключ — сохраните его сейчас:', 'New key — save it now:')}</strong><code>{createdKey}</code><CopyButton value={createdKey} label={l(language, 'Копировать', 'Copy')} /></Notice>}
-      <section className="omni-panel">
-        <div className="omni-panel-title"><span>{l(language, 'Создать ключ', 'Create key')}</span></div>
-        <form className="omni-inline-form" onSubmit={(event) => void create(event)}>
-          <input className="text-input" value={label} onChange={(event) => setLabel(event.target.value)} placeholder={l(language, 'Название ключа', 'Key label')} />
-          <button className="btn primary" disabled={busy === 'create' || !label.trim()}><Icon name="plus" size={14} />{l(language, 'Создать', 'Create')}</button>
-        </form>
-      </section>
-      <section className="omni-panel">
-        <div className="omni-panel-title"><span>{l(language, 'Ключи API', 'API keys')}</span><Badge>{keys.length}</Badge></div>
-        {resource.loading ? <Loading /> : keys.length === 0 ? <Empty>{l(language, 'Ключей пока нет.', 'No keys yet.')}</Empty> : (
-          <div className="omni-table-wrap"><table className="omni-table"><thead><tr><th>{l(language, 'Название', 'Label')}</th><th>{l(language, 'Ключ', 'Key')}</th><th>{l(language, 'Состояние', 'Status')}</th><th>{l(language, 'Создан', 'Created')}</th><th /></tr></thead><tbody>
-            {keys.map((key) => { const id = omniId(key); const active = key.isActive !== false && key.enabled !== false; return <tr key={id || omniLabel(key)}><td><strong>{omniLabel(key)}</strong></td><td><code>•••• {omniText(key.keyPreview ?? key.preview ?? key.lastFour)}</code></td><td><Badge tone={active ? 'good' : 'bad'}>{active ? l(language, 'Активен', 'Active') : l(language, 'Отключён', 'Disabled')}</Badge></td><td>{formatOmniDate(key.createdAt ?? key.created_at, language)}</td><td className="actions"><button className="omni-icon-button danger" disabled={busy === id} onClick={() => void remove(id)}><Icon name="trash" size={14} /></button></td></tr> })}
-          </tbody></table></div>
-        )}
-      </section>
-    </div>
-  )
-}
-
-function ProvidersPage({ language, refreshKey }: { language: AppLanguage; refreshKey: number }): JSX.Element {
-  const [revision, setRevision] = useState(0)
-  const [provider, setProvider] = useState('openai')
-  const [name, setName] = useState('')
-  const [url, setUrl] = useState(DEFAULT_PROVIDER_URLS.openai)
-  const [apiKey, setApiKey] = useState('')
-  const [busy, setBusy] = useState('')
-  const [result, setResult] = useState('')
-  const resource = useOmniResource(() => omniRequest<unknown>('GET', '/api/providers'), [refreshKey, revision])
-  const providers = omniList(resource.data, 'connections', 'providers', 'data')
-
-  const create = async (event: FormEvent): Promise<void> => {
-    event.preventDefault(); setBusy('create'); setResult('')
-    try {
-      await omniRequest('POST', '/api/providers', { provider, name: name.trim() || provider, url: url.trim(), apiKey: apiKey.trim() || undefined, isActive: true })
-      setName(''); setApiKey(''); setRevision((value) => value + 1)
-    } catch (error) { setResult(error instanceof Error ? error.message : String(error)) }
-    finally { setBusy('') }
+  const toggleArray = (field: 'allowedCombos' | 'allowedConnections', id: string): void => {
+    setDraft((current) => current ? { ...current, [field]: current[field].includes(id) ? current[field].filter((value) => value !== id) : [...current[field], id] } : current)
   }
-  const action = async (id: string, kind: 'test' | 'delete'): Promise<void> => {
-    if (kind === 'delete' && !window.confirm(l(language, 'Удалить провайдера?', 'Delete provider?'))) return
-    setBusy(`${kind}:${id}`); setResult('')
-    try {
-      const response = await omniRequest(kind === 'test' ? 'POST' : 'DELETE', `/api/providers/${encodeURIComponent(id)}${kind === 'test' ? '/test' : ''}`)
-      if (kind === 'test') setResult(formatOmniJson(response)); else setRevision((value) => value + 1)
-    } catch (error) { setResult(error instanceof Error ? error.message : String(error)) }
-    finally { setBusy('') }
-  }
-  return (
-    <div className="omni-page">
-      <PageHeader icon="server" title={tr(language, 'omni.providers')} subtitle={l(language, 'Подключения к облачным и локальным моделям.', 'Cloud and local model connections.')} />
-      {resource.error && <Notice kind="error">{resource.error}</Notice>}
-      {result && <Notice kind={result.startsWith('{') ? 'info' : 'error'}><pre>{result}</pre></Notice>}
+
+  return <div className="omni-page">
+    <PageHeader icon="key" title={tr(language, 'omni.apiManager')} subtitle={l(language, 'Ключи, ограничения доступа и статистика использования.', 'Keys, access policies and usage analytics.')} />
+    {(resource.error || actionError) && <Notice kind="error">{resource.error || actionError}</Notice>}
+    {createdKey && <Notice kind="success"><strong>{l(language, 'Новый ключ — сохраните его сейчас:', 'New key — save it now:')}</strong><code>{createdKey}</code><CopyButton value={createdKey} label={l(language, 'Копировать', 'Copy')} /></Notice>}
+    <section className="omni-stat-grid omni-stat-grid-four">
+      <div className="omni-stat-card"><span>{l(language, 'Запросы', 'Requests')}</span><strong>{omniNumber(summary.totalRequests).toLocaleString(language)}</strong><small>{omniNumber(summary.successRatePct)}% success</small></div>
+      <div className="omni-stat-card"><span>{l(language, 'Токены', 'Tokens')}</span><strong>{omniNumber(summary.totalTokens).toLocaleString(language)}</strong><small>{omniNumber(summary.uniqueModels)} {l(language, 'моделей', 'models')}</small></div>
+      <div className="omni-stat-card"><span>{l(language, 'Стоимость', 'Cost')}</span><strong>${omniNumber(summary.totalCost).toFixed(2)}</strong><small>{omniNumber(summary.avgLatencyMs)} ms avg</small></div>
+      <div className="omni-stat-card"><span>{l(language, 'Политики', 'Policies')}</span><strong>{groups.length + pools.length}</strong><small>{sessions.length || omniNumber(sessionsBody.count)} {l(language, 'сессий', 'sessions')}</small></div>
+    </section>
+    <section className="omni-panel">
+      <div className="omni-panel-title"><span>{l(language, 'Создать ключ', 'Create key')}</span></div>
+      <form className="omni-inline-form" onSubmit={(event) => void create(event)}><input className="text-input" value={label} onChange={(event) => setLabel(event.target.value)} placeholder={l(language, 'Название ключа', 'Key name')} /><button className="btn primary" disabled={busy === 'create' || !label.trim()}><Icon name="plus" size={14} />{l(language, 'Создать', 'Create')}</button></form>
+    </section>
+    <div className="omni-master-detail">
       <section className="omni-panel">
-        <div className="omni-panel-title"><span>{l(language, 'Добавить провайдера', 'Add provider')}</span></div>
-        <form className="omni-form-grid" onSubmit={(event) => void create(event)}>
-          <Field label={l(language, 'Тип', 'Provider')}><select className="text-input" value={provider} onChange={(event) => { const value = event.target.value; setProvider(value); setUrl(DEFAULT_PROVIDER_URLS[value] ?? '') }}><option value="openai">OpenAI</option><option value="anthropic">Anthropic</option><option value="openrouter">OpenRouter</option><option value="ollama">Ollama</option><option value="lmstudio">LM Studio</option><option value="custom">Custom OpenAI</option></select></Field>
-          <Field label={l(language, 'Название', 'Name')}><input className="text-input" value={name} onChange={(event) => setName(event.target.value)} placeholder={provider} /></Field>
-          <Field label="Base URL"><input className="text-input" required value={url} onChange={(event) => setUrl(event.target.value)} /></Field>
-          <Field label="API key" hint={l(language, 'Не нужен для локальных серверов.', 'Optional for local servers.')}><input className="text-input" type="password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} /></Field>
-          <div className="omni-form-submit"><button className="btn primary" disabled={busy === 'create' || !url.trim()}><Icon name="plus" size={14} />{l(language, 'Подключить', 'Connect')}</button></div>
-        </form>
+        <div className="omni-panel-title"><span>{l(language, 'Ключи API', 'API keys')}</span><Badge>{keys.length}</Badge><input className="text-input small" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={l(language, 'Поиск', 'Search')} /></div>
+        {resource.loading ? <Loading /> : visibleKeys.length === 0 ? <Empty>{l(language, 'Ключей не найдено.', 'No keys found.')}</Empty> : <div className="omni-table-wrap"><table className="omni-table interactive"><thead><tr><th>{l(language, 'Название', 'Name')}</th><th>{l(language, 'Ключ', 'Key')}</th><th>{l(language, 'Состояние', 'Status')}</th><th>{l(language, 'Последнее использование', 'Last used')}</th><th /></tr></thead><tbody>{visibleKeys.map((key) => { const id = omniId(key); const active = key.isActive !== false; return <tr key={id} className={selectedId === id ? 'selected' : ''} onClick={() => setSelectedId(id)}><td><strong>{omniLabel(key)}</strong><small className="omni-cell-note">{omniText(key.machineId)}</small></td><td><code>{omniText(key.key ?? key.keyPreview, '••••')}</code></td><td><button type="button" onClick={(event) => { event.stopPropagation(); void mutate(id, { isActive: !active }, `toggle:${id}`) }}><Badge tone={active ? 'good' : 'bad'}>{active ? l(language, 'Активен', 'Active') : l(language, 'Отключён', 'Disabled')}</Badge></button></td><td>{formatOmniDate(key.lastUsedAt, language)}</td><td className="actions"><button type="button" className="omni-icon-button danger" disabled={busy === id} onClick={(event) => { event.stopPropagation(); void remove(id) }}><Icon name="trash" size={14} /></button></td></tr> })}</tbody></table></div>}
       </section>
-      <section className="omni-panel">
-        <div className="omni-panel-title"><span>{l(language, 'Подключения', 'Connections')}</span><Badge>{providers.length}</Badge></div>
-        {resource.loading ? <Loading /> : providers.length === 0 ? <Empty>{l(language, 'Добавьте первый источник моделей.', 'Add your first model source.')}</Empty> : <div className="omni-card-grid">
-          {providers.map((item) => { const id = omniId(item); const active = item.isActive !== false && item.enabled !== false; return <article className="omni-provider-card" key={id || omniLabel(item)}><div className="omni-card-head"><span className="omni-provider-logo">{omniLabel(item).slice(0, 2).toUpperCase()}</span><div><strong>{omniLabel(item)}</strong><small>{omniText(item.provider ?? item.type)}</small></div><Badge tone={active ? 'good' : 'bad'}>{active ? l(language, 'активен', 'active') : l(language, 'выключен', 'off')}</Badge></div><code>{omniText(item.url ?? item.baseUrl, '—')}</code><div className="omni-card-actions"><button className="btn" disabled={!id || busy === `test:${id}`} onClick={() => void action(id, 'test')}><Icon name="activity" size={14} />{l(language, 'Проверить', 'Test')}</button><button className="btn danger" disabled={!id || busy === `delete:${id}`} onClick={() => void action(id, 'delete')}><Icon name="trash" size={14} /></button></div></article> })}
+      <section className="omni-panel omni-detail-panel">
+        <div className="omni-panel-title"><span>{l(language, 'Настройки ключа', 'Key settings')}</span>{selectedKey && <Badge tone={selectedKey.isActive === false ? 'bad' : 'good'}>{omniLabel(selectedKey)}</Badge>}</div>
+        {!draft || !selectedKey ? <Empty>{l(language, 'Выберите ключ слева.', 'Select a key on the left.')}</Empty> : <div className="omni-detail-form">
+          <Field label={l(language, 'Название', 'Name')}><input className="text-input" value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></Field>
+          <div className="omni-switch-grid"><label className="omni-switch"><input type="checkbox" checked={draft.isActive} onChange={(event) => setDraft({ ...draft, isActive: event.target.checked })} /><span />{l(language, 'Активен', 'Active')}</label><label className="omni-switch"><input type="checkbox" checked={draft.noLog} onChange={(event) => setDraft({ ...draft, noLog: event.target.checked })} /><span />No log</label><label className="omni-switch"><input type="checkbox" checked={draft.allowUsageCommand} onChange={(event) => setDraft({ ...draft, allowUsageCommand: event.target.checked })} /><span />Usage command</label><label className="omni-switch"><input type="checkbox" checked={draft.autoResolve} onChange={(event) => setDraft({ ...draft, autoResolve: event.target.checked })} /><span />Auto resolve</label></div>
+          <div className="omni-form-grid embedded"><Field label="RPM"><input className="text-input" type="number" min="0" value={draft.maxRequestsPerMinute} onChange={(event) => setDraft({ ...draft, maxRequestsPerMinute: event.target.value })} /></Field><Field label={l(language, 'Запросов в день', 'Requests/day')}><input className="text-input" type="number" min="0" value={draft.maxRequestsPerDay} onChange={(event) => setDraft({ ...draft, maxRequestsPerDay: event.target.value })} /></Field><Field label={l(language, 'Макс. сессий', 'Max sessions')}><input className="text-input" type="number" min="0" value={draft.maxSessions} onChange={(event) => setDraft({ ...draft, maxSessions: event.target.value })} /></Field><Field label="Stream mode"><select className="text-input" value={draft.streamDefaultMode} onChange={(event) => setDraft({ ...draft, streamDefaultMode: event.target.value })}><option value="legacy">legacy</option><option value="responses">responses</option><option value="auto">auto</option></select></Field></div>
+          <Field label={l(language, 'Разрешённые модели', 'Allowed models')} hint={l(language, 'По одной модели в строке; пусто — без ограничения.', 'One per line; empty means unrestricted.')}><textarea className="omni-textarea compact" value={draft.allowedModels} onChange={(event) => setDraft({ ...draft, allowedModels: event.target.value })} /></Field>
+          <fieldset className="omni-node-picker"><legend>{l(language, 'Разрешённые комбо', 'Allowed combos')}</legend>{combos.length === 0 ? <small>—</small> : combos.map((combo) => { const id = omniId(combo); return <label key={id}><input type="checkbox" checked={draft.allowedCombos.includes(id)} onChange={() => toggleArray('allowedCombos', id)} />{omniLabel(combo)}</label> })}</fieldset>
+          <fieldset className="omni-node-picker"><legend>{l(language, 'Разрешённые подключения', 'Allowed connections')}</legend>{providers.length === 0 ? <small>—</small> : providers.map((provider) => { const id = omniId(provider); return <label key={id}><input type="checkbox" checked={draft.allowedConnections.includes(id)} onChange={() => toggleArray('allowedConnections', id)} />{omniLabel(provider)}</label> })}</fieldset>
+          <div className="omni-budget-row"><label className="omni-switch"><input type="checkbox" checked={draft.usageLimitEnabled} onChange={(event) => setDraft({ ...draft, usageLimitEnabled: event.target.checked })} /><span />{l(language, 'Лимит расходов', 'Usage budget')}</label><Field label="USD/day"><input className="text-input" type="number" min="0" step="0.01" disabled={!draft.usageLimitEnabled} value={draft.dailyUsageLimitUsd} onChange={(event) => setDraft({ ...draft, dailyUsageLimitUsd: event.target.value })} /></Field><Field label="USD/week"><input className="text-input" type="number" min="0" step="0.01" disabled={!draft.usageLimitEnabled} value={draft.weeklyUsageLimitUsd} onChange={(event) => setDraft({ ...draft, weeklyUsageLimitUsd: event.target.value })} /></Field></div>
+          <div className="omni-card-actions"><button type="button" className="btn primary" disabled={busy === 'save-key' || !draft.name.trim()} onClick={() => void save()}><Icon name="save" size={14} />{l(language, 'Сохранить', 'Save')}</button></div>
         </div>}
       </section>
     </div>
-  )
+  </div>
+}
+
+interface ComboStepDraft {
+  key: string
+  connectionId: string
+  model: string
+  weight: number
+}
+
+interface ComboDraft {
+  id: string
+  name: string
+  description: string
+  strategy: string
+  isActive: boolean
+  systemMessage: string
+  contextLength: string
+  compressionMode: string
+  steps: ComboStepDraft[]
+}
+
+interface OmniLiveEvent {
+  event: string
+  channel: string
+  data: OmniRecord
+  timestamp: number
+}
+
+function useOmniLiveChannel(channel: string, enabled: boolean): { connected: boolean; error: string; events: OmniLiveEvent[]; clear: () => void } {
+  const status = useApp((s) => s.omnirouteStatus)
+  const [connected, setConnected] = useState(false)
+  const [error, setError] = useState('')
+  const [events, setEvents] = useState<OmniLiveEvent[]>([])
+  const retry = useRef<number | null>(null)
+  const subscriptionId = useRef(`combo-${crypto.randomUUID()}`)
+
+  useEffect(() => {
+    if (!enabled || status.state !== 'ready' || !status.port) return
+    let alive = true
+    let attempt = 0
+    const append = (item: unknown): void => {
+      if (!isRecord(item)) return
+      const event = omniText(item.event)
+      const itemChannel = omniText(item.channel, channel)
+      if (!event || itemChannel !== channel) return
+      const entry: OmniLiveEvent = { event, channel: itemChannel, data: isRecord(item.data) ? item.data : {}, timestamp: omniNumber(item.timestamp, Date.now()) }
+      setEvents((current) => [entry, ...current].slice(0, 200))
+    }
+    const unsubscribe = api.omniroute.onLiveEvent((payload) => {
+      if (!alive || payload.id !== subscriptionId.current) return
+      if (payload.state === 'open') { attempt = 0; setConnected(true); setError(''); return }
+      if (payload.state === 'error') { setError(payload.error || 'Live WebSocket connection failed'); return }
+      if (payload.state === 'closed') {
+        setConnected(false)
+        if (payload.error) setError(payload.error)
+        const delay = Math.min(30_000, 1000 * (2 ** attempt++))
+        retry.current = window.setTimeout(() => void connect(), delay)
+        return
+      }
+      const message = payload.data
+      if (!isRecord(message)) return
+      if (message.type === 'event') append(message)
+      else if (message.type === 'welcome' && Array.isArray(message.data)) message.data.forEach(append)
+    })
+    const connect = async (): Promise<void> => {
+      try {
+        await api.omniroute.liveConnect({ id: subscriptionId.current, channel: 'combo' })
+      } catch (caught) {
+        if (!alive) return
+        setError(caught instanceof Error ? caught.message : String(caught))
+        retry.current = window.setTimeout(() => void connect(), 3000)
+      }
+    }
+    void connect()
+    return () => {
+      alive = false
+      unsubscribe()
+      if (retry.current !== null) window.clearTimeout(retry.current)
+      void api.omniroute.liveDisconnect(subscriptionId.current)
+    }
+  }, [channel, enabled, status.port, status.state])
+
+  return { connected, error, events, clear: useCallback(() => setEvents([]), []) }
+}
+
+function comboModels(combo: OmniRecord): OmniRecord[] {
+  return Array.isArray(combo.models) ? combo.models.filter(isRecord) : []
 }
 
 function CombosPage({ language, refreshKey, studio = false }: { language: AppLanguage; refreshKey: number; studio?: boolean }): JSX.Element {
   const [revision, setRevision] = useState(0)
-  const [name, setName] = useState('')
-  const [model, setModel] = useState('auto/best-coding')
-  const [strategy, setStrategy] = useState('priority')
-  const [selectedNodes, setSelectedNodes] = useState<string[]>([])
   const [selectedCombo, setSelectedCombo] = useState('')
+  const [draft, setDraft] = useState<ComboDraft | null>(null)
   const [busy, setBusy] = useState('')
-  const [result, setResult] = useState('')
-  const resource = useOmniResource(() => Promise.all([omniRequest<unknown>('GET', '/api/combos'), omniRequest<unknown>('GET', '/api/providers'), omniRequest<unknown>('GET', '/api/combos/metrics')]), [refreshKey, revision])
-  const combos = omniList(resource.data?.[0], 'combos', 'data')
-  const providers = omniList(resource.data?.[1], 'connections', 'providers', 'data')
-  const activeCombo = combos.find((combo) => omniId(combo) === selectedCombo) ?? combos[0]
-  useEffect(() => { if (!selectedCombo && combos[0]) setSelectedCombo(omniId(combos[0])) }, [combos, selectedCombo])
+  const [result, setResult] = useState<unknown>(null)
+  const [error, setError] = useState('')
+  const live = useOmniLiveChannel('combo', studio)
+  const resource = useOmniResource(async () => {
+    const [comboBody, providerBody, metricsBody] = await Promise.all([
+      omniRequest<unknown>('GET', '/api/combos'), omniRequest<unknown>('GET', '/api/providers'), omniRequest<unknown>('GET', '/api/combos/metrics')
+    ])
+    const connections = omniList(providerBody, 'connections', 'providers', 'data')
+    const modelPairs = await Promise.all(connections.map(async (connection) => {
+      const id = omniId(connection)
+      try { return [id, omniList(await omniRequest<unknown>('GET', `/api/providers/${encodeURIComponent(id)}/models`), 'models', 'data')] as const }
+      catch { return [id, []] as const }
+    }))
+    return { comboBody, providerBody, metricsBody, modelsByConnection: Object.fromEntries(modelPairs) as Record<string, OmniRecord[]> }
+  }, [refreshKey, revision])
+  const combos = omniList(resource.data?.comboBody, 'combos', 'data')
+  const providers = omniList(resource.data?.providerBody, 'connections', 'providers', 'data')
+  const metricsRoot = isRecord(resource.data?.metricsBody) ? resource.data.metricsBody : {}
+  const metrics = getNestedRecord(metricsRoot, 'metrics')
+  const modelsByConnection = resource.data?.modelsByConnection ?? {}
+  const activeCombo = combos.find((combo) => omniId(combo) === selectedCombo) ?? combos[0] ?? null
+  const liveEvents = live.events.filter((event) => !activeCombo || omniText(event.data.comboName) === omniLabel(activeCombo))
 
-  const create = async (event: FormEvent): Promise<void> => {
-    event.preventDefault(); setBusy('create'); setResult('')
-    try {
-      await omniRequest('POST', '/api/combos', { name: name.trim(), model: model.trim(), strategy, nodes: selectedNodes.map((connectionId, index) => ({ connectionId, priority: index + 1, weight: 100 })) })
-      setName(''); setSelectedNodes([]); setRevision((value) => value + 1)
-    } catch (error) { setResult(error instanceof Error ? error.message : String(error)) }
+  useEffect(() => { if ((!selectedCombo || !combos.some((combo) => omniId(combo) === selectedCombo)) && combos[0]) setSelectedCombo(omniId(combos[0])) }, [combos, selectedCombo])
+
+  const providerFor = (connectionId: string): OmniRecord | undefined => providers.find((provider) => omniId(provider) === connectionId)
+  const qualifyModel = (connectionId: string, model: string): string => {
+    if (model.includes('/')) return model
+    const providerId = omniText(providerFor(connectionId)?.provider)
+    return providerId ? `${providerId}/${model}` : model
+  }
+  const initialStep = (): ComboStepDraft => {
+    const connection = providers[0]
+    const connectionId = connection ? omniId(connection) : ''
+    const firstModel = modelsByConnection[connectionId]?.[0]
+    return { key: crypto.randomUUID(), connectionId, model: omniText(firstModel?.qualifiedModel ?? firstModel?.id), weight: 100 }
+  }
+  const openEditor = (combo?: OmniRecord): void => {
+    const steps = combo ? comboModels(combo).map((model) => ({ key: omniText(model.id, crypto.randomUUID()), connectionId: omniText(model.connectionId), model: omniText(model.model), weight: omniNumber(model.weight, 0) })) : [initialStep()]
+    const config = combo ? getNestedRecord(combo, 'config') : {}
+    setDraft({ id: combo ? omniId(combo) : '', name: combo ? omniLabel(combo, '') : '', description: omniText(combo?.description), strategy: omniText(combo?.strategy, 'priority'), isActive: combo?.isActive !== false, systemMessage: omniText(combo?.system_message), contextLength: omniOptionalNumber(combo?.context_length)?.toString() ?? '', compressionMode: omniText(config.compressionMode), steps })
+    setError(''); setResult(null)
+  }
+  const updateStep = (key: string, patch: Partial<ComboStepDraft>): void => setDraft((current) => current ? { ...current, steps: current.steps.map((step) => step.key === key ? { ...step, ...patch } : step) } : current)
+  const moveStep = (index: number, delta: number): void => setDraft((current) => {
+    if (!current) return current
+    const target = index + delta
+    if (target < 0 || target >= current.steps.length) return current
+    const steps = [...current.steps]; const [step] = steps.splice(index, 1); steps.splice(target, 0, step)
+    return { ...current, steps }
+  })
+  const payloadFor = (value: ComboDraft): OmniRecord => {
+    const config: OmniRecord = {}
+    if (value.compressionMode) config.compressionMode = value.compressionMode
+    const contextLength = optionalNumberInput(value.contextLength)
+    return {
+      name: value.name.trim(), description: value.description.trim(), strategy: value.strategy, isActive: value.isActive,
+      models: value.steps.map((step) => { const connection = providerFor(step.connectionId); return { model: qualifyModel(step.connectionId, step.model.trim()), providerId: omniText(connection?.provider), connectionId: step.connectionId, weight: step.weight } }),
+      ...(Object.keys(config).length ? { config } : {}), system_message: value.systemMessage.trim(),
+      ...(contextLength === null ? {} : { context_length: contextLength })
+    }
+  }
+  const save = async (): Promise<void> => {
+    if (!draft) return
+    if (!draft.name.trim() || draft.steps.length === 0 || draft.steps.some((step) => !step.connectionId || !step.model.trim())) { setError(l(language, 'Заполните название и все шаги маршрута.', 'Complete the name and every route step.')); return }
+    if (draft.strategy === 'weighted' && draft.steps.reduce((sum, step) => sum + step.weight, 0) !== 100) { setError(l(language, 'Для weighted сумма весов должна быть 100%.', 'Weighted routes must total 100%.')); return }
+    setBusy('save-combo'); setError('')
+    try { await omniRequest(draft.id ? 'PUT' : 'POST', draft.id ? `/api/combos/${encodeURIComponent(draft.id)}` : '/api/combos', payloadFor(draft)); setDraft(null); setRevision((value) => value + 1) }
+    catch (caught) { setError(caught instanceof Error ? caught.message : String(caught)) }
     finally { setBusy('') }
   }
   const remove = async (id: string): Promise<void> => {
     if (!window.confirm(l(language, 'Удалить комбо?', 'Delete combo?'))) return
-    setBusy(id)
+    setBusy(`delete:${id}`); setError('')
     try { await omniRequest('DELETE', `/api/combos/${encodeURIComponent(id)}`); setRevision((value) => value + 1) }
-    catch (error) { setResult(error instanceof Error ? error.message : String(error)) }
+    catch (caught) { setError(caught instanceof Error ? caught.message : String(caught)) }
     finally { setBusy('') }
   }
-  const test = async (): Promise<void> => {
-    if (!activeCombo) return
-    setBusy('test'); setResult('')
-    try { setResult(formatOmniJson(await omniRequest('POST', '/api/combos/test', { comboName: omniLabel(activeCombo) }))) }
-    catch (error) { setResult(error instanceof Error ? error.message : String(error)) }
+  const test = async (combo = activeCombo): Promise<void> => {
+    if (!combo) return
+    setBusy('test'); setError(''); setResult(null)
+    try { setResult(await omniRequest('POST', '/api/combos/test', { comboName: omniLabel(combo) })) }
+    catch (caught) { setError(caught instanceof Error ? caught.message : String(caught)) }
     finally { setBusy('') }
   }
+  const updateCombo = async (combo: OmniRecord, patch: unknown): Promise<void> => {
+    const id = omniId(combo); setBusy(`update:${id}`); setError('')
+    try { await omniRequest('PUT', `/api/combos/${encodeURIComponent(id)}`, patch); setRevision((value) => value + 1) }
+    catch (caught) { setError(caught instanceof Error ? caught.message : String(caught)) }
+    finally { setBusy('') }
+  }
+  const duplicate = async (combo: OmniRecord): Promise<void> => {
+    setBusy(`duplicate:${omniId(combo)}`); setError('')
+    try { await omniRequest('POST', '/api/combos', { ...combo, id: undefined, name: `${omniLabel(combo)}-copy`, models: comboModels(combo) }); setRevision((value) => value + 1) }
+    catch (caught) { setError(caught instanceof Error ? caught.message : String(caught)) }
+    finally { setBusy('') }
+  }
+  const reorder = async (index: number, delta: number): Promise<void> => {
+    const target = index + delta
+    if (target < 0 || target >= combos.length) return
+    const ordered = [...combos]; const [item] = ordered.splice(index, 1); ordered.splice(target, 0, item)
+    setBusy('reorder'); setError('')
+    try { await omniRequest('POST', '/api/combos/reorder', { comboIds: ordered.map(omniId) }); setRevision((value) => value + 1) }
+    catch (caught) { setError(caught instanceof Error ? caught.message : String(caught)) }
+    finally { setBusy('') }
+  }
+
   if (studio) {
-    const nodes = Array.isArray(activeCombo?.nodes) ? activeCombo.nodes.filter(isRecord) : []
-    return <div className="omni-page"><PageHeader icon="gitBranch" title={tr(language, 'omni.comboStudio')} subtitle={l(language, 'Визуальная проверка каскада и стратегии маршрутизации.', 'Visual routing cascade and strategy check.')} actions={<button className="btn primary" disabled={!activeCombo || busy === 'test'} onClick={() => void test()}><Icon name="play" size={14} />{l(language, 'Тестировать', 'Run test')}</button>} />
-      {resource.error && <Notice kind="error">{resource.error}</Notice>}{result && <Notice kind={result.startsWith('{') ? 'info' : 'error'}><pre>{result}</pre></Notice>}
-      <section className="omni-panel"><div className="omni-panel-title"><span>{l(language, 'Маршрут', 'Route')}</span><select className="text-input small" value={selectedCombo} onChange={(event) => setSelectedCombo(event.target.value)}>{combos.map((combo) => <option key={omniId(combo)} value={omniId(combo)}>{omniLabel(combo)}</option>)}</select></div>
-        {!activeCombo ? <Empty>{l(language, 'Сначала создайте комбо.', 'Create a combo first.')}</Empty> : <div className="omni-flow"><div className="omni-flow-node source"><Icon name="message" size={18} /><strong>{l(language, 'Запрос', 'Request')}</strong><small>{omniText(activeCombo.model)}</small></div><Icon name="arrowRight" size={20} /><div className="omni-flow-stack">{nodes.length ? nodes.map((node, index) => <div className="omni-flow-node" key={`${omniText(node.connectionId)}:${index}`}><Badge tone="blue">{index + 1}</Badge><strong>{providers.find((provider) => omniId(provider) === omniText(node.connectionId)) ? omniLabel(providers.find((provider) => omniId(provider) === omniText(node.connectionId))!) : omniText(node.connectionId, l(language, 'Провайдер', 'Provider'))}</strong><small>{l(language, 'вес', 'weight')} {omniNumber(node.weight, 100)}</small></div>) : <div className="omni-flow-node"><strong>Auto</strong><small>{l(language, 'динамический выбор', 'dynamic selection')}</small></div>}</div><Icon name="arrowRight" size={20} /><div className="omni-flow-node target"><Icon name="check" size={18} /><strong>{l(language, 'Ответ', 'Response')}</strong><small>{omniText(activeCombo.strategy, 'priority')}</small></div></div>}
-      </section></div>
+    const steps = activeCombo ? comboModels(activeCombo) : []
+    const latestByIndex = new Map<number, OmniLiveEvent>()
+    for (const event of liveEvents) { const index = omniNumber(event.data.targetIndex, -1); if (index >= 0 && !latestByIndex.has(index)) latestByIndex.set(index, event) }
+    return <div className="omni-page"><PageHeader icon="gitBranch" title={tr(language, 'omni.comboStudio')} subtitle={l(language, 'Live-маршрутизация, тесты и состояние каждого шага.', 'Live routing, tests and per-step health.')} actions={<><Badge tone={live.connected ? 'good' : 'bad'}>{live.connected ? 'LIVE' : 'OFFLINE'}</Badge><button type="button" className="btn primary" disabled={!activeCombo || busy === 'test'} onClick={() => void test()}><Icon name="play" size={14} />{l(language, 'Тестировать', 'Run test')}</button></>} />
+      {(resource.error || error || live.error) && <Notice kind="error">{resource.error || error || live.error}</Notice>}{result !== null && <Notice><pre>{formatOmniJson(result)}</pre></Notice>}
+      <section className="omni-panel"><div className="omni-panel-title"><span>{l(language, 'Маршрут', 'Route')}</span><select className="text-input small" value={selectedCombo} onChange={(event) => setSelectedCombo(event.target.value)}>{combos.map((combo) => <option key={omniId(combo)} value={omniId(combo)}>{omniLabel(combo)}</option>)}</select><Badge tone="blue">{activeCombo ? omniText(activeCombo.strategy, 'priority') : '—'}</Badge></div>
+        {!activeCombo ? <Empty>{l(language, 'Сначала создайте комбо.', 'Create a combo first.')}</Empty> : <div className="omni-flow"><div className="omni-flow-node source"><Icon name="message" size={18} /><strong>{omniLabel(activeCombo)}</strong><small>{omniText(activeCombo.strategy)}</small></div><Icon name="arrowRight" size={20} /><div className="omni-flow-stack">{steps.map((step, index) => { const liveStep = latestByIndex.get(index); const tone = liveStep?.event.endsWith('succeeded') ? 'good' : liveStep?.event.endsWith('failed') ? 'bad' : 'blue'; return <div className={`omni-flow-node${liveStep ? ` live-${tone}` : ''}`} key={omniText(step.id, `${index}`)}><Badge tone={tone}>{index + 1}</Badge><div><strong>{omniText(step.model)}</strong><small>{providerFor(omniText(step.connectionId)) ? omniLabel(providerFor(omniText(step.connectionId))!) : omniText(step.providerId)}</small></div><span className="omni-flow-status">{liveStep ? liveStep.event.split('.').pop() : `${omniNumber(step.weight)}%`}</span></div> })}</div><Icon name="arrowRight" size={20} /><div className="omni-flow-node target"><Icon name="check" size={18} /><strong>{l(language, 'Ответ', 'Response')}</strong><small>{liveEvents.length} events</small></div></div>}
+      </section>
+      <section className="omni-panel"><div className="omni-panel-title"><span>{l(language, 'События маршрута', 'Route events')}</span><Badge>{liveEvents.length}</Badge><button type="button" className="btn" onClick={live.clear}>{l(language, 'Очистить', 'Clear')}</button></div>{liveEvents.length === 0 ? <Empty>{l(language, 'Запустите запрос через это комбо — события появятся здесь.', 'Send a request through this combo to see live events.')}</Empty> : <div className="omni-event-list">{liveEvents.slice(0, 60).map((event, index) => <div className="omni-event-row" key={`${event.timestamp}:${index}`}><Badge tone={event.event.endsWith('succeeded') ? 'good' : event.event.endsWith('failed') ? 'bad' : 'blue'}>{event.event.split('.').pop()}</Badge><strong>{omniText(event.data.model, omniText(event.data.provider))}</strong><span>{omniOptionalNumber(event.data.latencyMs) !== null ? `${omniNumber(event.data.latencyMs)} ms` : omniText(event.data.error)}</span><time>{new Date(event.timestamp).toLocaleTimeString(language)}</time></div>)}</div>}</section>
+    </div>
   }
-  return <div className="omni-page"><PageHeader icon="layers" title={tr(language, 'omni.combos')} subtitle={l(language, 'Надёжные маршруты с fallback между провайдерами.', 'Reliable routes with provider fallback.')} />
-    {(resource.error || result) && <Notice kind="error">{resource.error || result}</Notice>}
-    <section className="omni-panel"><div className="omni-panel-title"><span>{l(language, 'Новое комбо', 'New combo')}</span></div><form className="omni-form-grid" onSubmit={(event) => void create(event)}><Field label={l(language, 'Название', 'Name')}><input className="text-input" required value={name} onChange={(event) => setName(event.target.value)} /></Field><Field label={l(language, 'Псевдоним модели', 'Model alias')}><input className="text-input" required value={model} onChange={(event) => setModel(event.target.value)} /></Field><Field label={l(language, 'Стратегия', 'Strategy')}><select className="text-input" value={strategy} onChange={(event) => setStrategy(event.target.value)}><option value="priority">Priority / fallback</option><option value="weighted">Weighted</option><option value="round-robin">Round robin</option><option value="cost-optimized">Cost optimized</option><option value="least-used">Least used</option><option value="auto">Auto</option></select></Field><fieldset className="omni-node-picker"><legend>{l(language, 'Узлы', 'Nodes')}</legend>{providers.length === 0 ? <small>{l(language, 'Сначала добавьте провайдеров.', 'Add providers first.')}</small> : providers.map((item) => { const id = omniId(item); return <label key={id}><input type="checkbox" checked={selectedNodes.includes(id)} onChange={(event) => setSelectedNodes((current) => event.target.checked ? [...current, id] : current.filter((value) => value !== id))} />{omniLabel(item)}</label> })}</fieldset><div className="omni-form-submit"><button className="btn primary" disabled={busy === 'create'}><Icon name="plus" size={14} />{l(language, 'Создать', 'Create')}</button></div></form></section>
-    <section className="omni-panel"><div className="omni-panel-title"><span>{l(language, 'Комбо маршрутизации', 'Routing combos')}</span><Badge>{combos.length}</Badge></div>{resource.loading ? <Loading /> : combos.length === 0 ? <Empty>{l(language, 'Комбо пока нет.', 'No combos yet.')}</Empty> : <div className="omni-card-grid">{combos.map((combo) => { const id = omniId(combo); const nodes = Array.isArray(combo.nodes) ? combo.nodes.length : 0; return <article className="omni-combo-card" key={id || omniLabel(combo)}><div className="omni-card-head"><Icon name="layers" size={18} /><div><strong>{omniLabel(combo)}</strong><small>{omniText(combo.model)}</small></div><Badge tone="blue">{omniText(combo.strategy, 'priority')}</Badge></div><div className="omni-combo-meta"><span>{nodes} {l(language, 'узлов', 'nodes')}</span><span>{combo.isActive === false ? l(language, 'выключено', 'disabled') : l(language, 'активно', 'active')}</span></div><div className="omni-card-actions"><button className="btn danger" disabled={!id || busy === id} onClick={() => void remove(id)}><Icon name="trash" size={14} />{l(language, 'Удалить', 'Delete')}</button></div></article> })}</div>}</section>
+
+  return <div className="omni-page"><PageHeader icon="layers" title={tr(language, 'omni.combos')} subtitle={l(language, 'Редактор fallback-маршрутов, весов и стратегий.', 'Edit fallback routes, weights and strategies.')} actions={<button type="button" className="btn primary" disabled={providers.length === 0} onClick={() => openEditor()}><Icon name="plus" size={14} />{l(language, 'Новое комбо', 'New combo')}</button>} />
+    {(resource.error || error) && <Notice kind="error">{resource.error || error}</Notice>}{result !== null && <Notice><pre>{formatOmniJson(result)}</pre></Notice>}
+    {providers.length === 0 && <Notice>{l(language, 'Для создания комбо сначала добавьте хотя бы одного провайдера.', 'Add at least one provider before creating a combo.')}</Notice>}
+    {draft && <section className="omni-panel omni-editor-panel"><div className="omni-panel-title"><span>{draft.id ? l(language, 'Редактировать комбо', 'Edit combo') : l(language, 'Новое комбо', 'New combo')}</span><button type="button" className="omni-icon-button" onClick={() => setDraft(null)}><Icon name="close" size={14} /></button></div><div className="omni-detail-form">
+      <div className="omni-form-grid embedded"><Field label={l(language, 'Название', 'Name')}><input className="text-input" value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></Field><Field label={l(language, 'Стратегия', 'Strategy')}><select className="text-input" value={draft.strategy} onChange={(event) => setDraft({ ...draft, strategy: event.target.value })}>{['priority','weighted','round-robin','random','least-used','cost-optimized','reset-aware','headroom','auto','lkgp','fusion'].map((strategy) => <option key={strategy} value={strategy}>{strategy}</option>)}</select></Field><Field label={l(language, 'Описание', 'Description')}><input className="text-input" value={draft.description} onChange={(event) => setDraft({ ...draft, description: event.target.value })} /></Field><Field label={l(language, 'Сжатие', 'Compression')}><select className="text-input" value={draft.compressionMode} onChange={(event) => setDraft({ ...draft, compressionMode: event.target.value })}><option value="">default</option>{['off','lite','standard','aggressive','ultra','rtk','stacked'].map((mode) => <option key={mode} value={mode}>{mode}</option>)}</select></Field></div>
+      <section className="omni-subpanel"><div className="omni-panel-title"><span>{l(language, 'Шаги маршрута', 'Route steps')}</span><Badge>{draft.steps.length}</Badge><button type="button" className="btn" onClick={() => setDraft({ ...draft, steps: [...draft.steps, { ...initialStep(), weight: draft.strategy === 'weighted' ? 0 : 100 }] })}><Icon name="plus" size={13} />{l(language, 'Шаг', 'Step')}</button></div><div className="omni-step-list">{draft.steps.map((step, index) => { const connection = providerFor(step.connectionId); const options = modelsByConnection[step.connectionId] ?? []; return <div className="omni-step-row" key={step.key}><Badge tone="blue">{index + 1}</Badge><select className="text-input" value={step.connectionId} onChange={(event) => { const connectionId = event.target.value; const first = modelsByConnection[connectionId]?.[0]; updateStep(step.key, { connectionId, model: omniText(first?.qualifiedModel ?? first?.id) }) }}>{providers.map((item) => <option key={omniId(item)} value={omniId(item)}>{omniLabel(item)} · {omniText(item.provider)}</option>)}</select><input className="text-input" list={`omni-models-${step.key}`} value={step.model} onChange={(event) => updateStep(step.key, { model: event.target.value })} placeholder={`${omniText(connection?.provider, 'provider')}/model`} /><datalist id={`omni-models-${step.key}`}>{options.map((model) => <option key={omniText(model.id)} value={omniText(model.qualifiedModel ?? (connection ? `${omniText(connection.provider)}/${omniText(model.id)}` : model.id))} />)}</datalist><input className="text-input omni-weight-input" type="number" min="0" max="100" value={step.weight} onChange={(event) => updateStep(step.key, { weight: Number(event.target.value) })} title={l(language, 'Вес', 'Weight')} /><div className="omni-row-actions"><button type="button" className="omni-icon-button" disabled={index === 0} onClick={() => moveStep(index, -1)}><Icon name="arrowUp" size={13} /></button><button type="button" className="omni-icon-button" disabled={index === draft.steps.length - 1} onClick={() => moveStep(index, 1)}><Icon name="arrowDown" size={13} /></button><button type="button" className="omni-icon-button danger" onClick={() => setDraft({ ...draft, steps: draft.steps.filter((item) => item.key !== step.key) })}><Icon name="trash" size={13} /></button></div></div> })}</div>{draft.strategy === 'weighted' && <div className="omni-weight-total"><span>{l(language, 'Сумма весов', 'Weight total')}</span><Badge tone={draft.steps.reduce((sum, step) => sum + step.weight, 0) === 100 ? 'good' : 'bad'}>{draft.steps.reduce((sum, step) => sum + step.weight, 0)}%</Badge><button type="button" className="btn" onClick={() => { const base = Math.floor(100 / Math.max(1, draft.steps.length)); setDraft({ ...draft, steps: draft.steps.map((step, index) => ({ ...step, weight: base + (index === 0 ? 100 - base * draft.steps.length : 0) })) }) }}>{l(language, 'Распределить', 'Balance')}</button></div>}</section>
+      <div className="omni-form-grid embedded"><Field label={l(language, 'Системное сообщение', 'System message')}><textarea className="omni-textarea compact" value={draft.systemMessage} onChange={(event) => setDraft({ ...draft, systemMessage: event.target.value })} /></Field><Field label={l(language, 'Длина контекста', 'Context length')}><input className="text-input" type="number" min="1000" value={draft.contextLength} onChange={(event) => setDraft({ ...draft, contextLength: event.target.value })} /></Field></div>
+      <div className="omni-card-actions"><label className="omni-switch"><input type="checkbox" checked={draft.isActive} onChange={(event) => setDraft({ ...draft, isActive: event.target.checked })} /><span />{l(language, 'Активно', 'Active')}</label><button type="button" className="btn" onClick={() => setDraft(null)}>{l(language, 'Отмена', 'Cancel')}</button><button type="button" className="btn primary" disabled={busy === 'save-combo'} onClick={() => void save()}><Icon name="save" size={14} />{l(language, 'Сохранить', 'Save')}</button></div>
+    </div></section>}
+    <section className="omni-panel"><div className="omni-panel-title"><span>{l(language, 'Комбо маршрутизации', 'Routing combos')}</span><Badge>{combos.length}</Badge></div>{resource.loading ? <Loading /> : combos.length === 0 ? <Empty>{l(language, 'Комбо пока нет.', 'No combos yet.')}</Empty> : <div className="omni-card-grid">{combos.map((combo, index) => { const id = omniId(combo); const steps = comboModels(combo); const metric = isRecord(metrics[id]) ? metrics[id] as OmniRecord : isRecord(metrics[omniLabel(combo)]) ? metrics[omniLabel(combo)] as OmniRecord : {}; const active = combo.isActive !== false; return <article className="omni-combo-card" key={id}><div className="omni-card-head"><Icon name="layers" size={18} /><div><strong>{omniLabel(combo)}</strong><small>{steps.map((step) => omniText(step.model)).join(' → ') || '—'}</small></div><button type="button" onClick={() => void updateCombo(combo, { isActive: !active })}><Badge tone={active ? 'good' : 'bad'}>{active ? 'ON' : 'OFF'}</Badge></button></div><div className="omni-combo-meta"><span>{steps.length} {l(language, 'шагов', 'steps')}</span><span>{omniText(combo.strategy, 'priority')}</span><span>{omniNumber(metric.successRate ?? metric.successRatePct)}% success</span></div><div className="omni-card-actions omni-card-actions-wrap"><button type="button" className="omni-icon-button" disabled={index === 0 || busy === 'reorder'} onClick={() => void reorder(index, -1)}><Icon name="arrowUp" size={14} /></button><button type="button" className="omni-icon-button" disabled={index === combos.length - 1 || busy === 'reorder'} onClick={() => void reorder(index, 1)}><Icon name="arrowDown" size={14} /></button><button type="button" className="btn" onClick={() => void test(combo)}><Icon name="play" size={14} />{l(language, 'Тест', 'Test')}</button><button type="button" className="btn" onClick={() => openEditor(combo)}><Icon name="settings" size={14} />{l(language, 'Изменить', 'Edit')}</button><button type="button" className="omni-icon-button" onClick={() => void duplicate(combo)}><Icon name="copy" size={14} /></button><button type="button" className="omni-icon-button danger" disabled={busy === `delete:${id}`} onClick={() => void remove(id)}><Icon name="trash" size={14} /></button></div></article> })}</div>}</section>
   </div>
 }
 
@@ -453,25 +696,152 @@ function CliPage({ language, refreshKey }: { language: AppLanguage; refreshKey: 
   return <div className="omni-page"><PageHeader icon="terminal" title={tr(language, 'omni.cliCode')} subtitle={l(language, 'Состояние CLI-агентов и их конфигураций.', 'CLI agent runtime and configuration status.')} />{resource.error && <Notice kind="error">{resource.error}</Notice>}{resource.loading ? <Loading /> : <div className="omni-card-grid">{(resource.data ?? []).map((tool) => { const installed = omniBool(tool.installed); const runnable = omniBool(tool.runnable); return <article className="omni-cli-card" key={omniText(tool.toolId)}><div className="omni-card-head"><span className="omni-cli-icon"><Icon name="terminal" size={17} /></span><div><strong>{omniText(tool.toolId).toUpperCase()}</strong><small>{omniText(tool.command)}</small></div><Badge tone={runnable ? 'good' : installed ? 'blue' : 'neutral'}>{runnable ? l(language, 'готов', 'ready') : installed ? l(language, 'обнаружен', 'detected') : l(language, 'не найден', 'not found')}</Badge></div><dl className="omni-detail-list"><div><dt>{l(language, 'Режим', 'Mode')}</dt><dd>{omniText(tool.runtimeMode, 'auto')}</dd></div><div><dt>{l(language, 'Конфигурация', 'Config')}</dt><dd title={omniText(tool.configPath)}>{omniText(tool.configPath, '—')}</dd></div></dl><small className="omni-card-message">{omniText(tool.message ?? tool.error)}</small></article> })}</div>}</div>
 }
 
+function useTrafficPolling(enabled: boolean, path: string, onPayload: (payload: OmniRecord) => void): { connected: boolean; error: string } {
+  const status = useApp((s) => s.omnirouteStatus)
+  const [connected, setConnected] = useState(false)
+  const [error, setError] = useState('')
+  const callback = useRef(onPayload)
+  callback.current = onPayload
+  useEffect(() => {
+    if (!enabled || status.state !== 'ready' || !status.port) return
+    let alive = true
+    let timer: number | null = null
+    const poll = async (): Promise<void> => {
+      try {
+        const body = await omniRequest<unknown>('GET', path)
+        if (!alive) return
+        setConnected(true); setError('')
+        callback.current({ type: 'snapshot', data: omniList(body, 'requests', 'data') })
+      } catch (caught) {
+        if (!alive) return
+        setConnected(false)
+        setError(caught instanceof Error ? caught.message : String(caught))
+      } finally {
+        if (alive) timer = window.setTimeout(() => void poll(), 1500)
+      }
+    }
+    void poll()
+    return () => { alive = false; if (timer !== null) window.clearTimeout(timer) }
+  }, [enabled, path, status.port, status.state])
+  return { connected, error }
+}
+
 function TrafficPage({ language, refreshKey }: { language: AppLanguage; refreshKey: number }): JSX.Element {
   const [revision, setRevision] = useState(0)
   const [error, setError] = useState('')
+  const [busy, setBusy] = useState('')
   const [selected, setSelected] = useState('')
+  const [requestDetail, setRequestDetail] = useState<OmniRecord | null>(null)
+  const [requests, setRequests] = useState<OmniRecord[]>([])
   const [sessionName, setSessionName] = useState('')
-  const resource = useOmniResource(() => Promise.all([omniRequest<unknown>('GET', '/api/tools/traffic-inspector/requests'), omniRequest<unknown>('GET', '/api/tools/traffic-inspector/capture-modes'), omniRequest<unknown>('GET', '/api/tools/traffic-inspector/sessions')]), [refreshKey, revision])
-  const requests = omniList(resource.data?.[0], 'requests', 'data')
+  const [hostName, setHostName] = useState('')
+  const [hostLabel, setHostLabel] = useState('')
+  const [hostKind, setHostKind] = useState('llm')
+  const [profile, setProfile] = useState('all')
+  const [statusFilter, setStatusFilter] = useState('')
+  const [sourceFilter, setSourceFilter] = useState('')
+  const [sessionFilter, setSessionFilter] = useState('')
+  const [query, setQuery] = useState('')
+  const [annotation, setAnnotation] = useState('')
+  const [replayResult, setReplayResult] = useState<unknown>(null)
+  const queryPath = useMemo(() => {
+    const params = new URLSearchParams()
+    if (profile !== 'all') params.set('profile', profile)
+    if (statusFilter) params.set('status', statusFilter)
+    if (sourceFilter) params.set('source', sourceFilter)
+    if (sessionFilter) params.set('sessionId', sessionFilter)
+    const search = params.toString()
+    return `/api/tools/traffic-inspector/requests${search ? `?${search}` : ''}`
+  }, [profile, sessionFilter, sourceFilter, statusFilter])
+  const resource = useOmniResource(() => Promise.all([
+    omniRequest<unknown>('GET', queryPath), omniRequest<unknown>('GET', '/api/tools/traffic-inspector/capture-modes'),
+    omniRequest<unknown>('GET', '/api/tools/traffic-inspector/sessions'), omniRequest<unknown>('GET', '/api/tools/traffic-inspector/hosts')
+  ]), [refreshKey, revision, queryPath])
   const modes = isRecord(resource.data?.[1]) ? resource.data[1] : {}
   const sessions = omniList(resource.data?.[2], 'sessions', 'data')
+  const hosts = omniList(resource.data?.[3], 'hosts', 'data')
   const httpProxy = getNestedRecord(modes, 'httpProxy')
   const systemProxy = getNestedRecord(modes, 'systemProxy')
   const tls = getNestedRecord(modes, 'tlsIntercept')
-  const selectedRequest = requests.find((request) => omniId(request) === selected)
-  const invoke = async (method: 'POST' | 'DELETE', path: string, body?: unknown): Promise<void> => { setError(''); try { await omniRequest(method, path, body); setRevision((value) => value + 1) } catch (caught) { setError(caught instanceof Error ? caught.message : String(caught)) } }
-  const toggleSystemProxy = (): void => { const applied = omniBool(systemProxy.applied); if (!applied && !window.confirm(l(language, 'OmniRoute изменит системные настройки прокси. Продолжить?', 'OmniRoute will change the system proxy settings. Continue?'))) return; void invoke('POST', '/api/tools/traffic-inspector/capture-modes/system-proxy', { action: applied ? 'revert' : 'apply', port: omniNumber(httpProxy.port, 8080), guardMinutes: 30 }) }
-  return <div className="omni-page"><PageHeader icon="activity" title={tr(language, 'omni.trafficInspector')} subtitle={l(language, 'Захват, фильтрация и повтор запросов к моделям.', 'Capture, inspect and replay model traffic.')} actions={<button className="btn danger" disabled={requests.length === 0} onClick={() => void invoke('DELETE', '/api/tools/traffic-inspector/requests')}><Icon name="trash" size={14} />{l(language, 'Очистить', 'Clear')}</button>} />{(resource.error || error) && <Notice kind="error">{resource.error || error}</Notice>}
-    <section className="omni-mode-grid"><button className={`omni-mode-card${omniBool(httpProxy.running) ? ' active' : ''}`} onClick={() => void invoke('POST', '/api/tools/traffic-inspector/capture-modes/http-proxy', { action: omniBool(httpProxy.running) ? 'stop' : 'start' })}><Icon name="globe" size={18} /><div><strong>HTTP_PROXY</strong><small>{omniBool(httpProxy.running) ? `${l(language, 'порт', 'port')} ${omniNumber(httpProxy.port)}` : l(language, 'выключен', 'stopped')}</small></div><Badge tone={omniBool(httpProxy.running) ? 'good' : 'neutral'}>{omniBool(httpProxy.running) ? 'ON' : 'OFF'}</Badge></button><button className={`omni-mode-card${omniBool(tls.enabled) ? ' active' : ''}`} onClick={() => void invoke('POST', '/api/tools/traffic-inspector/capture-modes/tls-intercept', { enabled: !omniBool(tls.enabled) })}><Icon name="key" size={18} /><div><strong>TLS intercept</strong><small>{l(language, 'Расшифровка тела', 'Body decryption')}</small></div><Badge tone={omniBool(tls.enabled) ? 'good' : 'neutral'}>{omniBool(tls.enabled) ? 'ON' : 'OFF'}</Badge></button><button className={`omni-mode-card${omniBool(systemProxy.applied) ? ' active' : ''}`} onClick={toggleSystemProxy}><Icon name="server" size={18} /><div><strong>{l(language, 'Системный прокси', 'System proxy')}</strong><small>{l(language, 'Настройки ОС', 'OS settings')}</small></div><Badge tone={omniBool(systemProxy.applied) ? 'good' : 'neutral'}>{omniBool(systemProxy.applied) ? 'ON' : 'OFF'}</Badge></button></section>
-    <section className="omni-panel"><div className="omni-panel-title"><span>{l(language, 'Сессии записи', 'Recording sessions')}</span><Badge>{sessions.length}</Badge></div><form className="omni-inline-form" onSubmit={(event) => { event.preventDefault(); void invoke('POST', '/api/tools/traffic-inspector/sessions', { name: sessionName.trim() || undefined }).then(() => setSessionName('')) }}><input className="text-input" value={sessionName} onChange={(event) => setSessionName(event.target.value)} placeholder={l(language, 'Название сессии', 'Session name')} /><button className="btn"><Icon name="play" size={14} />{l(language, 'Начать запись', 'Start recording')}</button></form></section>
-    <section className="omni-panel"><div className="omni-panel-title"><span>{l(language, 'Запросы', 'Requests')}</span><Badge>{requests.length}</Badge></div>{requests.length === 0 ? <Empty>{l(language, 'Перехваченных запросов пока нет.', 'No captured requests yet.')}</Empty> : <div className="omni-traffic-layout"><div className="omni-table-wrap"><table className="omni-table interactive"><thead><tr><th>{l(language, 'Метод', 'Method')}</th><th>URL</th><th>{l(language, 'Статус', 'Status')}</th><th>{l(language, 'Время', 'Time')}</th></tr></thead><tbody>{requests.map((request) => { const id = omniId(request); const statusCode = omniNumber(request.status ?? request.statusCode); return <tr key={id} className={selected === id ? 'selected' : ''} onClick={() => setSelected(id)}><td><Badge tone="blue">{omniText(request.method, 'POST')}</Badge></td><td className="truncate">{omniText(request.url ?? request.path)}</td><td><Badge tone={statusCode >= 200 && statusCode < 400 ? 'good' : 'bad'}>{statusCode || '—'}</Badge></td><td>{omniNumber(request.durationMs ?? request.duration)} ms</td></tr> })}</tbody></table></div>{selectedRequest && <pre className="omni-request-detail">{formatOmniJson(selectedRequest)}</pre>}</div>}</section>
+  const httpActive = omniBool(httpProxy.active ?? httpProxy.running)
+  const systemActive = omniBool(systemProxy.active ?? systemProxy.applied)
+  const tlsActive = omniBool(tls.active ?? tls.enabled)
+
+  useEffect(() => { if (resource.data) setRequests(omniList(resource.data[0], 'requests', 'data')) }, [resource.data?.[0]])
+  useEffect(() => {
+    if (!selected) { setRequestDetail(null); setAnnotation(''); return }
+    let alive = true
+    void omniRequest<unknown>('GET', `/api/tools/traffic-inspector/requests/${encodeURIComponent(selected)}`).then((body) => {
+      if (!alive) return
+      const detail = isRecord(body) ? body : null
+      setRequestDetail(detail); setAnnotation(detail ? omniText(detail.annotation) : '')
+    }, (caught: unknown) => alive && setError(caught instanceof Error ? caught.message : String(caught)))
+    return () => { alive = false }
+  }, [selected, revision])
+
+  const socket = useTrafficPolling(true, queryPath, useCallback((payload: OmniRecord) => {
+    const type = omniText(payload.type)
+    const data = payload.data
+    if (type === 'snapshot' && Array.isArray(data)) setRequests(data.filter(isRecord))
+    else if (type === 'new' && isRecord(data)) setRequests((current) => [data, ...current.filter((item) => omniId(item) !== omniId(data))])
+    else if (type === 'update' && isRecord(data)) setRequests((current) => current.map((item) => omniId(item) === omniId(data) ? { ...item, ...data } : item))
+    else if (type === 'clear') { setRequests([]); setSelected('') }
+  }, []))
+  const visibleRequests = requests.filter((request) => {
+    const needle = query.trim().toLowerCase()
+    if (profile !== 'all' && omniText(request.detectedKind) !== profile) return false
+    if (sourceFilter && omniText(request.source) !== sourceFilter) return false
+    if (sessionFilter && omniText(request.sessionId) !== sessionFilter) return false
+    const status = request.status
+    const numeric = typeof status === 'number' ? status : 0
+    if (statusFilter && statusFilter !== 'error' && `${Math.floor(numeric / 100)}xx` !== statusFilter) return false
+    if (statusFilter === 'error' && status !== 'error') return false
+    return !needle || `${omniText(request.method)} ${omniText(request.host)} ${omniText(request.path)} ${omniText(request.sourceModel)} ${omniText(request.mappedModel)}`.toLowerCase().includes(needle)
+  })
+
+  const invoke = async (method: 'POST' | 'PATCH' | 'PUT' | 'DELETE', path: string, body?: unknown, key = path): Promise<unknown> => {
+    setBusy(key); setError('')
+    try { const response = await omniRequest(method, path, body); setRevision((value) => value + 1); return response }
+    catch (caught) { setError(caught instanceof Error ? caught.message : String(caught)); return null }
+    finally { setBusy('') }
+  }
+  const toggleSystemProxy = (): void => {
+    if (!systemActive && !window.confirm(l(language, 'OmniRoute изменит системные настройки прокси. Продолжить?', 'OmniRoute will change the system proxy settings. Continue?'))) return
+    void invoke('POST', '/api/tools/traffic-inspector/capture-modes/system-proxy', { action: systemActive ? 'revert' : 'apply', port: omniNumber(httpProxy.port, 8080), guardMinutes: 30 })
+  }
+  const replay = async (): Promise<void> => {
+    if (!selected) return
+    setBusy('replay'); setError(''); setReplayResult(null)
+    try { setReplayResult(await omniRequest('POST', `/api/tools/traffic-inspector/requests/${encodeURIComponent(selected)}/replay`)) }
+    catch (caught) { setError(caught instanceof Error ? caught.message : String(caught)) }
+    finally { setBusy('') }
+  }
+  const saveAnnotation = async (): Promise<void> => { if (selected) await invoke('PUT', `/api/tools/traffic-inspector/requests/${encodeURIComponent(selected)}/annotation`, { annotation }, 'annotation') }
+  const exportHar = async (sessionId?: string): Promise<void> => {
+    setBusy('export'); setError('')
+    try {
+      const body = await omniRequest('GET', sessionId ? `/api/tools/traffic-inspector/sessions/${encodeURIComponent(sessionId)}/export.har` : '/api/tools/traffic-inspector/export.har')
+      downloadOmniJson(body, `omniroute-traffic-${sessionId || new Date().toISOString().replace(/[:.]/g, '-')}.har`)
+    } catch (caught) { setError(caught instanceof Error ? caught.message : String(caught)) }
+    finally { setBusy('') }
+  }
+  const sessionAction = async (session: OmniRecord, action: 'stop' | 'rename' | 'delete' | 'export'): Promise<void> => {
+    const id = omniId(session)
+    if (action === 'export') { await exportHar(id); return }
+    if (action === 'delete') { if (!window.confirm(l(language, 'Удалить сессию записи?', 'Delete this recording session?'))) return; await invoke('DELETE', `/api/tools/traffic-inspector/sessions/${encodeURIComponent(id)}`, undefined, `session:${id}`); return }
+    const name = action === 'rename' ? window.prompt(l(language, 'Новое название сессии', 'New session name'), omniLabel(session, '')) : undefined
+    if (action === 'rename' && name === null) return
+    await invoke('PATCH', `/api/tools/traffic-inspector/sessions/${encodeURIComponent(id)}`, { action, ...(name !== undefined ? { name } : {}) }, `session:${id}`)
+  }
+
+  return <div className="omni-page"><PageHeader icon="activity" title={tr(language, 'omni.trafficInspector')} subtitle={l(language, 'Live-захват, фильтрация, replay и HAR.', 'Live capture, filters, replay and HAR export.')} actions={<><Badge tone={socket.connected ? 'good' : 'bad'}>{socket.connected ? 'LIVE' : 'OFFLINE'}</Badge><button type="button" className="btn" disabled={busy === 'export'} onClick={() => void exportHar()}><Icon name="save" size={14} />HAR</button><button type="button" className="btn danger" disabled={requests.length === 0} onClick={() => void invoke('DELETE', '/api/tools/traffic-inspector/requests')}><Icon name="trash" size={14} />{l(language, 'Очистить', 'Clear')}</button></>} />
+    {(resource.error || error || socket.error) && <Notice kind="error">{resource.error || error || socket.error}</Notice>}{replayResult !== null && <Notice><strong>Replay</strong><pre>{typeof replayResult === 'string' ? replayResult : formatOmniJson(replayResult)}</pre></Notice>}
+    <section className="omni-mode-grid"><button type="button" className={`omni-mode-card${httpActive ? ' active' : ''}`} onClick={() => void invoke('POST', '/api/tools/traffic-inspector/capture-modes/http-proxy', { action: httpActive ? 'stop' : 'start' })}><Icon name="globe" size={18} /><div><strong>HTTP_PROXY</strong><small>{httpActive ? `${l(language, 'порт', 'port')} ${omniNumber(httpProxy.port, 8080)}` : l(language, 'выключен', 'stopped')}</small></div><Badge tone={httpActive ? 'good' : 'neutral'}>{httpActive ? 'ON' : 'OFF'}</Badge></button><button type="button" className={`omni-mode-card${tlsActive ? ' active' : ''}`} onClick={() => void invoke('POST', '/api/tools/traffic-inspector/capture-modes/tls-intercept', { enabled: !tlsActive })}><Icon name="key" size={18} /><div><strong>TLS intercept</strong><small>{l(language, 'Расшифровка тела', 'Body decryption')}</small></div><Badge tone={tlsActive ? 'good' : 'neutral'}>{tlsActive ? 'ON' : 'OFF'}</Badge></button><button type="button" className={`omni-mode-card${systemActive ? ' active' : ''}`} onClick={toggleSystemProxy}><Icon name="server" size={18} /><div><strong>{l(language, 'Системный прокси', 'System proxy')}</strong><small>{l(language, 'Настройки ОС', 'OS settings')}</small></div><Badge tone={systemActive ? 'good' : 'neutral'}>{systemActive ? 'ON' : 'OFF'}</Badge></button></section>
+    <section className="omni-panel"><div className="omni-panel-title"><span>{l(language, 'Сессии записи', 'Recording sessions')}</span><Badge>{sessions.length}</Badge></div><form className="omni-inline-form" onSubmit={(event) => { event.preventDefault(); void invoke('POST', '/api/tools/traffic-inspector/sessions', { name: sessionName.trim() || undefined }, 'new-session').then(() => setSessionName('')) }}><input className="text-input" value={sessionName} onChange={(event) => setSessionName(event.target.value)} placeholder={l(language, 'Название сессии', 'Session name')} /><button className="btn"><Icon name="play" size={14} />{l(language, 'Начать запись', 'Start recording')}</button></form>{sessions.length > 0 && <div className="omni-session-list">{sessions.map((session) => { const id = omniId(session); const active = !session.ended_at && !session.endedAt; return <div className="omni-session-row" key={id}><Badge tone={active ? 'good' : 'neutral'}>{active ? 'REC' : 'STOP'}</Badge><div><strong>{omniLabel(session, l(language, 'Без названия', 'Untitled'))}</strong><small>{formatOmniDate(session.started_at ?? session.startedAt, language)} · {omniNumber(session.request_count ?? session.requestCount)} req</small></div><div className="omni-row-actions">{active && <button type="button" className="btn" onClick={() => void sessionAction(session, 'stop')}><Icon name="stop" size={13} /></button>}<button type="button" className="omni-icon-button" onClick={() => void sessionAction(session, 'rename')}><Icon name="settings" size={13} /></button><button type="button" className="omni-icon-button" onClick={() => void sessionAction(session, 'export')}><Icon name="save" size={13} /></button><button type="button" className="omni-icon-button danger" onClick={() => void sessionAction(session, 'delete')}><Icon name="trash" size={13} /></button></div></div> })}</div>}</section>
+    <section className="omni-panel"><div className="omni-panel-title"><span>Host rules</span><Badge>{hosts.length}</Badge></div><form className="omni-inline-form omni-host-form" onSubmit={(event) => { event.preventDefault(); if (!hostName.trim()) return; void invoke('POST', '/api/tools/traffic-inspector/hosts', { host: hostName.trim(), label: hostLabel.trim() || null, kind: hostKind, enabled: true }, 'add-host').then(() => { setHostName(''); setHostLabel('') }) }}><input className="text-input" value={hostName} onChange={(event) => setHostName(event.target.value)} placeholder="api.example.com" /><input className="text-input" value={hostLabel} onChange={(event) => setHostLabel(event.target.value)} placeholder={l(language, 'Метка', 'Label')} /><select className="text-input small" value={hostKind} onChange={(event) => setHostKind(event.target.value)}><option value="llm">LLM</option><option value="app">App</option><option value="custom">Custom</option></select><button className="btn" disabled={!hostName.trim()}><Icon name="plus" size={13} />{l(language, 'Добавить', 'Add')}</button></form>{hosts.length > 0 && <div className="omni-chip-cloud">{hosts.map((host) => { const name = omniText(host.host); const active = host.enabled !== false; return <span className="omni-host-chip" key={name}><button type="button" onClick={() => void invoke('PATCH', `/api/tools/traffic-inspector/hosts/${encodeURIComponent(name)}`, { enabled: !active })}><Badge tone={active ? 'good' : 'neutral'}>{name}</Badge></button><small>{omniText(host.kind)}</small><button type="button" className="omni-icon-button danger" onClick={() => void invoke('DELETE', `/api/tools/traffic-inspector/hosts/${encodeURIComponent(name)}`)}><Icon name="close" size={12} /></button></span> })}</div>}</section>
+    <section className="omni-panel"><div className="omni-panel-title"><span>{l(language, 'Запросы', 'Requests')}</span><Badge>{visibleRequests.length}/{requests.length}</Badge></div><div className="omni-filter-bar"><input className="text-input" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={l(language, 'URL, модель или провайдер', 'URL, model or provider')} /><select className="text-input small" value={profile} onChange={(event) => setProfile(event.target.value)}><option value="all">All profiles</option><option value="llm">LLM</option><option value="custom">Custom</option></select><select className="text-input small" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="">All status</option>{['2xx','3xx','4xx','5xx','error'].map((value) => <option key={value} value={value}>{value}</option>)}</select><select className="text-input small" value={sourceFilter} onChange={(event) => setSourceFilter(event.target.value)}><option value="">All sources</option>{['agent-bridge','custom-host','http-proxy','system-proxy'].map((value) => <option key={value} value={value}>{value}</option>)}</select><select className="text-input small" value={sessionFilter} onChange={(event) => setSessionFilter(event.target.value)}><option value="">All sessions</option>{sessions.map((session) => <option key={omniId(session)} value={omniId(session)}>{omniLabel(session)}</option>)}</select></div>
+      {visibleRequests.length === 0 ? <Empty>{l(language, 'Перехваченных запросов пока нет.', 'No captured requests yet.')}</Empty> : <div className="omni-traffic-layout"><div className="omni-table-wrap"><table className="omni-table interactive"><thead><tr><th>{l(language, 'Метод', 'Method')}</th><th>Host / path</th><th>{l(language, 'Модель', 'Model')}</th><th>{l(language, 'Статус', 'Status')}</th><th>{l(language, 'Время', 'Time')}</th></tr></thead><tbody>{visibleRequests.map((request) => { const id = omniId(request); const statusValue = request.status ?? request.statusCode; const statusCode = typeof statusValue === 'number' ? statusValue : 0; return <tr key={id} className={selected === id ? 'selected' : ''} onClick={() => setSelected(id)}><td><Badge tone="blue">{omniText(request.method, 'POST')}</Badge></td><td className="truncate"><strong>{omniText(request.host)}</strong>{omniText(request.path ?? request.url)}</td><td>{omniText(request.mappedModel ?? request.sourceModel, '—')}</td><td><Badge tone={statusCode >= 200 && statusCode < 400 ? 'good' : statusCode ? 'bad' : 'neutral'}>{statusCode || omniText(statusValue, '—')}</Badge></td><td>{omniNumber(request.totalLatencyMs ?? request.durationMs ?? request.duration)} ms</td></tr> })}</tbody></table></div>{requestDetail && <aside className="omni-request-detail-pane"><div className="omni-request-detail-head"><strong>{omniText(requestDetail.method)} {omniText(requestDetail.host)}{omniText(requestDetail.path)}</strong><button type="button" className="omni-icon-button" onClick={() => setSelected('')}><Icon name="close" size={13} /></button></div><dl className="omni-detail-list"><div><dt>Source</dt><dd>{omniText(requestDetail.source)}</dd></div><div><dt>Model</dt><dd>{omniText(requestDetail.sourceModel)} → {omniText(requestDetail.mappedModel)}</dd></div><div><dt>Latency</dt><dd>{omniNumber(requestDetail.totalLatencyMs)} ms</dd></div></dl><details open><summary>Request</summary><pre>{omniText(requestDetail.requestBody, formatOmniJson(requestDetail.requestHeaders))}</pre></details><details><summary>Response</summary><pre>{omniText(requestDetail.responseBody, formatOmniJson(requestDetail.responseHeaders))}</pre></details><Field label={l(language, 'Аннотация', 'Annotation')}><textarea className="omni-textarea compact" value={annotation} onChange={(event) => setAnnotation(event.target.value)} /></Field><div className="omni-card-actions"><button type="button" className="btn" disabled={busy === 'annotation'} onClick={() => void saveAnnotation()}><Icon name="save" size={13} />{l(language, 'Заметка', 'Note')}</button><button type="button" className="btn primary" disabled={busy === 'replay'} onClick={() => void replay()}><Icon name="play" size={13} />Replay</button></div></aside>}</div>}
+    </section>
   </div>
 }
 
@@ -501,7 +871,7 @@ function NativePage({ path, language, refreshKey }: { path: string; language: Ap
   if (path === '/home') return <HomePage language={language} refreshKey={refreshKey} />
   if (path === '/dashboard/endpoint') return <EndpointsPage language={language} refreshKey={refreshKey} />
   if (path === '/dashboard/api-manager') return <ApiManagerPage language={language} refreshKey={refreshKey} />
-  if (path === '/dashboard/providers') return <ProvidersPage language={language} refreshKey={refreshKey} />
+  if (path === '/dashboard/providers') return <FullProvidersPage language={language} refreshKey={refreshKey} />
   if (path === '/dashboard/combos') return <CombosPage language={language} refreshKey={refreshKey} />
   if (path === '/dashboard/combos/live') return <CombosPage language={language} refreshKey={refreshKey} studio />
   if (path === '/dashboard/quota') return <QuotaPage language={language} refreshKey={refreshKey} />
@@ -520,19 +890,131 @@ export function OmnirouteView(): JSX.Element {
   const appLanguage = useApp((s) => s.appLanguage)
   const t = (key: TranslationKey): string => tr(appLanguage, key)
   const [reloadKey, setReloadKey] = useState(0)
+  const [sectionsOpen, setSectionsOpen] = useState(false)
+  const [tabScroll, setTabScroll] = useState({ overflow: false, left: false, right: false })
+  const tabsRef = useRef<HTMLDivElement>(null)
+  const sectionsRef = useRef<HTMLDivElement>(null)
+
+  const updateTabScroll = useCallback((): void => {
+    const tabs = tabsRef.current
+    if (!tabs) return
+    const maxScrollLeft = Math.max(0, tabs.scrollWidth - tabs.clientWidth)
+    setTabScroll({
+      overflow: maxScrollLeft > 2,
+      left: tabs.scrollLeft > 1,
+      right: tabs.scrollLeft < maxScrollLeft - 1
+    })
+  }, [])
 
   useEffect(() => {
     if (useApp.getState().omnirouteStatus.state === 'stopped') void api.omniroute.start().catch(() => {})
   }, [])
 
+  useEffect(() => {
+    const tabs = tabsRef.current
+    if (!tabs) return
+    const scrollWheelHorizontally = (event: WheelEvent): void => {
+      if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return
+      const before = tabs.scrollLeft
+      tabs.scrollLeft += event.deltaY
+      if (tabs.scrollLeft !== before) event.preventDefault()
+    }
+    const observer = new ResizeObserver(updateTabScroll)
+    observer.observe(tabs)
+    tabs.addEventListener('scroll', updateTabScroll, { passive: true })
+    tabs.addEventListener('wheel', scrollWheelHorizontally, { passive: false })
+    updateTabScroll()
+    return () => {
+      observer.disconnect()
+      tabs.removeEventListener('scroll', updateTabScroll)
+      tabs.removeEventListener('wheel', scrollWheelHorizontally)
+    }
+  }, [updateTabScroll])
+
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      const activeTab = tabsRef.current?.querySelector<HTMLElement>('.omni-tab.active')
+      activeTab?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' })
+      updateTabScroll()
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [appLanguage, path, updateTabScroll])
+
+  useEffect(() => {
+    if (!sectionsOpen) return
+    const closeOutside = (event: MouseEvent): void => {
+      if (!sectionsRef.current?.contains(event.target as Node)) setSectionsOpen(false)
+    }
+    const closeOnEscape = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') setSectionsOpen(false)
+    }
+    document.addEventListener('mousedown', closeOutside)
+    document.addEventListener('keydown', closeOnEscape)
+    return () => {
+      document.removeEventListener('mousedown', closeOutside)
+      document.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [sectionsOpen])
+
+  const scrollTabs = (direction: -1 | 1): void => {
+    const tabs = tabsRef.current
+    if (!tabs) return
+    tabs.scrollBy({ left: direction * Math.max(180, tabs.clientWidth * 0.65), behavior: 'smooth' })
+  }
+
   return (
     <div className="omni-view">
       <div className="omni-toolbar">
         <span className="omni-view-title"><Icon name="route" size={15} /><span>{t('rail.omniroute')}</span></span>
-        <div className="omni-tabs" role="tablist">
+        <div className="omni-sections" ref={sectionsRef}>
+          <button
+            className={`omni-sections-button${sectionsOpen ? ' active' : ''}`}
+            type="button"
+            aria-label={t('omni.sections')}
+            aria-haspopup="menu"
+            aria-expanded={sectionsOpen}
+            title={t('omni.sections')}
+            onClick={() => setSectionsOpen((open) => !open)}
+          >
+            <Icon name="list" size={14} />
+            <span>{t('omni.sections')}</span>
+            <Icon name="chevronDown" size={11} />
+          </button>
+          {sectionsOpen && (
+            <div className="omni-sections-menu" role="menu" aria-label={t('omni.sections')}>
+              {OMNI_PAGE_GROUPS.map((group) => (
+                <div className="omni-sections-group" role="group" aria-label={t(group.labelKey)} key={group.id}>
+                  <div className="omni-sections-group-label">{t(group.labelKey)}</div>
+                  {OMNI_PAGES.filter((page) => page.group === group.id).map((page) => (
+                    <button
+                      className={`omni-sections-item${path === page.path ? ' active' : ''}`}
+                      type="button"
+                      role="menuitem"
+                      aria-current={path === page.path ? 'page' : undefined}
+                      key={page.path}
+                      onClick={() => {
+                        openOmniroutePage(page.path)
+                        setSectionsOpen(false)
+                      }}
+                    >
+                      <Icon name={page.icon} size={14} />
+                      <span>{t(page.labelKey)}</span>
+                    </button>
+                  ))}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        {tabScroll.overflow && (
+          <button className="omni-tab-scroll left" type="button" disabled={!tabScroll.left} aria-label={t('omni.scrollLeft')} title={t('omni.scrollLeft')} onClick={() => scrollTabs(-1)}><Icon name="chevronRight" size={13} /></button>
+        )}
+        <div className="omni-tabs" ref={tabsRef} role="tablist">
           {OMNI_PAGES.map((page) => <button className={`omni-tab${path === page.path ? ' active' : ''}`} key={page.path} role="tab" aria-selected={path === page.path} title={t(page.labelKey)} onClick={() => openOmniroutePage(page.path)}><Icon name={page.icon} size={14} /><span>{t(page.labelKey)}</span></button>)}
         </div>
-        <span className="omni-toolbar-spacer" />
+        {tabScroll.overflow && (
+          <button className="omni-tab-scroll" type="button" disabled={!tabScroll.right} aria-label={t('omni.scrollRight')} title={t('omni.scrollRight')} onClick={() => scrollTabs(1)}><Icon name="chevronRight" size={13} /></button>
+        )}
         <button className="omni-toolbtn" title={t('common.refresh')} aria-label={t('common.refresh')} disabled={status.state !== 'ready'} onClick={() => setReloadKey((key) => key + 1)}><Icon name="refresh" size={14} /></button>
         <button className="omni-toolbtn" title={t('common.close')} aria-label={t('common.close')} onClick={closeOmniroute}><Icon name="close" size={14} /></button>
       </div>

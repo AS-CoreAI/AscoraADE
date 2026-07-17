@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type JSX } from 'react'
 import { createPortal } from 'react-dom'
 import type { TaskSummary, Workspace } from '@shared/ipc'
 import { Icon } from './Icon'
-import { OMNI_PAGES } from '@/lib/omniroutePages'
+import { OMNI_PAGE_GROUPS, OMNI_PAGES } from '@/lib/omniroutePages'
 import { SshRail } from './SshRail'
 import { BlueprintRail } from './BlueprintRail'
 import { useApp, type AppLanguage, type ThemePreference } from '@/state/store'
@@ -89,6 +89,7 @@ export function LeftRail(): JSX.Element {
   const [themeMenuOpen, setThemeMenuOpen] = useState(false)
   const [languageMenuOpen, setLanguageMenuOpen] = useState(false)
   const [omniMenuOpen, setOmniMenuOpen] = useState(false)
+  const omniroutePath = useApp((s) => s.omniroutePath)
   const openOmniroutePage = useApp((s) => s.openOmniroutePage)
   const footerMenuRef = useRef<HTMLDivElement>(null)
   const [aboutOpen, setAboutOpen] = useState(false)
@@ -646,19 +647,25 @@ export function LeftRail(): JSX.Element {
         {omniMenuOpen && (
           <div className="theme-menu omni-menu" role="menu" aria-label={t('rail.omniroute')}>
             <div className="theme-menu-label">{t('rail.omniroute')}</div>
-            {OMNI_PAGES.map((page) => (
-              <button
-                className="theme-option omni-option"
-                key={page.path}
-                role="menuitem"
-                onClick={() => {
-                  openOmniroutePage(page.path)
-                  setOmniMenuOpen(false)
-                }}
-              >
-                <Icon name={page.icon} size={14} />
-                <span>{t(page.labelKey)}</span>
-              </button>
+            {OMNI_PAGE_GROUPS.map((group) => (
+              <div className="omni-menu-group" key={group.id} role="group" aria-label={t(group.labelKey)}>
+                <div className="omni-menu-group-label">{t(group.labelKey)}</div>
+                {OMNI_PAGES.filter((page) => page.group === group.id).map((page) => (
+                  <button
+                    className="theme-option omni-option"
+                    key={page.path}
+                    role="menuitem"
+                    aria-current={view === 'omniroute' && omniroutePath === page.path ? 'page' : undefined}
+                    onClick={() => {
+                      openOmniroutePage(page.path)
+                      setOmniMenuOpen(false)
+                    }}
+                  >
+                    <Icon name={page.icon} size={14} />
+                    <span>{t(page.labelKey)}</span>
+                  </button>
+                ))}
+              </div>
             ))}
           </div>
         )}

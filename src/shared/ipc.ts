@@ -131,7 +131,10 @@ export const IPC = {
     start: 'omniroute:start',
     stop: 'omniroute:stop',
     admin: 'omniroute:admin',
-    statusChanged: 'omniroute:status-changed'
+    statusChanged: 'omniroute:status-changed',
+    liveConnect: 'omniroute:live-connect',
+    liveDisconnect: 'omniroute:live-disconnect',
+    liveEvent: 'omniroute:live-event'
   },
   blueprint: {
     list: 'blueprint:list',
@@ -355,6 +358,19 @@ export interface OmnirouteAdminResponse {
   status: number
   /** Parsed JSON body when the response was JSON, else null. */
   body: unknown
+  error?: string
+}
+
+export interface OmnirouteLiveConnectRequest {
+  /** Renderer-owned subscription id used to route events and disconnect safely. */
+  id: string
+  channel: 'combo'
+}
+
+export interface OmnirouteLiveEvent {
+  id: string
+  state: 'open' | 'message' | 'closed' | 'error'
+  data?: unknown
   error?: string
 }
 

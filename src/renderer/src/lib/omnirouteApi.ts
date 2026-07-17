@@ -31,6 +31,16 @@ export function omniBool(value: unknown): boolean {
   return value === true || value === 1 || value === 'true' || value === 'active' || value === 'healthy'
 }
 
+export function omniStringList(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+    : []
+}
+
+export function omniOptionalNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
 function responseError(body: unknown, status: number, fallback?: string): string {
   if (isRecord(body)) {
     for (const key of ['error', 'message', 'detail']) {
@@ -76,4 +86,16 @@ export function formatOmniJson(value: unknown): string {
   } catch {
     return String(value)
   }
+}
+
+export function downloadOmniJson(value: unknown, filename: string): void {
+  const blob = new Blob([formatOmniJson(value)], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = filename
+  document.body.appendChild(anchor)
+  anchor.click()
+  anchor.remove()
+  window.setTimeout(() => URL.revokeObjectURL(url), 0)
 }
