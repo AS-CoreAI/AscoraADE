@@ -2446,6 +2446,83 @@ button {
   flex-shrink: 0;
   color: var(--accent);
 }
+/* OmniRoute full-catalog model picker */
+.omni-model-menu {
+  display: flex;
+  flex-direction: column;
+  width: min(420px, calc(100vw - 24px));
+  max-width: min(420px, calc(100vw - 24px));
+  padding: 5px;
+}
+.omni-model-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  margin-bottom: 4px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-input);
+}
+.omni-model-search svg { flex-shrink: 0; color: var(--text-faint); }
+.omni-model-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+  outline: none;
+}
+.omni-model-list {
+  max-height: min(48vh, 380px);
+  overflow: auto;
+  scrollbar-width: thin;
+}
+.omni-model-group + .omni-model-group { margin-top: 3px; }
+.omni-model-group-head {
+  position: sticky;
+  top: 0;
+  padding: 5px 10px 3px;
+  background: var(--bg-elevated);
+  color: var(--text-faint);
+  font-size: 9.5px;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.omni-model-option .provider-option-label {
+  font: 11px var(--font-mono);
+}
+.omni-model-empty {
+  padding: 16px 12px;
+  color: var(--text-faint);
+  font-size: 11px;
+  line-height: 1.5;
+  text-align: center;
+}
+.omni-model-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  padding: 6px 8px 3px;
+  border-top: 1px solid var(--border);
+}
+.omni-model-connect {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  padding: 4px 9px;
+  flex-shrink: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  color: var(--text-muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.omni-model-connect:hover { color: var(--text); background: var(--bg-hover); }
 .provider-select-wrap[data-tooltip]::before,
 .provider-select-wrap[data-tooltip]::after {
   position: absolute;
