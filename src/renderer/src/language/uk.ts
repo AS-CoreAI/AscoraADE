@@ -36,6 +36,7 @@ const uk: Translation = {
   'settings.omnirouteRetry': 'Повторити',
   'settings.omnirouteOpenLogs': 'Відкрити папку журналів',
   'settings.omnirouteProviders': 'Провайдери',
+  'settings.omnirouteOpenCatalog': 'Відкрити каталог провайдерів',
   'settings.omnirouteProvidersLoadError': 'Не вдалося завантажити провайдерів OmniRoute.',
   'settings.omnirouteNoProviders': 'Апстрім-провайдерів не налаштовано — додайте ключ API нижче.',
   'settings.omnirouteAddProvider': 'Додати провайдера',

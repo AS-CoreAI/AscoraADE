@@ -268,18 +268,6 @@ interface OmniRouteProviderConnection {
   isActive?: boolean
 }
 
-const OMNIROUTE_PROVIDER_PRESETS = [
-  ['openai', 'OpenAI'],
-  ['anthropic', 'Anthropic'],
-  ['gemini', 'Google Gemini'],
-  ['openrouter', 'OpenRouter'],
-  ['groq', 'Groq'],
-  ['xai', 'xAI'],
-  ['mistral', 'Mistral'],
-  ['together', 'Together AI'],
-  ['custom', 'OpenAI-compatible']
-] as const
-
 function omniAdminError(body: unknown, fallback: string): string {
   if (body && typeof body === 'object') {
     const error = (body as { error?: unknown }).error
@@ -309,11 +297,8 @@ function OmniRoutePanel(): JSX.Element {
   const start = useApp((s) => s.startOmniroute)
   const stop = useApp((s) => s.stopOmniroute)
   const refreshModels = useApp((s) => s.refreshModels)
+  const openOmniroutePage = useApp((s) => s.openOmniroutePage)
   const [connections, setConnections] = useState<OmniRouteProviderConnection[]>([])
-  const [provider, setProvider] = useState<(typeof OMNIROUTE_PROVIDER_PRESETS)[number][0]>('openai')
-  const [name, setName] = useState('')
-  const [apiKey, setApiKey] = useState('')
-  const [baseUrl, setBaseUrl] = useState('')
   const [busy, setBusy] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
 
@@ -333,60 +318,6 @@ function OmniRoutePanel(): JSX.Element {
     // cause admin requests while the user is typing.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status.state])
-
-  const createCompatibleNode = async (): Promise<string> => {
-    const prefix = `ascora-${Date.now().toString(36)}`
-    const result = await api.omniroute.admin({
-      method: 'POST',
-      path: '/api/provider-nodes',
-      body: {
-        name: name.trim() || 'Ascora custom provider',
-        prefix,
-        apiType: 'chat',
-        type: 'openai-compatible',
-        baseUrl: baseUrl.trim()
-      }
-    })
-    const body = result.body as
-      | { id?: unknown; node?: { id?: unknown }; providerNode?: { id?: unknown }; data?: { id?: unknown } }
-      | null
-    const id = body?.node?.id ?? body?.providerNode?.id ?? body?.data?.id ?? body?.id
-    if (!result.ok || typeof id !== 'string') {
-      throw new Error(result.error ?? omniAdminError(result.body, t('settings.omnirouteAddError')))
-    }
-    return id
-  }
-
-  const addProvider = async (): Promise<void> => {
-    if (!apiKey.trim() || (provider === 'custom' && !baseUrl.trim())) return
-    setBusy('add')
-    setMessage(null)
-    try {
-      const providerId = provider === 'custom' ? await createCompatibleNode() : provider
-      const result = await api.omniroute.admin({
-        method: 'POST',
-        path: '/api/providers',
-        body: {
-          provider: providerId,
-          name: name.trim() || OMNIROUTE_PROVIDER_PRESETS.find(([id]) => id === provider)?.[1],
-          apiKey: apiKey.trim()
-        }
-      })
-      if (!result.ok) {
-        throw new Error(result.error ?? omniAdminError(result.body, t('settings.omnirouteAddError')))
-      }
-      setName('')
-      setApiKey('')
-      setBaseUrl('')
-      setMessage(t('settings.omnirouteProviderAdded'))
-      await loadConnections()
-      await refreshModels()
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : String(error))
-    } finally {
-      setBusy(null)
-    }
-  }
 
   const testProvider = async (id: string): Promise<void> => {
     setBusy(`test:${id}`)
@@ -488,18 +419,10 @@ function OmniRoutePanel(): JSX.Element {
             </div>
           )}
 
-          <div className="omniroute-add-form">
-            <div className="omniroute-section-title">{t('settings.omnirouteAddProvider')}</div>
-            <select className="text-input" value={provider} onChange={(event) => setProvider(event.target.value as typeof provider)}>
-              {OMNIROUTE_PROVIDER_PRESETS.map(([id, label]) => <option key={id} value={id}>{label}</option>)}
-            </select>
-            <input className="text-input" value={name} onChange={(event) => setName(event.target.value)} placeholder={t('settings.omnirouteProviderName')} />
-            <input className="text-input" type="password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} placeholder={t('settings.omnirouteApiKey')} />
-            <input className="text-input" value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} placeholder={t('settings.omnirouteBaseUrl')} disabled={provider !== 'custom'} />
-            <button className="btn" disabled={busy !== null || !apiKey.trim() || (provider === 'custom' && !baseUrl.trim())} onClick={() => void addProvider()}>
-              {busy === 'add' ? t('settings.saving') : t('settings.omnirouteAddProvider')}
-            </button>
-          </div>
+          <button className="btn" onClick={() => openOmniroutePage('/dashboard/providers')}>
+            <Icon name="plug" size={14} />
+            {t('settings.omnirouteOpenCatalog')}
+          </button>
           {message && <div className="field-hint omniroute-message">{message}</div>}
         </section>
       )}

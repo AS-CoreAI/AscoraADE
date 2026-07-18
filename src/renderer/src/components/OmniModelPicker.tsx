@@ -2,6 +2,7 @@ import { useEffect, useId, useMemo, useRef, useState, type JSX } from 'react'
 import { Icon } from './Icon'
 import { OMNI_PROVIDER_CATALOG } from '@/lib/omnirouteProviderCatalog.generated'
 import { OMNI_BUILTIN_MODELS, OMNI_PROVIDER_ID_TO_ALIAS } from '@/lib/omnirouteProviderModels.generated'
+import { isAutoOmniModel } from '@/lib/omniModels'
 
 // The composer's OmniRoute model list shows only models that are routable right
 // now — the live gateway catalog (`/v1/models`, passed as `runtimeModels`) = your
@@ -32,12 +33,8 @@ for (const [alias, models] of Object.entries(OMNI_BUILTIN_MODELS)) {
   for (const model of models) CATALOG_BY_ID.set(`${alias}/${model.id}`, { name: model.name, providerId, providerName })
 }
 
-function isAutoModel(id: string): boolean {
-  return id === 'auto' || id.startsWith('auto/') || id.startsWith('combo:')
-}
-
 function describe(id: string): CatalogModel {
-  if (isAutoModel(id)) return { id, name: id, providerId: AUTO_GROUP_ID, providerName: 'auto' }
+  if (isAutoOmniModel(id)) return { id, name: id, providerId: AUTO_GROUP_ID, providerName: 'auto' }
   const hit = CATALOG_BY_ID.get(id)
   if (hit) return { id, name: hit.name, providerId: hit.providerId, providerName: hit.providerName }
   const prefix = id.includes('/') ? id.slice(0, id.indexOf('/')) : id
@@ -54,7 +51,6 @@ interface DisplayGroup {
 export function OmniModelPicker({
   value,
   runtimeModels,
-  connectedProviders,
   onChange,
   onConnect,
   className,
@@ -67,7 +63,6 @@ export function OmniModelPicker({
 }: {
   value: string
   runtimeModels: string[]
-  connectedProviders: string[]
   onChange: (id: string) => void
   onConnect: () => void
   className: string
@@ -84,30 +79,15 @@ export function OmniModelPicker({
   const searchRef = useRef<HTMLInputElement>(null)
   const listboxId = useId()
 
-  // Model prefixes (aliases) that are backed by a real connection. no-auth/free
-  // providers have no connection row, so they are excluded — nothing routable is
-  // shown unless you actually connected the provider.
-  const connectedAliases = useMemo(() => {
-    const set = new Set<string>()
-    for (const pid of connectedProviders) set.add(OMNI_PROVIDER_ID_TO_ALIAS[pid] ?? pid)
-    return set
-  }, [connectedProviders])
-
-  // Only connected providers' models, grouped by provider. Search filters within them.
+  // Every routable model (the gateway's /v1/models), grouped by provider. Search
+  // filters within them.
   const groups = useMemo<DisplayGroup[]>(() => {
     const needle = query.trim().toLowerCase()
     const map = new Map<string, DisplayGroup>()
     const seen = new Set<string>()
     for (const id of runtimeModels) {
       if (seen.has(id)) continue
-      // auto/* and combos need at least one real connection to route to; every
-      // other model must belong to a provider you connected.
-      if (isAutoModel(id)) {
-        if (connectedAliases.size === 0) continue
-      } else {
-        const prefix = id.includes('/') ? id.slice(0, id.indexOf('/')) : id
-        if (!connectedAliases.has(prefix)) continue
-      }
+      seen.add(id)
       const model = describe(id)
       if (
         needle &&
@@ -116,7 +96,6 @@ export function OmniModelPicker({
         !model.providerName.toLowerCase().includes(needle)
       )
         continue
-      seen.add(id)
       const group = map.get(model.providerId) ?? { providerId: model.providerId, providerName: model.providerName, models: [] }
       group.models.push(model)
       map.set(model.providerId, group)

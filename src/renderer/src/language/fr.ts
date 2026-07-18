@@ -276,6 +276,7 @@ const fr: Translation = {
   'settings.omnirouteRetry': 'Réessayer',
   'settings.omnirouteOpenLogs': 'Ouvrir le dossier des journaux',
   'settings.omnirouteProviders': 'Fournisseurs',
+  'settings.omnirouteOpenCatalog': 'Ouvrir le catalogue des fournisseurs',
   'settings.omnirouteProvidersLoadError': 'Impossible de charger les fournisseurs OmniRoute.',
   'settings.omnirouteNoProviders': 'Aucun fournisseur en amont configuré — ajoutez une clé API ci-dessous.',
   'settings.omnirouteAddProvider': 'Ajouter un fournisseur',

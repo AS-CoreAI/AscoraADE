@@ -3,7 +3,6 @@ import { Icon } from './Icon'
 import { FileIcon } from './FileIcon'
 import { ProviderSelect, type ProviderSelectOption } from './ProviderSelect'
 import { OmniModelPicker } from './OmniModelPicker'
-import { omniList, omniRequest, omniText } from '@/lib/omnirouteApi'
 import { useApp, type AgentMode, type AppLanguage } from '@/state/store'
 import { api } from '@/lib/api'
 import { tr, type TranslationKey } from '@/language'
@@ -275,34 +274,6 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
   const t = (key: TranslationKey, values?: Record<string, string | number>): string =>
     tr(appLanguage, key, values)
   const omniRu = appLanguage === 'ru' || appLanguage === 'uk'
-
-  // Providers with a real, non-failed connection — the only ones whose models the
-  // OmniRoute picker will offer. no-auth/free providers without a connection are
-  // excluded because they are not verified to actually answer in this environment.
-  const [omniConnectedProviders, setOmniConnectedProviders] = useState<string[]>([])
-  useEffect(() => {
-    if (provider !== 'omniroute' || omnirouteStatus.state !== 'ready') {
-      setOmniConnectedProviders([])
-      return
-    }
-    let alive = true
-    const badStatus = new Set(['error', 'failed', 'expired', 'banned', 'credits_exhausted', 'unavailable'])
-    void omniRequest<unknown>('GET', '/api/providers').then(
-      (body) => {
-        if (!alive) return
-        const ids = new Set<string>()
-        for (const connection of omniList(body, 'connections', 'providers', 'data')) {
-          if (connection.isActive === false) continue
-          if (badStatus.has(omniText(connection.testStatus).toLowerCase())) continue
-          const pid = omniText(connection.provider)
-          if (pid) ids.add(pid)
-        }
-        setOmniConnectedProviders([...ids])
-      },
-      () => { if (alive) setOmniConnectedProviders([]) }
-    )
-    return () => { alive = false }
-  }, [provider, omnirouteStatus.state, models])
 
   const [text, setText] = useState('')
   const [attachments, setAttachments] = useState<AttachmentFile[]>([])
@@ -876,7 +847,6 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
           <OmniModelPicker
             value={omnirouteModel}
             runtimeModels={models}
-            connectedProviders={omniConnectedProviders}
             onChange={(id) => setOmnirouteModel(id)}
             onConnect={() => openOmniroutePage('/dashboard/providers')}
             className="composer-select"
@@ -884,8 +854,8 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
             placement="top"
             disabled={omnirouteStatus.state !== 'ready'}
             connectLabel={omniRu ? 'Открыть Провайдеры' : 'Open Providers'}
-            searchPlaceholder={omniRu ? 'Поиск по подключённым моделям…' : 'Search connected models…'}
-            emptyLabel={omniRu ? 'Нет подключённых провайдеров. Подключите провайдера, чтобы выбрать модель.' : 'No connected providers. Connect one to pick a model.'}
+            searchPlaceholder={omniRu ? 'Поиск по моделям…' : 'Search models…'}
+            emptyLabel={omniRu ? 'Модели недоступны.' : 'No models available.'}
           />
         ) : provider === 'openrouter' ? (
           <select

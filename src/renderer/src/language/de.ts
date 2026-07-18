@@ -277,6 +277,7 @@ const de: Translation = {
   'settings.omnirouteRetry': 'Erneut versuchen',
   'settings.omnirouteOpenLogs': 'Protokollordner öffnen',
   'settings.omnirouteProviders': 'Anbieter',
+  'settings.omnirouteOpenCatalog': 'Anbieterkatalog öffnen',
   'settings.omnirouteProvidersLoadError': 'OmniRoute-Anbieter konnten nicht geladen werden.',
   'settings.omnirouteNoProviders': 'Keine Upstream-Anbieter konfiguriert — fügen Sie unten einen API-Schlüssel hinzu.',
   'settings.omnirouteAddProvider': 'Anbieter hinzufügen',

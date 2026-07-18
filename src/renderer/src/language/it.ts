@@ -277,6 +277,7 @@ const it: Translation = {
   'settings.omnirouteRetry': 'Riprova',
   'settings.omnirouteOpenLogs': 'Apri cartella dei log',
   'settings.omnirouteProviders': 'Provider',
+  'settings.omnirouteOpenCatalog': 'Apri il catalogo dei provider',
   'settings.omnirouteProvidersLoadError': 'Impossibile caricare i provider OmniRoute.',
   'settings.omnirouteNoProviders': 'Nessun provider upstream configurato — aggiungi una chiave API qui sotto.',
   'settings.omnirouteAddProvider': 'Aggiungi provider',
