@@ -184,14 +184,17 @@ export class LmStudioClient {
     this.requireOmniroute()
     const name = this.providerName
     const url = `${this.baseUrl}/chat/completions`
-    const body = JSON.stringify({
+    const basePayload: Record<string, unknown> = {
       model: this.model(params),
       messages: params.messages,
       temperature: params.temperature ?? 0.7,
+      ...(params.tools && params.tools.length > 0 ? { tools: params.tools } : {})
+    }
+    const body = JSON.stringify({
+      ...basePayload,
       stream: true,
       // Ask OpenAI-compatible servers to append a final usage frame.
-      ...(this.config.provider === 'openrouter' ? {} : { stream_options: { include_usage: true } }),
-      ...(params.tools && params.tools.length > 0 ? { tools: params.tools } : {})
+      ...(this.config.provider === 'openrouter' ? {} : { stream_options: { include_usage: true } })
     })
 
     let res: Response
@@ -216,6 +219,8 @@ export class LmStudioClient {
     const toolAcc = new Map<number, { id: string; name: string; arguments: string }>()
     let finishReason: string | undefined
     let usage: TokenUsage | undefined
+    let yielded = false
+    let streamDone = false
 
     const assembled = (): StreamReturn => ({
       toolCalls: [...toolAcc.entries()]
@@ -238,12 +243,12 @@ export class LmStudioClient {
           buffer = buffer.slice(newline + 1)
           if (!line.startsWith('data:')) continue
           const data = line.slice(5).trim()
-          if (data === '[DONE]') return assembled()
+          if (data === '[DONE]') { streamDone = true; break }
           try {
             const json = JSON.parse(data)
             const choice = json?.choices?.[0]
             const content: unknown = choice?.delta?.content
-            if (typeof content === 'string' && content.length > 0) yield content
+            if (typeof content === 'string' && content.length > 0) { yielded = true; yield content }
 
             const calls: unknown = choice?.delta?.tool_calls
             if (Array.isArray(calls)) {
@@ -272,12 +277,49 @@ export class LmStudioClient {
             /* keep-alive or partial frame — ignore */
           }
         }
+        if (streamDone) break
       }
     } catch (err) {
       if (isAbort(err)) throw new LmStudioError('Request aborted', 'aborted')
       throw err
     } finally {
       reader.releaseLock()
+    }
+
+    // OmniRoute routes some web/free providers that ignore `stream: true` and
+    // return an empty SSE stream even though a non-streaming request answers
+    // (the native Playground uses stream:false and works). Fall back once so the
+    // chat turn isn't a blank "(no content returned)". Scoped to OmniRoute only.
+    if (this.config.provider === 'omniroute' && !yielded && toolAcc.size === 0) {
+      try {
+        const fbRes = await fetch(url, {
+          method: 'POST',
+          headers: this.headers(),
+          body: JSON.stringify({ ...basePayload, stream: false }),
+          signal
+        })
+        if (fbRes.ok) {
+          const fbJson = (await fbRes.json()) as {
+            choices?: { message?: { content?: unknown }; finish_reason?: string }[]
+            usage?: { prompt_tokens?: number; completion_tokens?: number }
+          }
+          const fbChoice = fbJson?.choices?.[0]
+          let fbContent: unknown = fbChoice?.message?.content
+          if (Array.isArray(fbContent)) {
+            fbContent = fbContent
+              .map((part) => (part && typeof (part as { text?: unknown }).text === 'string' ? (part as { text: string }).text : ''))
+              .join('')
+          }
+          if (typeof fbContent === 'string' && fbContent.length > 0) yield fbContent
+          if (typeof fbChoice?.finish_reason === 'string') finishReason = fbChoice.finish_reason
+          if (fbJson?.usage && typeof fbJson.usage === 'object') {
+            usage = { inputTokens: fbJson.usage.prompt_tokens ?? 0, outputTokens: fbJson.usage.completion_tokens ?? 0 }
+          }
+        }
+      } catch (err) {
+        if (isAbort(err)) throw new LmStudioError('Request aborted', 'aborted')
+        // Fallback failed — return whatever the stream produced.
+      }
     }
 
     return assembled()

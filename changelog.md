@@ -9,6 +9,9 @@ What's new?
 - **OmniRoute chat backend** — select routed models from the composer, use native tool calls, and track OmniRoute turns in Analytics.
 - **OmniRoute composer model picker** — the composer's OmniRoute model selector is now a searchable dropdown grouped by provider, driven live from the gateway's model list, with a shortcut to the provider catalog. The agent-backend settings replace the custom "add provider" form with a button that opens the same catalog, so connections are managed in one place. The provider-catalog detail panel now also stays in view while scrolling in narrow layouts, and pressing Test on a provider with no connections opens the add-connection flow instead of a no-op.
 
+### Fixed
+- **OmniRoute chat no longer returns blank replies** — some OmniRoute web/free providers (and `auto/*` routes to them) ignore streaming and return an empty SSE stream for `stream: true`, so a chat turn ended as "(no content returned)" even though the model actually answers (the native Playground worked because it uses `stream: false`). The chat now falls back once to a non-streaming request when the OmniRoute stream produces no content or tool calls, recovering the reply and its token usage. Scoped to the OmniRoute backend; other providers are unchanged.
+
 ## Ascora ADE 1.2.4
 What's new?
 
