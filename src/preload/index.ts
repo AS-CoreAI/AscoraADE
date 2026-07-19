@@ -71,6 +71,14 @@ import {
   type AgentRunResult,
   type WebFetchResult,
   type WebSearchResult,
+  type PublicIpStatus,
+  type VpnConfigureRequest,
+  type VpnConnectRequest,
+  type VpnAuthRequest,
+  type VpnAuthResult,
+  type VpnServersResult,
+  type VpnStatus,
+  type VpnTrafficResult,
   type UpdateInfo,
   type ChangelogInfo
 } from '@shared/ipc'
@@ -490,6 +498,37 @@ const api = {
     fetch: (url: string, maxChars?: number): Promise<WebFetchResult> =>
       ipcRenderer.invoke(IPC.web.fetch, url, maxChars),
     search: (query: string): Promise<WebSearchResult> => ipcRenderer.invoke(IPC.web.search, query)
+  },
+  network: {
+    publicIp: (force = false): Promise<PublicIpStatus> =>
+      ipcRenderer.invoke(IPC.network.publicIp, force),
+    onStatusChanged: (cb: (status: PublicIpStatus) => void): (() => void) => {
+      const listener = (_event: IpcRendererEvent, status: PublicIpStatus): void => cb(status)
+      ipcRenderer.on(IPC.network.statusChanged, listener)
+      return () => ipcRenderer.removeListener(IPC.network.statusChanged, listener)
+    }
+  },
+  vpn: {
+    status: (forceDependencies = false): Promise<VpnStatus> =>
+      ipcRenderer.invoke(IPC.vpn.status, forceDependencies),
+    servers: (force = false): Promise<VpnServersResult> =>
+      ipcRenderer.invoke(IPC.vpn.servers, force),
+    connect: (request: VpnConnectRequest): Promise<VpnStatus> =>
+      ipcRenderer.invoke(IPC.vpn.connect, request),
+    disconnect: (): Promise<VpnStatus> => ipcRenderer.invoke(IPC.vpn.disconnect),
+    configure: (request: VpnConfigureRequest): Promise<VpnStatus> =>
+      ipcRenderer.invoke(IPC.vpn.configure, request),
+    login: (request: VpnAuthRequest): Promise<VpnAuthResult> =>
+      ipcRenderer.invoke(IPC.vpn.login, request),
+    register: (request: VpnAuthRequest): Promise<VpnAuthResult> =>
+      ipcRenderer.invoke(IPC.vpn.register, request),
+    logout: (): Promise<VpnAuthResult> => ipcRenderer.invoke(IPC.vpn.logout),
+    traffic: (): Promise<VpnTrafficResult> => ipcRenderer.invoke(IPC.vpn.traffic),
+    onStatusChanged: (cb: (status: VpnStatus) => void): (() => void) => {
+      const listener = (_event: IpcRendererEvent, status: VpnStatus): void => cb(status)
+      ipcRenderer.on(IPC.vpn.statusChanged, listener)
+      return () => ipcRenderer.removeListener(IPC.vpn.statusChanged, listener)
+    }
   },
   update: {
     /** Probe release feeds for a newer build. */

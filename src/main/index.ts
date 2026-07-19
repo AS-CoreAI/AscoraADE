@@ -6,6 +6,7 @@ import { stopLiveServer } from './ipc/live'
 import { stopOmniroute } from './omniroute/runner'
 import { startPresence, stopPresence } from './presence'
 import { stopAllBlueprints } from './blueprint/runner'
+import { flushVpnUsage } from './vpn/service'
 
 // WProvider sign-in pages must look like an ordinary interactive Chromium tab.
 // In particular, Cloudflare Turnstile on Grok loops indefinitely when Blink
@@ -66,7 +67,7 @@ if (!app.requestSingleInstanceLock()) {
     stopAllBlueprints()
     stopPresence()
     stopLiveServer()
-    void stopOmniroute().finally(() => {
+    void Promise.allSettled([stopOmniroute(), flushVpnUsage()]).finally(() => {
       closeStore()
       app.quit()
     })

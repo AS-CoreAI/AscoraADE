@@ -19,6 +19,7 @@ import { registerLiveHandlers } from './live'
 import { registerSshHandlers } from './ssh'
 import { registerUpdateHandlers } from './update'
 import { registerBlueprintHandlers } from './blueprint'
+import { registerNetworkVpnHandlers } from './network-vpn'
 
 /** Register every IPC handler. Called once after the app is ready. */
 export function registerIpc(): void {
@@ -43,4 +44,5 @@ export function registerIpc(): void {
   registerLiveHandlers()
   registerSshHandlers()
   registerUpdateHandlers()
+  registerNetworkVpnHandlers()
 }

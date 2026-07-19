@@ -184,6 +184,22 @@ export const IPC = {
     fetch: 'web:fetch',
     search: 'web:search'
   },
+  network: {
+    publicIp: 'network:public-ip',
+    statusChanged: 'network:status-changed'
+  },
+  vpn: {
+    status: 'vpn:status',
+    servers: 'vpn:servers',
+    connect: 'vpn:connect',
+    disconnect: 'vpn:disconnect',
+    configure: 'vpn:configure',
+    login: 'vpn:login',
+    register: 'vpn:register',
+    logout: 'vpn:logout',
+    traffic: 'vpn:traffic',
+    statusChanged: 'vpn:status-changed'
+  },
   update: {
     check: 'update:check',
     changelog: 'update:changelog',
@@ -371,6 +387,130 @@ export interface OmnirouteLiveEvent {
   id: string
   state: 'open' | 'message' | 'closed' | 'error'
   data?: unknown
+  error?: string
+}
+
+// ---------- Public network identity + Wandrounik VPN ----------
+
+export type PublicIpState = 'checking' | 'ready' | 'error'
+
+/** Public egress address and coarse country code. No location finer than country is requested. */
+export interface PublicIpStatus {
+  state: PublicIpState
+  ip: string | null
+  /** ISO 3166-1 alpha-2, e.g. "DE". */
+  countryCode: string | null
+  /** True for the countries where the product should recommend a VPN (BY/RU). */
+  vpnRecommended: boolean
+  checkedAt: number | null
+  error?: string
+}
+
+export type VpnProtocol = 'wireguard' | 'openvpn'
+export type VpnConnectionState =
+  | 'disconnected'
+  | 'connecting'
+  | 'connected'
+  | 'disconnecting'
+  | 'error'
+
+export interface VpnServer {
+  id: string
+  country: string
+  countryCode: string
+  city: string
+  host: string
+  wireguardPort: number
+  openvpnPort: number
+  load: number
+  status: 'online' | 'offline' | 'maintenance'
+  freeAllowed: boolean
+  premiumAllowed: boolean
+  supportsWireguard: boolean
+  supportsOpenvpn: boolean
+  /** TCP probe latency. Null means the host did not answer within the probe timeout. */
+  pingMs: number | null
+}
+
+export interface VpnDependencyStatus {
+  available: boolean
+  executable: string | null
+  hint?: string
+}
+
+export interface VpnSettings {
+  protocol: VpnProtocol
+  /** Empty means automatic server selection by the Wandrounik control plane. */
+  serverId: string | null
+  apiBaseUrl: string
+}
+
+export type VpnAccountTier = 'anonymous' | 'free' | 'paid'
+
+export interface VpnAccountStatus {
+  authenticated: boolean
+  email: string | null
+  tier: VpnAccountTier
+}
+
+export interface VpnStatus {
+  state: VpnConnectionState
+  protocol: VpnProtocol
+  serverId: string | null
+  serverLabel: string | null
+  endpoint: string | null
+  assignedIp: string | null
+  connectedAt: number | null
+  error?: string
+  settings: VpnSettings
+  account: VpnAccountStatus
+  dependencies: Record<VpnProtocol, VpnDependencyStatus>
+}
+
+export interface VpnServersResult {
+  ok: boolean
+  servers: VpnServer[]
+  error?: string
+}
+
+export interface VpnConnectRequest {
+  protocol: VpnProtocol
+  serverId?: string | null
+}
+
+export interface VpnConfigureRequest {
+  protocol?: VpnProtocol
+  serverId?: string | null
+  apiBaseUrl?: string
+}
+
+export interface VpnAuthRequest {
+  email: string
+  password: string
+}
+
+export interface VpnAuthResult {
+  ok: boolean
+  status: VpnStatus
+  error?: string
+}
+
+export interface VpnTrafficStats {
+  source: 'anonymous' | 'account'
+  todayBytes: number
+  weekBytes: number
+  monthBytes: number
+  allTimeBytes: number
+  limitBytes: number | null
+  usedBytes: number | null
+  remainingBytes: number | null
+  limitExceeded: boolean
+  resetAt: string | null
+}
+
+export interface VpnTrafficResult {
+  ok: boolean
+  traffic: VpnTrafficStats | null
   error?: string
 }
 

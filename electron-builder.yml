@@ -35,6 +35,13 @@ extraResources:
 
 win:
   icon: build/icon.png
+  # Bundled VPN backends (vendored by scripts/vpn/vendor.mjs): a portable
+  # wireguard.exe (drivers embedded) plus the official OpenVPN MSI that the
+  # app installs silently on first OpenVPN connect. Windows-only — Linux uses
+  # distro packages.
+  extraResources:
+    - from: .build/vpn
+      to: vpn
   # Never publish an unsigned Windows artifact. Release/CI must provide an
   # OV/EV certificate issued to exactly "ASCore AI" via WIN_CSC_LINK and
   # WIN_CSC_KEY_PASSWORD (or make it available in the certificate store).

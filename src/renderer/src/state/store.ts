@@ -56,7 +56,7 @@ import { diffStat } from '@/lib/diff'
 import { solveZCodeCaptcha } from '@/lib/zcode-captcha'
 import { isLanguageCode, type LanguageCode } from '@/language'
 
-export type View = 'home' | 'workspace' | 'blueprint' | 'analytics' | 'omniroute'
+export type View = 'home' | 'workspace' | 'blueprint' | 'analytics' | 'omniroute' | 'vpn'
 /** Agent permission mode — mirrors ZCode's "Ask before changes" control. */
 export type AgentMode = 'ask' | 'auto'
 export type Connection = 'unknown' | 'connecting' | 'connected' | 'error'
@@ -1347,6 +1347,8 @@ interface AppState {
   closeAnalytics: () => void
   openOmniroutePage: (path: string) => void
   closeOmniroute: () => void
+  openVpn: () => void
+  closeVpn: () => void
   toggleDir: (node: TreeNode) => Promise<void>
   refreshDirectory: (path: string) => Promise<void>
   /** Rebase the remote tree root one directory up (SSH only). */
@@ -2355,6 +2357,14 @@ export const useApp = create<AppState>((set, get) => {
   },
 
   closeOmniroute() {
+    set({ view: get().active ? 'workspace' : 'home' })
+  },
+
+  openVpn() {
+    set({ view: 'vpn' })
+  },
+
+  closeVpn() {
     set({ view: get().active ? 'workspace' : 'home' })
   },
 

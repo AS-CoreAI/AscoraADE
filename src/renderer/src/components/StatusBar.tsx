@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState, type JSX } from 'react'
 import { useApp, type AppLanguage, type LiveOpenTarget } from '@/state/store'
 import { tr, type TranslationKey } from '@/language'
+import { api } from '@/lib/api'
 import { Icon } from './Icon'
 import {
   REASONING_LABEL_KEY,
@@ -11,11 +12,12 @@ import {
   GLM_MODE_SHORT_KEY,
   MODE_LABEL_KEY
 } from './Composer'
-import { WPROVIDER_SERVICE_INFO } from '@shared/ipc'
+import { WPROVIDER_SERVICE_INFO, type PublicIpStatus } from '@shared/ipc'
 
 /** Re-poll Claude usage every few minutes while it's the active backend. */
 const USAGE_POLL_MS = 3 * 60 * 1000
 const LIVE_TARGET_STORAGE_KEY = 'ascora.live-open-target'
+const IP_POLL_MS = 5 * 60 * 1000
 
 const CONN_COLOR: Record<string, string> = {
   unknown: 'var(--text-faint)',
@@ -47,6 +49,13 @@ export function resetLabel(iso?: string, language: AppLanguage = 'en'): string {
 export function StatusBar(): JSX.Element {
   const [liveTarget, setLiveTarget] = useState<LiveOpenTarget>(savedLiveTarget)
   const [liveTargetOpen, setLiveTargetOpen] = useState(false)
+  const [publicIp, setPublicIp] = useState<PublicIpStatus>({
+    state: 'checking',
+    ip: null,
+    countryCode: null,
+    vpnRecommended: false,
+    checkedAt: null
+  })
   const liveTargetRef = useRef<HTMLSpanElement>(null)
   const liveTargetMenuId = useId()
   const active = useApp((s) => s.active)
@@ -91,6 +100,7 @@ export function StatusBar(): JSX.Element {
   const activeFile = useApp((s) => s.activeFile)
   const setSettingsOpen = useApp((s) => s.setSettingsOpen)
   const setUsageOpen = useApp((s) => s.setUsageOpen)
+  const openVpn = useApp((s) => s.openVpn)
   const liveUrl = useApp((s) => s.liveUrl)
   const livePort = useApp((s) => s.livePort)
   const goLive = useApp((s) => s.goLive)
@@ -158,6 +168,25 @@ export function StatusBar(): JSX.Element {
       window.removeEventListener('keydown', closeOnEscape)
     }
   }, [liveTargetOpen])
+
+  useEffect(() => {
+    let alive = true
+    const unsubscribe = api.network.onStatusChanged((next) => {
+      if (alive) setPublicIp(next)
+    })
+    const refresh = (): void => {
+      void api.network.publicIp().then((next) => {
+        if (alive) setPublicIp(next)
+      })
+    }
+    refresh()
+    const timer = setInterval(refresh, IP_POLL_MS)
+    return () => {
+      alive = false
+      clearInterval(timer)
+      unsubscribe()
+    }
+  }, [])
 
   // Headline usage window (most-consumed) for the status-bar indicator.
   const usageWin = isCodex ? codexUsage?.headline : isClaude ? claudeUsage?.headline : undefined
@@ -286,6 +315,12 @@ export function StatusBar(): JSX.Element {
           ? t(MODE_LABEL_KEY[mode])
           : t('status.autoApply')
 
+  const ipLabel = publicIp.state === 'checking'
+    ? t('status.ipChecking')
+    : publicIp.ip
+      ? `${t('status.publicIp')}: ${publicIp.ip}${publicIp.countryCode ? ` · ${publicIp.countryCode}` : ''}${publicIp.vpnRecommended ? ` · ${t('status.vpnNeeded')}` : ''}`
+      : t('status.ipUnavailable')
+
   return (
     <div className="statusbar">
       <button
@@ -297,6 +332,14 @@ export function StatusBar(): JSX.Element {
       </button>
       <span className="seg">{modelLabel}</span>
       <span className="seg">{accessLabel}</span>
+      <button
+        type="button"
+        className={`seg seg-btn ip-seg${publicIp.vpnRecommended ? ' restricted' : publicIp.state === 'ready' ? ' safe' : ''}`}
+        onClick={openVpn}
+        title={t('status.openVpn')}
+      >
+        <Icon name="shield" size={12} /> {ipLabel}
+      </button>
       <span className="spacer" />
       {usageWin && (
         <button

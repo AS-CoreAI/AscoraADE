@@ -11,6 +11,7 @@ import { HomeView } from '@/views/HomeView'
 import { WorkspaceView } from '@/views/WorkspaceView'
 import { AnalyticsView } from '@/views/AnalyticsView'
 import { OmnirouteView } from '@/views/OmnirouteView'
+import { VpnView } from '@/views/VpnView'
 import { useApp } from '@/state/store'
 import { api } from '@/lib/api'
 
@@ -46,6 +47,8 @@ export function App(): JSX.Element {
         <div className="main">
           {view === 'analytics' ? (
             <AnalyticsView />
+          ) : view === 'vpn' ? (
+            <VpnView />
           ) : view === 'omniroute' ? (
             <OmnirouteView />
           ) : view === 'home' ? (

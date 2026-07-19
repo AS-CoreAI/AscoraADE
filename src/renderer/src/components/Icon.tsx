@@ -52,8 +52,15 @@ export type IconName =
   | 'sliders'
   | 'activity'
   | 'flask'
+  | 'shield'
 
 const paths: Record<IconName, JSX.Element> = {
+  shield: (
+    <>
+      <path d="M12 3 20 6v5c0 5.2-3.2 8.4-8 10-4.8-1.6-8-4.8-8-10V6z" />
+      <path d="m9 12 2 2 4-4" />
+    </>
+  ),
   plus: (
     <>
       <line x1="12" y1="5" x2="12" y2="19" />

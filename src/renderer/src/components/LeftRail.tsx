@@ -92,6 +92,8 @@ export function LeftRail(): JSX.Element {
   const [agenticMenuOpen, setAgenticMenuOpen] = useState(true)
   const omniroutePath = useApp((s) => s.omniroutePath)
   const openOmniroutePage = useApp((s) => s.openOmniroutePage)
+  const openVpn = useApp((s) => s.openVpn)
+  const closeVpn = useApp((s) => s.closeVpn)
   const footerMenuRef = useRef<HTMLDivElement>(null)
   const [aboutOpen, setAboutOpen] = useState(false)
 
@@ -716,6 +718,21 @@ export function LeftRail(): JSX.Element {
           }}
         >
           <Icon name="route" size={17} />
+        </button>
+        <button
+          className={`rail-settings${view === 'vpn' ? ' active vpn-active' : ''}`}
+          title={t('rail.vpn')}
+          aria-label={t('rail.vpn')}
+          aria-current={view === 'vpn' ? 'page' : undefined}
+          onClick={() => {
+            setThemeMenuOpen(false)
+            setLanguageMenuOpen(false)
+            setOmniMenuOpen(false)
+            setAboutOpen(false)
+            view === 'vpn' ? closeVpn() : openVpn()
+          }}
+        >
+          <Icon name="shield" size={17} />
         </button>
         <button
           className="rail-settings"

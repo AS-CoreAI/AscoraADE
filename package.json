@@ -27,7 +27,9 @@
     "omniroute:smoke": "node scripts/omniroute/smoke.mjs",
     "omniroute:providers": "node scripts/omniroute/sync-provider-catalog.mjs",
     "omniroute:update": "node scripts/omniroute/update.mjs",
-    "dist:win": "npm run omniroute:ensure && electron-vite build && electron-builder --win",
+    "vpn:vendor": "node scripts/vpn/vendor.mjs",
+    "vpn:ensure": "node scripts/vpn/vendor.mjs --ensure",
+    "dist:win": "npm run omniroute:ensure && npm run vpn:ensure && electron-vite build && electron-builder --win",
     "dist:linux": "npm run omniroute:ensure && electron-vite build && electron-builder --linux",
     "postinstall": "install-electron && npm run rebuild:optional"
   },

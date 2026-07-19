@@ -1,0 +1,12 @@
+{
+  "wireguard": {
+    "version": "0.5.3",
+    "url": "https://download.wireguard.com/windows-client/wireguard-amd64-0.5.3.msi",
+    "sha256": "76fcec042c5989c5b816cd32eaed1e5b1c3b998a4b1c9eca55f299e3314ef7e4"
+  },
+  "openvpn": {
+    "version": "2.6.14",
+    "url": "https://swupdate.openvpn.org/community/releases/OpenVPN-2.6.14-I001-amd64.msi",
+    "sha256": "19bca902826ef0dc9a6cf849297ce43ba8b2844bdb913c37230308d3274c953c"
+  }
+}
