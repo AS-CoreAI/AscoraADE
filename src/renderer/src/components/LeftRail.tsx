@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type JSX } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type JSX } from 'react'
 import { createPortal } from 'react-dom'
 import type { TaskSummary, Workspace } from '@shared/ipc'
 import { Icon } from './Icon'
@@ -89,6 +89,7 @@ export function LeftRail(): JSX.Element {
   const [themeMenuOpen, setThemeMenuOpen] = useState(false)
   const [languageMenuOpen, setLanguageMenuOpen] = useState(false)
   const [omniMenuOpen, setOmniMenuOpen] = useState(false)
+  const [agenticMenuOpen, setAgenticMenuOpen] = useState(true)
   const omniroutePath = useApp((s) => s.omniroutePath)
   const openOmniroutePage = useApp((s) => s.openOmniroutePage)
   const footerMenuRef = useRef<HTMLDivElement>(null)
@@ -649,20 +650,25 @@ export function LeftRail(): JSX.Element {
             <div className="theme-menu-label">{t('rail.omniroute')}</div>
             {OMNI_PAGE_GROUPS.map((group) => (
               <div className="omni-menu-group" key={group.id} role="group" aria-label={t(group.labelKey)}>
-                <div className="omni-menu-group-label">{t(group.labelKey)}</div>
-                {OMNI_PAGES.filter((page) => page.group === group.id).map((page) => (
+                {group.id === 'agentic' ? (
+                  <button className="omni-menu-group-label omni-menu-group-toggle" type="button" aria-expanded={agenticMenuOpen} onClick={() => setAgenticMenuOpen((open) => !open)}>
+                    <span>{t(group.labelKey)}</span><Icon name="chevronDown" size={12} />
+                  </button>
+                ) : <div className="omni-menu-group-label">{t(group.labelKey)}</div>}
+                {(group.id !== 'agentic' || agenticMenuOpen) && OMNI_PAGES.filter((page) => page.group === group.id).map((page) => (
                   <button
-                    className="theme-option omni-option"
+                    className={`theme-option omni-option${page.subtitleKey ? ' detailed' : ''}`}
                     key={page.path}
                     role="menuitem"
                     aria-current={view === 'omniroute' && omniroutePath === page.path ? 'page' : undefined}
+                    style={page.accent ? { '--omni-option-accent': page.accent } as CSSProperties : undefined}
                     onClick={() => {
                       openOmniroutePage(page.path)
                       setOmniMenuOpen(false)
                     }}
                   >
                     <Icon name={page.icon} size={14} />
-                    <span>{t(page.labelKey)}</span>
+                    <span className="omni-option-copy"><strong>{t(page.labelKey)}</strong>{page.subtitleKey ? <small>{t(page.subtitleKey)}</small> : null}</span>
                   </button>
                 ))}
               </div>

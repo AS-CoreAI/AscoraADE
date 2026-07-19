@@ -5,12 +5,13 @@ import {
   useRef,
   useState,
   type DependencyList,
+  type CSSProperties,
   type FormEvent,
   type JSX,
   type ReactNode
 } from 'react'
 import { Icon, type IconName } from '@/components/Icon'
-import { OMNI_PAGE_GROUPS, OMNI_PAGES } from '@/lib/omniroutePages'
+import { AGENTIC_PAGE_PATHS, OMNI_PAGE_GROUPS, OMNI_PAGES } from '@/lib/omniroutePages'
 import {
   downloadOmniJson,
   formatOmniDate,
@@ -31,6 +32,7 @@ import { useApp, type AppLanguage } from '@/state/store'
 import { api } from '@/lib/api'
 import { tr, type TranslationKey } from '@/language'
 import { ProvidersPage as FullProvidersPage } from './omniroute/ProvidersPage'
+import { AgenticPage } from './omniroute/AgenticPages'
 
 const FIRST_BOOT_HINT_MS = 10_000
 
@@ -879,6 +881,7 @@ function NativePage({ path, language, refreshKey }: { path: string; language: Ap
   if (path === '/dashboard/cli-code') return <CliPage language={language} refreshKey={refreshKey} />
   if (path === '/dashboard/tools/traffic-inspector') return <TrafficPage language={language} refreshKey={refreshKey} />
   if (path === '/dashboard/playground') return <PlaygroundPage language={language} refreshKey={refreshKey} />
+  if (AGENTIC_PAGE_PATHS.has(path)) return <AgenticPage path={path} language={language} refreshKey={refreshKey} />
   return <HomePage language={language} refreshKey={refreshKey} />
 }
 
@@ -891,6 +894,7 @@ export function OmnirouteView(): JSX.Element {
   const t = (key: TranslationKey): string => tr(appLanguage, key)
   const [reloadKey, setReloadKey] = useState(0)
   const [sectionsOpen, setSectionsOpen] = useState(false)
+  const [agenticSectionsOpen, setAgenticSectionsOpen] = useState(true)
   const [tabScroll, setTabScroll] = useState({ overflow: false, left: false, right: false })
   const tabsRef = useRef<HTMLDivElement>(null)
   const sectionsRef = useRef<HTMLDivElement>(null)
@@ -984,21 +988,26 @@ export function OmnirouteView(): JSX.Element {
             <div className="omni-sections-menu" role="menu" aria-label={t('omni.sections')}>
               {OMNI_PAGE_GROUPS.map((group) => (
                 <div className="omni-sections-group" role="group" aria-label={t(group.labelKey)} key={group.id}>
-                  <div className="omni-sections-group-label">{t(group.labelKey)}</div>
-                  {OMNI_PAGES.filter((page) => page.group === group.id).map((page) => (
+                  {group.id === 'agentic' ? (
+                    <button className="omni-sections-group-label omni-sections-group-toggle" type="button" aria-expanded={agenticSectionsOpen} onClick={() => setAgenticSectionsOpen((open) => !open)}>
+                      <span>{t(group.labelKey)}</span><Icon name="chevronDown" size={12} />
+                    </button>
+                  ) : <div className="omni-sections-group-label">{t(group.labelKey)}</div>}
+                  {(group.id !== 'agentic' || agenticSectionsOpen) && OMNI_PAGES.filter((page) => page.group === group.id).map((page) => (
                     <button
-                      className={`omni-sections-item${path === page.path ? ' active' : ''}`}
+                      className={`omni-sections-item${page.subtitleKey ? ' detailed' : ''}${path === page.path ? ' active' : ''}`}
                       type="button"
                       role="menuitem"
                       aria-current={path === page.path ? 'page' : undefined}
                       key={page.path}
+                      style={page.accent ? { '--omni-item-accent': page.accent } as CSSProperties : undefined}
                       onClick={() => {
                         openOmniroutePage(page.path)
                         setSectionsOpen(false)
                       }}
                     >
                       <Icon name={page.icon} size={14} />
-                      <span>{t(page.labelKey)}</span>
+                      <span className="omni-sections-item-copy"><strong>{t(page.labelKey)}</strong>{page.subtitleKey ? <small>{t(page.subtitleKey)}</small> : null}</span>
                     </button>
                   ))}
                 </div>
@@ -1010,7 +1019,7 @@ export function OmnirouteView(): JSX.Element {
           <button className="omni-tab-scroll left" type="button" disabled={!tabScroll.left} aria-label={t('omni.scrollLeft')} title={t('omni.scrollLeft')} onClick={() => scrollTabs(-1)}><Icon name="chevronRight" size={13} /></button>
         )}
         <div className="omni-tabs" ref={tabsRef} role="tablist">
-          {OMNI_PAGES.map((page) => <button className={`omni-tab${path === page.path ? ' active' : ''}`} key={page.path} role="tab" aria-selected={path === page.path} title={t(page.labelKey)} onClick={() => openOmniroutePage(page.path)}><Icon name={page.icon} size={14} /><span>{t(page.labelKey)}</span></button>)}
+          {OMNI_PAGES.map((page) => <button className={`omni-tab${path === page.path ? ' active' : ''}`} style={page.accent ? { '--omni-tab-accent': page.accent } as CSSProperties : undefined} key={page.path} role="tab" aria-selected={path === page.path} title={t(page.labelKey)} onClick={() => openOmniroutePage(page.path)}><Icon name={page.icon} size={14} /><span>{t(page.labelKey)}</span></button>)}
         </div>
         {tabScroll.overflow && (
           <button className="omni-tab-scroll" type="button" disabled={!tabScroll.right} aria-label={t('omni.scrollRight')} title={t('omni.scrollRight')} onClick={() => scrollTabs(1)}><Icon name="chevronRight" size={13} /></button>

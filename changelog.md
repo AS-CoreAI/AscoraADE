@@ -1,6 +1,11 @@
 ## Ascora ADE 1.3.0
 What's new?
 
+### Added
+- **Guided OmniRoute provider registration wizard** — Providers now offers a polished four-step flow for API-key, custom compatible, and OAuth connections. The wizard includes searchable provider selection, OpenAI/Anthropic/Claude Code protocol choices, credential validation, connection testing, clear success/error results, responsive layouts, keyboard/backdrop dismissal, and localized Russian/English copy while reusing the existing secure provider APIs and specialized OAuth/device-code/import flows.
+- **Native Agentic Features workspace** — OmniRoute navigation now includes a collapsible, color-accented Agentic Features group with localized two-line entries and native Ascora pages for Memory, Agent Skills, Chaos Mode, Omni Skills, MCP, A2A, and Plugins. The pages expose live gateway metrics, engine and protocol health, task/activity summaries, searchable skill and MCP tool catalogs, installed/marketplace content, responsive cards, and explicit empty/error states without embedding the upstream dashboard.
+- **Interactive memory, agent-skill, and A2A controls** — Agent Skill cards can open a full detail modal with metadata, API/CLI contracts, and the complete `SKILL.md`; Memory has a real enable/disable switch plus a validated modal for creating factual, episodic, procedural, or semantic entries; and A2A has a persisted server switch that reflects its live online/disabled state. All actions use the bundled OmniRoute management API, report progress and failures in-app, and preserve safe defaults.
+
 ### Changed
 - **Version bump to 1.3.0** — package metadata and the About section now report version 1.3.0.
 - **Bundled OmniRoute gateway** — OmniRoute 3.8.48 now ships as a zero-install, managed sidecar with automatic startup, health monitoring, crash recovery, persistent configuration, and clean shutdown.

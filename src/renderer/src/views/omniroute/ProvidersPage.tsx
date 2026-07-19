@@ -148,7 +148,7 @@ function capabilityLabel(language: AppLanguage, capability: string): string {
   return l(language, ...(labels[capability] ?? [capability, capability]))
 }
 
-function Modal({ title, onClose, wide = false, children }: { title: string; onClose: () => void; wide?: boolean; children: ReactNode }): JSX.Element {
+function Modal({ title, onClose, wide = false, dialogClassName = '', children }: { title: string; onClose: () => void; wide?: boolean; dialogClassName?: string; children: ReactNode }): JSX.Element {
   useEffect(() => {
     const close = (event: KeyboardEvent): void => { if (event.key === 'Escape') onClose() }
     document.addEventListener('keydown', close)
@@ -156,8 +156,8 @@ function Modal({ title, onClose, wide = false, children }: { title: string; onCl
   }, [onClose])
   return (
     <div className="omni-provider-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target) onClose() }}>
-      <section className={`omni-provider-modal${wide ? ' wide' : ''}`} role="dialog" aria-modal="true" aria-label={title}>
-        <header><h2>{title}</h2><button type="button" className="omni-icon-button" onClick={onClose}><Icon name="close" size={16} /></button></header>
+      <section className={`omni-provider-modal${wide ? ' wide' : ''}${dialogClassName ? ` ${dialogClassName}` : ''}`} role="dialog" aria-modal="true" aria-label={title}>
+        <header><h2>{title}</h2><button type="button" className="omni-icon-button" onClick={onClose} aria-label={`Close ${title}`}><Icon name="close" size={16} /></button></header>
         <div className="omni-provider-modal-body">{children}</div>
       </section>
     </div>
@@ -727,6 +727,222 @@ function CommandCodeEditor({ language, onClose, onSaved }: { language: AppLangua
   </Modal>
 }
 
+type WizardKind = 'apikey' | 'custom' | 'oauth'
+type WizardStep = 'type' | 'provider' | 'credentials' | 'result'
+
+function ProviderWizard({ language, onClose, onSaved }: { language: AppLanguage; onClose: () => void; onSaved: () => void }): JSX.Element {
+  const [kind, setKind] = useState<WizardKind>('apikey')
+  const [step, setStep] = useState<WizardStep>('type')
+  const [query, setQuery] = useState('')
+  const [entry, setEntry] = useState<ProviderEntry | null>(null)
+  const [name, setName] = useState('')
+  const [apiKey, setApiKey] = useState('')
+  const [baseUrl, setBaseUrl] = useState('')
+  const [prefix, setPrefix] = useState('')
+  const [mode, setMode] = useState<CompatibleMode>('openai')
+  const [busy, setBusy] = useState(false)
+  const [status, setStatus] = useState('')
+  const [error, setError] = useState('')
+  const [result, setResult] = useState<{ name: string; test: string } | null>(null)
+  const [oauthEntry, setOauthEntry] = useState<ProviderEntry | null>(null)
+
+  const options = useMemo<ProviderEntry[]>(() => {
+    const needle = query.trim().toLowerCase()
+    return OMNI_PROVIDER_CATALOG
+      .filter((provider) => (kind === 'oauth' ? provider.category === 'oauth' : provider.category !== 'oauth' && provider.category !== 'upstream-proxy'))
+      .filter((provider) => !needle || `${provider.name} ${provider.id}`.toLowerCase().includes(needle))
+  }, [kind, query])
+
+  const kinds: { id: WizardKind; icon: 'key' | 'server' | 'external'; title: string; hint: string }[] = [
+    { id: 'apikey', icon: 'key', title: l(language, 'Провайдер с API-ключом', 'API-key provider'), hint: l(language, 'Встроенные провайдеры: OpenAI, Anthropic, Gemini, Groq и другие.', 'Built-in providers like OpenAI, Anthropic, Gemini, Groq and more.') },
+    { id: 'custom', icon: 'server', title: l(language, 'Совместимый провайдер', 'Custom compatible provider'), hint: l(language, 'Свой endpoint, совместимый с OpenAI, Anthropic или Claude Code.', 'Your own OpenAI-, Anthropic- or Claude Code-compatible endpoint.') },
+    { id: 'oauth', icon: 'external', title: l(language, 'Провайдер OAuth', 'OAuth provider'), hint: l(language, 'OAuth, device-code или локальный импорт для кодинг-провайдеров.', 'OAuth, device-code or local import for coding providers.') }
+  ]
+
+  const steps: { id: WizardStep; label: string }[] = [
+    { id: 'type', label: l(language, 'Тип', 'Type') },
+    { id: 'provider', label: l(language, 'Поставщик', 'Provider') },
+    { id: 'credentials', label: l(language, 'Доступ', 'Access') },
+    { id: 'result', label: l(language, 'Результат', 'Result') }
+  ]
+  const stepIndex = steps.findIndex((item) => item.id === step)
+
+  const chooseKind = (next: WizardKind): void => {
+    setKind(next); setError(''); setEntry(null); setName(''); setApiKey(''); setBaseUrl(''); setPrefix('')
+    setStep(next === 'custom' ? 'credentials' : 'provider')
+  }
+
+  const chooseProvider = (provider: ProviderEntry): void => {
+    setEntry(provider); setError(''); setName(''); setApiKey(''); setBaseUrl(provider.baseUrl || provider.localDefault || '')
+    if (provider.category === 'oauth') setOauthEntry(provider)
+    else setStep('credentials')
+  }
+
+  const connectionId = (created: unknown): string => {
+    const record = isRecord(created) ? created : {}
+    const connection = isRecord(record.connection) ? record.connection : isRecord(record.provider) ? record.provider : record
+    return omniId(connection)
+  }
+  const testConnection = async (id: string): Promise<string> => {
+    if (!id) return 'unknown'
+    try { await omniRequest('POST', `/api/providers/${encodeURIComponent(id)}/test`); return 'ok' }
+    catch { return 'error' }
+  }
+
+  const submitApiKey = async (): Promise<void> => {
+    if (!entry) return
+    setBusy(true); setError('')
+    try {
+      if (apiKey.trim()) {
+        setStatus(l(language, 'Проверка учётных данных…', 'Validating credentials…'))
+        const body: Record<string, unknown> = { provider: entry.id, apiKey: apiKey.trim() }
+        if (baseUrl.trim()) body.baseUrl = baseUrl.trim()
+        const response = await omniRequest<unknown>('POST', '/api/providers/validate', body)
+        const validation = isRecord(response) ? response : {}
+        if (validation.valid === false && validation.unsupported !== true) throw new Error(omniText(validation.error, l(language, 'Проверка не пройдена.', 'Validation failed.')))
+      }
+      setStatus(l(language, 'Сохранение подключения…', 'Saving connection…'))
+      const payload: Record<string, unknown> = { provider: entry.id, name: name.trim() || 'main' }
+      if (apiKey.trim()) payload.apiKey = apiKey.trim()
+      if (baseUrl.trim()) payload.providerSpecificData = { baseUrl: baseUrl.trim() }
+      const created = await omniRequest<unknown>('POST', '/api/providers', payload)
+      setStatus(l(language, 'Проверка соединения…', 'Testing connection…'))
+      const test = await testConnection(connectionId(created))
+      setResult({ name: name.trim() || entry.name, test }); setStep('result'); onSaved()
+    } catch (caught) { setError(caught instanceof Error ? caught.message : String(caught)); setStep('result') }
+    finally { setBusy(false); setStatus('') }
+  }
+
+  const submitCustom = async (): Promise<void> => {
+    setBusy(true); setError('')
+    try {
+      const type = mode === 'openai' ? 'openai-compatible' : 'anthropic-compatible'
+      setStatus(l(language, 'Создание совместимого провайдера…', 'Creating compatible provider…'))
+      const nodeResponse = await omniRequest<unknown>('POST', '/api/provider-nodes', { name: name.trim(), prefix: prefix.trim(), baseUrl: baseUrl.trim(), type, ...(mode === 'cc' ? { compatMode: 'cc' } : {}) })
+      const nodeRecord = isRecord(nodeResponse) && isRecord(nodeResponse.node) ? nodeResponse.node : isRecord(nodeResponse) ? nodeResponse : {}
+      const nodeId = omniId(nodeRecord)
+      setStatus(l(language, 'Сохранение подключения…', 'Saving connection…'))
+      const created = await omniRequest<unknown>('POST', '/api/providers', { provider: nodeId, name: name.trim() || 'main', ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}) })
+      setStatus(l(language, 'Проверка соединения…', 'Testing connection…'))
+      const test = await testConnection(connectionId(created))
+      setResult({ name: name.trim() || l(language, 'Совместимый провайдер', 'Custom provider'), test }); setStep('result'); onSaved()
+    } catch (caught) { setError(caught instanceof Error ? caught.message : String(caught)); setStep('result') }
+    finally { setBusy(false); setStatus('') }
+  }
+
+  const apiKeyReady = Boolean(entry && (apiKey.trim() || isCredentialOptional(entry)))
+  const customReady = Boolean(name.trim() && prefix.trim() && baseUrl.trim())
+
+  return (
+    <Modal title={l(language, 'Мастер регистрации поставщика', 'Provider registration wizard')} onClose={onClose} wide dialogClassName="omni-provider-wizard-modal">
+      <div className="omni-wizard">
+        <ol className="omni-wizard-steps" aria-label={l(language, 'Этапы подключения', 'Connection steps')}>
+          {steps.map((item, index) => (
+            <li key={item.id} className={`omni-wizard-step${item.id === step ? ' active' : ''}${index < stepIndex ? ' done' : ''}`} aria-current={item.id === step ? 'step' : undefined}>
+              <span className="omni-wizard-step-marker">{index < stepIndex ? <Icon name="check" size={14} /> : index + 1}</span>
+              <span>{item.label}</span>
+            </li>
+          ))}
+        </ol>
+
+        <div className="omni-wizard-stage">
+          {step === 'type' && (
+            <section className="omni-wizard-panel">
+              <header className="omni-wizard-intro">
+                <span>{l(language, 'Шаг 1 из 4', 'Step 1 of 4')}</span>
+                <h3>{l(language, 'Выберите способ подключения', 'Choose a connection method')}</h3>
+                <p>{l(language, 'Укажите, как провайдер выдаёт доступ к моделям. Параметры можно будет изменить позже.', 'Choose how this provider grants access to its models. You can change the settings later.')}</p>
+              </header>
+              <div className="omni-wizard-types">
+                {kinds.map((item) => (
+                  <button type="button" key={item.id} className="omni-wizard-type" onClick={() => chooseKind(item.id)}>
+                    <span className="omni-wizard-type-icon"><Icon name={item.icon} size={22} /></span>
+                    <span className="omni-wizard-type-copy"><strong>{item.title}</strong><span>{item.hint}</span></span>
+                    <Icon name="arrowRight" size={16} />
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {step === 'provider' && (
+            <section className="omni-wizard-panel omni-wizard-providers">
+              <header className="omni-wizard-intro omni-wizard-intro-row">
+                <div><span>{l(language, 'Шаг 2 из 4', 'Step 2 of 4')}</span><h3>{l(language, 'Выберите провайдера', 'Choose a provider')}</h3><p>{l(language, 'Найдите сервис в каталоге и перейдите к настройке доступа.', 'Find a service in the catalog and continue to access settings.')}</p></div>
+                <Badge>{options.length}</Badge>
+              </header>
+              <label className="omni-wizard-search"><Icon name="search" size={15} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={l(language, 'Поиск по названию или идентификатору…', 'Search by name or identifier…')} /></label>
+              {options.length > 0 ? (
+                <div className="omni-provider-grid">
+                  {options.map((provider) => (
+                    <button type="button" key={provider.id} className="omni-provider-catalog-card" onClick={() => chooseProvider(provider)}>
+                      <div className="omni-provider-card-identity"><ProviderLogo entry={provider} /><strong title={provider.name}>{provider.name}</strong><i style={{ backgroundColor: CATEGORY_COLORS[provider.category] }} /></div>
+                      <div className="omni-provider-card-status"><span>{categoryLabel(language, provider.category)}</span><Icon name="arrowRight" size={13} /></div>
+                    </button>
+                  ))}
+                </div>
+              ) : <div className="omni-wizard-empty"><Icon name="search" size={20} /><strong>{l(language, 'Ничего не найдено', 'No providers found')}</strong><span>{l(language, 'Попробуйте изменить поисковый запрос.', 'Try a different search query.')}</span></div>}
+              <footer className="omni-wizard-footer"><button type="button" className="btn" onClick={() => setStep('type')}><Icon name="arrowLeft" size={14} />{l(language, 'Назад', 'Back')}</button></footer>
+            </section>
+          )}
+
+          {step === 'credentials' && kind === 'custom' && (
+            <form className="omni-wizard-panel omni-wizard-form" onSubmit={(event) => { event.preventDefault(); void submitCustom() }}>
+              <header className="omni-wizard-intro">
+                <span>{l(language, 'Шаг 3 из 4', 'Step 3 of 4')}</span>
+                <h3>{l(language, 'Настройте совместимый endpoint', 'Configure a compatible endpoint')}</h3>
+                <p>{l(language, 'Выберите протокол и укажите адрес сервера. Обязательные поля отмечены браузером при отправке.', 'Choose a protocol and enter the server address. Required fields are validated on submit.')}</p>
+              </header>
+              <div className="omni-segmented omni-wizard-mode-tabs"><button type="button" className={mode === 'openai' ? 'active' : ''} onClick={() => setMode('openai')}>OpenAI compatible</button><button type="button" className={mode === 'anthropic' ? 'active' : ''} onClick={() => setMode('anthropic')}>Anthropic compatible</button><button type="button" className={mode === 'cc' ? 'active' : ''} onClick={() => setMode('cc')}>Claude Code</button></div>
+              <div className="omni-form-grid omni-wizard-fields">
+                <Field label={l(language, 'Название', 'Name')}><input className="text-input" required value={name} onChange={(event) => setName(event.target.value)} /></Field>
+                <Field label={l(language, 'Префикс моделей', 'Model prefix')}><input className="text-input" required value={prefix} onChange={(event) => setPrefix(event.target.value)} placeholder="my-provider" /></Field>
+                <Field label="Base URL"><input className="text-input" required value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} placeholder={mode === 'openai' ? 'https://api.openai.com/v1' : 'https://api.anthropic.com/v1'} /></Field>
+                <Field label={`API key (${l(language, 'необязательно', 'optional')})`}><input className="text-input" type="password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} /></Field>
+              </div>
+              {status && <Notice kind="info">{status}</Notice>}
+              <footer className="omni-wizard-footer"><button type="button" className="btn" onClick={() => setStep('type')}><Icon name="arrowLeft" size={14} />{l(language, 'Назад', 'Back')}</button><button className="btn primary" disabled={busy || !customReady}>{busy ? <span className="omni-spinner" aria-hidden="true" /> : <Icon name="plus" size={14} />}{busy ? l(language, 'Создание…', 'Creating…') : l(language, 'Создать и проверить', 'Create and test')}</button></footer>
+            </form>
+          )}
+
+          {step === 'credentials' && kind === 'apikey' && entry && (
+            <form className="omni-wizard-panel omni-wizard-form" onSubmit={(event) => { event.preventDefault(); void submitApiKey() }}>
+              <header className="omni-wizard-intro">
+                <span>{l(language, 'Шаг 3 из 4', 'Step 3 of 4')}</span>
+                <h3>{l(language, 'Настройте доступ', 'Configure access')}</h3>
+                <p>{l(language, 'Данные сохраняются локально и используются только для запросов к выбранному провайдеру.', 'Credentials are stored locally and used only for requests to the selected provider.')}</p>
+              </header>
+              <div className="omni-wizard-chosen"><ProviderLogo entry={entry} size={30} /><div><strong>{entry.name}</strong><code>{entry.id}</code></div><Badge tone="blue">{categoryLabel(language, entry.category)}</Badge></div>
+              {(entry.authHint || entry.freeNote) && <Notice kind="info">{entry.authHint || entry.freeNote}</Notice>}
+              <div className="omni-form-grid omni-wizard-fields">
+                <Field label={l(language, 'Название подключения', 'Connection name')}><input className="text-input" value={name} onChange={(event) => setName(event.target.value)} placeholder="main" /></Field>
+                <Field label={entry.category === 'web-cookie' ? l(language, 'Cookie или токен сессии', 'Cookie or session token') : 'API key'} hint={isCredentialOptional(entry) ? l(language, 'Необязательно для локального/бесплатного.', 'Optional for local/free.') : entry.authHint}><input className="text-input" type="password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} /></Field>
+                {(entry.category === 'local' || CONFIGURABLE_BASE_URL_PROVIDERS.has(entry.id)) && <Field label="Base URL"><input className="text-input" value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} placeholder={defaultBaseUrl(entry)} /></Field>}
+              </div>
+              {status && <Notice kind="info">{status}</Notice>}
+              <footer className="omni-wizard-footer"><button type="button" className="btn" onClick={() => setStep('provider')}><Icon name="arrowLeft" size={14} />{l(language, 'Назад', 'Back')}</button><button className="btn primary" disabled={busy || !apiKeyReady}>{busy ? <span className="omni-spinner" aria-hidden="true" /> : <Icon name="plus" size={14} />}{busy ? l(language, 'Подключение…', 'Connecting…') : l(language, 'Подключить и проверить', 'Connect and test')}</button></footer>
+            </form>
+          )}
+
+          {step === 'result' && (
+            <section className="omni-wizard-panel omni-wizard-result">
+              {result ? (
+                <div className="omni-wizard-result-content">
+                  <span className={`omni-wizard-result-icon${result.test === 'error' ? ' bad' : ''}`}><Icon name={result.test === 'error' ? 'close' : 'check'} size={28} /></span>
+                  <div><span>{l(language, 'Шаг 4 из 4', 'Step 4 of 4')}</span><h3>{l(language, 'Провайдер добавлен', 'Provider added')}</h3><p>{result.name}</p></div>
+                  <Badge tone={result.test === 'ok' ? 'good' : result.test === 'error' ? 'bad' : 'neutral'}>{result.test === 'ok' ? l(language, 'Соединение проверено', 'Connection verified') : result.test === 'error' ? l(language, 'Нужна проверка соединения', 'Connection needs attention') : l(language, 'Добавлено без проверки', 'Added without validation')}</Badge>
+                </div>
+              ) : <div className="omni-wizard-result-content error"><span className="omni-wizard-result-icon bad"><Icon name="close" size={28} /></span><div><span>{l(language, 'Подключение не завершено', 'Connection not completed')}</span><h3>{l(language, 'Не удалось добавить провайдера', 'Could not add the provider')}</h3><p>{error || l(language, 'Проверьте параметры и попробуйте снова.', 'Check the settings and try again.')}</p></div></div>}
+              <footer className="omni-wizard-footer"><button type="button" className="btn" onClick={() => { setStep('type'); setResult(null); setError('') }}><Icon name="plus" size={14} />{l(language, 'Добавить ещё', 'Add another')}</button><button type="button" className="btn primary" onClick={onClose}><Icon name="check" size={14} />{l(language, 'Готово', 'Done')}</button></footer>
+            </section>
+          )}
+        </div>
+      </div>
+      {oauthEntry && <OAuthEditor language={language} entry={oauthEntry} onClose={() => setOauthEntry(null)} onSaved={() => { const added = oauthEntry; setOauthEntry(null); setResult({ name: added?.name ?? 'OAuth', test: 'unknown' }); setStep('result'); onSaved() }} />}
+    </Modal>
+  )
+}
+
 export function ProvidersPage({ language, refreshKey }: { language: AppLanguage; refreshKey: number }): JSX.Element {
   const openOmniroutePage = useApp((state) => state.openOmniroutePage)
   const [revision, setRevision] = useState(0)
@@ -742,6 +958,7 @@ export function ProvidersPage({ language, refreshKey }: { language: AppLanguage;
   const [compatibleEditor, setCompatibleEditor] = useState<{ mode: CompatibleMode; node?: OmniRecord | null } | null>(null)
   const [oauthEntry, setOauthEntry] = useState<ProviderEntry | null>(null)
   const [commandCodeOpen, setCommandCodeOpen] = useState(false)
+  const [wizardOpen, setWizardOpen] = useState(false)
   const [selectedModels, setSelectedModels] = useState<OmniRecord[]>([])
   const [modelsLoading, setModelsLoading] = useState(false)
   const [busy, setBusy] = useState('')
@@ -894,7 +1111,7 @@ export function ProvidersPage({ language, refreshKey }: { language: AppLanguage;
   })) as Record<ProviderCategory, { total: number; configured: number }>, [connectionsByProvider, entries])
 
   return <div className="omni-page omni-providers-page">
-    <header className="omni-page-head"><div className="omni-page-heading"><span className="omni-page-icon"><Icon name="server" size={19} /></span><div><h1>{tr(language, 'omni.providers')}</h1><p>{l(language, 'Полный каталог провайдеров, подключения, модели и проверка учётных данных.', 'Full provider catalog, connections, models, and credential health.')}</p></div></div><div className="omni-page-actions"><button type="button" className="btn" disabled={busy === 'test-all' || connections.length === 0} onClick={() => void perform('test-all', () => omniRequest('POST', '/api/providers/test-batch', { mode: 'all', providerId: null }), l(language, 'Проверка всех подключений завершена.', 'All connections tested.'))}><Icon name="activity" size={14} />{l(language, 'Проверить все', 'Test all')}</button><button type="button" className="btn primary" onClick={() => setCompatibleEditor({ mode: 'openai' })}><Icon name="plus" size={14} />{l(language, 'Совместимый', 'Compatible')}</button></div></header>
+    <header className="omni-page-head"><div className="omni-page-heading"><span className="omni-page-icon"><Icon name="server" size={19} /></span><div><h1>{tr(language, 'omni.providers')}</h1><p>{l(language, 'Полный каталог провайдеров, подключения, модели и проверка учётных данных.', 'Full provider catalog, connections, models, and credential health.')}</p></div></div><div className="omni-page-actions"><button type="button" className="btn" disabled={busy === 'test-all' || connections.length === 0} onClick={() => void perform('test-all', () => omniRequest('POST', '/api/providers/test-batch', { mode: 'all', providerId: null }), l(language, 'Проверка всех подключений завершена.', 'All connections tested.'))}><Icon name="activity" size={14} />{l(language, 'Проверить все', 'Test all')}</button><button type="button" className="btn" onClick={() => setCompatibleEditor({ mode: 'openai' })}><Icon name="plus" size={14} />{l(language, 'Совместимый', 'Compatible')}</button><button type="button" className="btn primary" onClick={() => setWizardOpen(true)}><Icon name="plus" size={14} />{l(language, 'Мастер регистрации', 'Registration wizard')}</button></div></header>
     {resource.error && <Notice kind="error">{resource.error}</Notice>}
     {message && <Notice kind={message.kind}>{message.text}</Notice>}
     {connections.length === 0 && !resource.loading && <section className="omni-provider-onboarding"><ProviderLogo entry={OMNI_PROVIDER_CATALOG.find((item) => item.id === 'openai') as ProviderEntry} size={34} /><div><strong>{l(language, 'Добавьте первого провайдера', 'Add your first provider')}</strong><p>{l(language, 'Выберите тип в каталоге. Ascora проведёт через API-ключ, локальный сервер, веб-сессию или OAuth.', 'Choose a type from the catalog. Ascora will guide you through API key, local server, web session, or OAuth setup.')}</p></div></section>}
@@ -934,5 +1151,6 @@ export function ProvidersPage({ language, refreshKey }: { language: AppLanguage;
     {compatibleEditor && <CompatibleEditor language={language} mode={compatibleEditor.mode} node={compatibleEditor.node} onClose={() => setCompatibleEditor(null)} onSaved={(node) => { reload(l(language, 'Совместимый провайдер сохранён.', 'Compatible provider saved.')); const id = omniId(node); if (id) setSelectedProviderId(id) }} />}
     {oauthEntry && <OAuthEditor language={language} entry={oauthEntry} onClose={() => setOauthEntry(null)} onSaved={() => reload(l(language, 'OAuth-подключение сохранено.', 'OAuth connection saved.'))} />}
     {commandCodeOpen && <CommandCodeEditor language={language} onClose={() => setCommandCodeOpen(false)} onSaved={() => reload(l(language, 'Command Code подключён.', 'Command Code connected.'))} />}
+    {wizardOpen && <ProviderWizard language={language} onClose={() => setWizardOpen(false)} onSaved={() => reload(l(language, 'Провайдер добавлен.', 'Provider added.'))} />}
   </div>
 }
