@@ -1,6 +1,7 @@
 import { app, BrowserWindow, safeStorage } from 'electron'
-import { createHash, generateKeyPairSync, randomUUID } from 'node:crypto'
-import { spawn, type ChildProcess } from 'node:child_process'
+import { createHash, createHmac, generateKeyPairSync, randomUUID } from 'node:crypto'
+import { execFile, spawn, type ChildProcess } from 'node:child_process'
+import { promisify } from 'node:util'
 import { access, chmod, mkdir, readdir, readFile, readlink, rename, rm, writeFile } from 'node:fs/promises'
 import { constants as fsConstants } from 'node:fs'
 import { isIP } from 'node:net'
@@ -9,7 +10,7 @@ import path from 'node:path'
 import { IPC, type VpnAccountTier, type VpnAuthRequest, type VpnAuthResult, type VpnConfigureRequest, type VpnConnectRequest, type VpnDependencyStatus, type VpnProtocol, type VpnServer, type VpnServersResult, type VpnSettings, type VpnStatus, type VpnTrafficResult, type VpnTrafficStats } from '../../shared/ipc'
 import { getPublicIpStatus } from '../network/public-ip'
 
-const DEFAULT_API_URL = 'https://api.wandrounik.com'
+const DEFAULT_API_URL = 'https://wandrounikvpn.asted.cloud'
 const REQUEST_TIMEOUT_MS = 15_000
 const SERVER_CACHE_MS = 60_000
 const TUNNEL_NAME = 'ascora-wandrounik'
@@ -211,6 +212,60 @@ async function deviceFingerprint(): Promise<string> {
     await writePrivateJson(devicePath(), stored)
   }
   return createHash('sha256').update(`ascora-wandrounik:${stored.id}`).digest('hex')
+}
+
+const execFileAsync = promisify(execFile)
+
+// Shared secret proving the request comes from an official client app.
+// Must match CLIENT_API_SHARED_SECRET on the Wandrounik Control Panel (and
+// the copy in the Wandrounik VPN client).
+const VPN_CLIENT_API_SECRET =
+  process.env.WANDROUNIK_CLIENT_SECRET ?? 'REMOVED_DEPLOYMENT_SECRET'
+
+async function hardwareMachineIdentifier(): Promise<string | null> {
+  try {
+    if (process.platform === 'win32') {
+      const { stdout } = await execFileAsync('reg.exe', [
+        'query', 'HKLM\\SOFTWARE\\Microsoft\\Cryptography', '/v', 'MachineGuid'
+      ], { windowsHide: true, timeout: 4000 })
+      return stdout.match(/MachineGuid\s+REG_SZ\s+(.+)/i)?.[1]?.trim() ?? null
+    }
+    if (process.platform === 'linux') {
+      return (await readFile('/etc/machine-id', 'utf8')).trim() || null
+    }
+    if (process.platform === 'darwin') {
+      const { stdout } = await execFileAsync('ioreg', ['-rd1', '-c', 'IOPlatformExpertDevice'], { timeout: 4000 })
+      return stdout.match(/"IOPlatformUUID"\s*=\s*"([^"]+)"/)?.[1] ?? null
+    }
+  } catch {
+    return null
+  }
+  return null
+}
+
+let cachedMachineId: string | null = null
+
+// Stable per-physical-machine identifier shared by every Wandrounik-family
+// product (Wandrounik VPN, Ascora ADE): the server enforces the shared daily
+// traffic limit by this value, so the derivation must stay identical across
+// products (see Wandrounik client src/main/device.ts).
+async function getMachineId(): Promise<string> {
+  if (!cachedMachineId) {
+    const stableId = (await hardwareMachineIdentifier()) ?? (await deviceFingerprint())
+    cachedMachineId = createHash('sha256')
+      .update(`wandrounik-machine:${stableId.trim().toLowerCase()}`)
+      .digest('hex')
+  }
+  return cachedMachineId
+}
+
+async function clientProofHeaders(body: string): Promise<Record<string, string>> {
+  const machineId = await getMachineId()
+  const ts = Math.floor(Date.now() / 1000).toString()
+  const proof = createHmac('sha256', VPN_CLIENT_API_SECRET)
+    .update(`${ts}.${machineId}.${body}`)
+    .digest('hex')
+  return { 'X-Machine-Id': machineId, 'X-Client-Ts': ts, 'X-Client-Proof': proof }
 }
 
 function normalizeApiBaseUrl(value: string): string {
@@ -554,6 +609,9 @@ async function apiRequest(pathname: string, init?: RequestInit, authenticate = t
     ...(init?.headers as Record<string, string> | undefined)
   }
   if (authenticate && tokens?.accessToken) headers.Authorization = `Bearer ${tokens.accessToken}`
+  // Machine identity + HMAC proof: the panel rejects unsigned /connect calls
+  // and enforces the daily limit per physical machine across our products.
+  Object.assign(headers, await clientProofHeaders(typeof init?.body === 'string' ? init.body : ''))
   let response: Response
   try {
     response = await fetch(`${settings.apiBaseUrl}${pathname}`, {
