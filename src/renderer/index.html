@@ -10,10 +10,12 @@
       from o.alicdn.com and pulls its dynamic widget JS/CSS (device fingerprint)
       from g.alicdn.com. Without g.alicdn.com the fingerprint fails, the proof
       degrades, and z.ai rejects the turn with `3007 captcha verify failed`.
+      yookassa.ru bootstraps the payment widget, whose client bundle is served
+      from static.yoomoney.ru.
     -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://o.alicdn.com https://g.alicdn.com; style-src 'self' 'unsafe-inline' https://g.alicdn.com; img-src 'self' data: https:; font-src 'self' data:; worker-src 'self' blob:; frame-src https: http://localhost:* http://127.0.0.1:*; connect-src 'self' ws: wss: https: http://localhost:* http://127.0.0.1:*"
+      content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://o.alicdn.com https://g.alicdn.com https://yookassa.ru https://static.yoomoney.ru; style-src 'self' 'unsafe-inline' https://g.alicdn.com; img-src 'self' data: https:; font-src 'self' data:; worker-src 'self' blob:; frame-src https: http://localhost:* http://127.0.0.1:*; connect-src 'self' ws: wss: https: http://localhost:* http://127.0.0.1:*"
     />
     <title>Ascora ADE</title>
   </head>

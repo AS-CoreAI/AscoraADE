@@ -5,6 +5,7 @@ import { Icon } from './Icon'
 import { OMNI_PAGE_GROUPS, OMNI_PAGES } from '@/lib/omniroutePages'
 import { SshRail } from './SshRail'
 import { BlueprintRail } from './BlueprintRail'
+import { DeveloperToolsModal } from './DeveloperToolsModal'
 import { useApp, type AppLanguage, type ThemePreference } from '@/state/store'
 import { api } from '@/lib/api'
 import { LANGUAGE_OPTIONS, localeForLanguage, tr, type TranslationKey } from '@/language'
@@ -86,8 +87,8 @@ export function LeftRail(): JSX.Element {
   const setAppLanguage = useApp((s) => s.setAppLanguage)
   const t = (key: TranslationKey, values?: Record<string, string | number>): string =>
     tr(appLanguage, key, values)
-  const [themeMenuOpen, setThemeMenuOpen] = useState(false)
-  const [languageMenuOpen, setLanguageMenuOpen] = useState(false)
+  const [preferencesMenuOpen, setPreferencesMenuOpen] = useState(false)
+  const [toolsOpen, setToolsOpen] = useState(false)
   const [omniMenuOpen, setOmniMenuOpen] = useState(false)
   const [agenticMenuOpen, setAgenticMenuOpen] = useState(true)
   const omniroutePath = useApp((s) => s.omniroutePath)
@@ -98,17 +99,15 @@ export function LeftRail(): JSX.Element {
   const [aboutOpen, setAboutOpen] = useState(false)
 
   useEffect(() => {
-    if (!themeMenuOpen && !languageMenuOpen && !omniMenuOpen) return
+    if (!preferencesMenuOpen && !omniMenuOpen) return
     const close = (event: MouseEvent): void => {
       if (footerMenuRef.current?.contains(event.target as Node)) return
-      setThemeMenuOpen(false)
-      setLanguageMenuOpen(false)
+      setPreferencesMenuOpen(false)
       setOmniMenuOpen(false)
     }
     const closeOnEscape = (event: KeyboardEvent): void => {
       if (event.key !== 'Escape') return
-      setThemeMenuOpen(false)
-      setLanguageMenuOpen(false)
+      setPreferencesMenuOpen(false)
       setOmniMenuOpen(false)
     }
     document.addEventListener('mousedown', close)
@@ -117,7 +116,7 @@ export function LeftRail(): JSX.Element {
       document.removeEventListener('mousedown', close)
       document.removeEventListener('keydown', closeOnEscape)
     }
-  }, [languageMenuOpen, omniMenuOpen, themeMenuOpen])
+  }, [omniMenuOpen, preferencesMenuOpen])
 
   useEffect(() => {
     if (!workspaceMenu) return
@@ -627,24 +626,42 @@ export function LeftRail(): JSX.Element {
       <SshRail />
 
       <div className="rail-footer" ref={footerMenuRef}>
-        {themeMenuOpen && (
-          <div className="theme-menu" role="menu" aria-label={t('app.theme.label')}>
-            <div className="theme-menu-label">{t('app.theme.label')}</div>
-            {THEMES.map((theme) => (
-              <button
-                className="theme-option"
-                key={theme}
-                role="menuitemradio"
-                aria-checked={themePreference === theme}
-                onClick={() => {
-                  setThemePreference(theme)
-                  setThemeMenuOpen(false)
-                }}
-              >
-                <span>{t(THEME_LABELS[theme])}</span>
-                {themePreference === theme && <Icon name="check" size={14} />}
-              </button>
-            ))}
+        {preferencesMenuOpen && (
+          <div className="theme-menu preferences-menu" role="dialog" aria-label={t('rail.preferencesSettings')}>
+            <div className="preferences-menu-section" role="group" aria-label={t('app.theme.label')}>
+              <div className="theme-menu-label">{t('app.theme.label')}</div>
+              <div className="preferences-choice-grid">
+                {THEMES.map((theme) => (
+                  <button
+                    className="theme-option"
+                    key={theme}
+                    role="radio"
+                    aria-checked={themePreference === theme}
+                    onClick={() => setThemePreference(theme)}
+                  >
+                    <span>{t(THEME_LABELS[theme])}</span>
+                    {themePreference === theme && <Icon name="check" size={14} />}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="preferences-menu-section" role="group" aria-label={t('app.language.label')}>
+              <div className="theme-menu-label">{t('app.language.label')}</div>
+              <div className="preferences-choice-grid languages">
+                {LANGUAGE_OPTIONS.map((language) => (
+                  <button
+                    className="theme-option"
+                    key={language.value}
+                    role="radio"
+                    aria-checked={appLanguage === language.value}
+                    onClick={() => setAppLanguage(language.value)}
+                  >
+                    <span>{t(language.labelKey)}</span>
+                    {appLanguage === language.value && <Icon name="check" size={14} />}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         )}
         {omniMenuOpen && (
@@ -677,31 +694,16 @@ export function LeftRail(): JSX.Element {
             ))}
           </div>
         )}
-        {languageMenuOpen && (
-          <div className="theme-menu" role="menu" aria-label={t('app.language.label')}>
-            <div className="theme-menu-label">{t('app.language.label')}</div>
-            {LANGUAGE_OPTIONS.map((language) => (
-              <button
-                className="theme-option"
-                key={language.value}
-                role="menuitemradio"
-                aria-checked={appLanguage === language.value}
-                onClick={() => {
-                  setAppLanguage(language.value)
-                  setLanguageMenuOpen(false)
-                }}
-              >
-                <span>{t(language.labelKey)}</span>
-                {appLanguage === language.value && <Icon name="check" size={14} />}
-              </button>
-            ))}
-          </div>
-        )}
         <button
           className={`rail-settings${view === 'analytics' ? ' active' : ''}`}
           title={t('rail.analytics')}
           aria-label={t('rail.analytics')}
-          onClick={() => (view === 'analytics' ? closeAnalytics() : openAnalytics())}
+          onClick={() => {
+            setPreferencesMenuOpen(false)
+            setOmniMenuOpen(false)
+            setAboutOpen(false)
+            view === 'analytics' ? closeAnalytics() : openAnalytics()
+          }}
         >
           <Icon name="barChart" size={17} />
         </button>
@@ -711,8 +713,7 @@ export function LeftRail(): JSX.Element {
           aria-label={t('rail.omniroute')}
           aria-expanded={omniMenuOpen}
           onClick={() => {
-            setThemeMenuOpen(false)
-            setLanguageMenuOpen(false)
+            setPreferencesMenuOpen(false)
             setAboutOpen(false)
             setOmniMenuOpen((open) => !open)
           }}
@@ -725,8 +726,7 @@ export function LeftRail(): JSX.Element {
           aria-label={t('rail.vpn')}
           aria-current={view === 'vpn' ? 'page' : undefined}
           onClick={() => {
-            setThemeMenuOpen(false)
-            setLanguageMenuOpen(false)
+            setPreferencesMenuOpen(false)
             setOmniMenuOpen(false)
             setAboutOpen(false)
             view === 'vpn' ? closeVpn() : openVpn()
@@ -739,8 +739,7 @@ export function LeftRail(): JSX.Element {
           title={t('rail.agentBackendSettings')}
           aria-label={t('rail.agentBackendSettings')}
           onClick={() => {
-            setThemeMenuOpen(false)
-            setLanguageMenuOpen(false)
+            setPreferencesMenuOpen(false)
             setOmniMenuOpen(false)
             setAboutOpen(false)
             setSettingsOpen(true)
@@ -749,39 +748,37 @@ export function LeftRail(): JSX.Element {
           <Icon name="message" size={17} />
         </button>
         <button
-          className={`rail-settings${themeMenuOpen ? ' active' : ''}`}
-          title={t('rail.appearanceSettings')}
-          aria-label={t('rail.appearanceSettings')}
-          aria-expanded={themeMenuOpen}
+          className={`rail-settings${toolsOpen ? ' active' : ''}`}
+          title={t('tools.title')}
+          aria-label={t('tools.title')}
+          aria-expanded={toolsOpen}
           onClick={() => {
-            setLanguageMenuOpen(false)
+            setPreferencesMenuOpen(false)
             setOmniMenuOpen(false)
             setAboutOpen(false)
-            setThemeMenuOpen((open) => !open)
+            setToolsOpen(true)
+          }}
+        >
+          <Icon name="terminal" size={17} />
+        </button>
+        <button
+          className={`rail-settings${preferencesMenuOpen ? ' active' : ''}`}
+          title={t('rail.preferencesSettings')}
+          aria-label={t('rail.preferencesSettings')}
+          aria-expanded={preferencesMenuOpen}
+          onClick={() => {
+            setOmniMenuOpen(false)
+            setAboutOpen(false)
+            setPreferencesMenuOpen((open) => !open)
           }}
         >
           <Icon name="settings" size={17} />
-        </button>
-        <button
-          className={`rail-settings${languageMenuOpen ? ' active' : ''}`}
-          title={t('app.language.settings')}
-          aria-label={t('app.language.settings')}
-          aria-expanded={languageMenuOpen}
-          onClick={() => {
-            setThemeMenuOpen(false)
-            setOmniMenuOpen(false)
-            setAboutOpen(false)
-            setLanguageMenuOpen((open) => !open)
-          }}
-        >
-          <Icon name="globe" size={17} />
         </button>
         <span style={{ flex: 1 }} />
         <div
           className="about-wrap"
           onMouseEnter={() => {
-            setThemeMenuOpen(false)
-            setLanguageMenuOpen(false)
+            setPreferencesMenuOpen(false)
             setOmniMenuOpen(false)
             setAboutOpen(true)
           }}
@@ -817,8 +814,7 @@ export function LeftRail(): JSX.Element {
             aria-label={t('rail.about')}
             aria-expanded={aboutOpen}
             onClick={() => {
-              setThemeMenuOpen(false)
-              setLanguageMenuOpen(false)
+              setPreferencesMenuOpen(false)
               setOmniMenuOpen(false)
               setAboutOpen((open) => !open)
             }}
@@ -827,6 +823,7 @@ export function LeftRail(): JSX.Element {
           </button>
         </div>
       </div>
+      <DeveloperToolsModal open={toolsOpen} onClose={() => setToolsOpen(false)} />
     </div>
   )
 }

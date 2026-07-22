@@ -13,6 +13,7 @@ import { registerOmnirouteHandlers } from './omniroute'
 import { registerAnalyticsHandlers } from './analytics'
 import { registerGitHandlers } from './git'
 import { registerTerminalHandlers } from './terminal'
+import { registerDeveloperToolsHandlers } from './developer-tools'
 import { registerAgentHandlers } from './agent'
 import { registerWebHandlers } from './web'
 import { registerLiveHandlers } from './live'
@@ -39,6 +40,7 @@ export function registerIpc(): void {
   registerAnalyticsHandlers()
   registerGitHandlers()
   registerTerminalHandlers()
+  registerDeveloperToolsHandlers()
   registerAgentHandlers()
   registerWebHandlers()
   registerLiveHandlers()

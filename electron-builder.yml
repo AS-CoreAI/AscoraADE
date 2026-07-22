@@ -35,10 +35,9 @@ extraResources:
 
 win:
   icon: build/icon.png
-  # Bundled VPN backends (vendored by scripts/vpn/vendor.mjs): a portable
-  # wireguard.exe (drivers embedded) plus the official OpenVPN MSI that the
-  # app installs silently on first OpenVPN connect. Windows-only — Linux uses
-  # distro packages.
+  # Bundled VPN backends (vendored by scripts/vpn/vendor.mjs): portable
+  # WireGuard and OpenVPN runtimes with their signed Wintun/WireGuardNT
+  # drivers. Windows-only — Linux uses distro packages.
   extraResources:
     - from: .build/vpn
       to: vpn

@@ -837,6 +837,35 @@ button {
   font-weight: 600;
   text-transform: uppercase;
 }
+.preferences-menu {
+  padding: 7px;
+}
+.preferences-menu-section + .preferences-menu-section {
+  margin-top: 7px;
+  padding-top: 7px;
+  border-top: 1px solid var(--border);
+}
+.preferences-choice-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 3px;
+}
+.preferences-choice-grid.languages {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.preferences-choice-grid .theme-option {
+  min-width: 0;
+  gap: 4px;
+}
+.preferences-choice-grid .theme-option span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.preferences-choice-grid .theme-option[aria-checked='true'] {
+  color: var(--accent);
+  background: var(--accent-dim);
+}
 .theme-option {
   width: 100%;
   height: 30px;
@@ -5008,6 +5037,8 @@ button.changes-badge:hover {
 .vpn-account-head em { padding: 3px 6px; border-radius: 999px; color: var(--text-muted); background: var(--bg-elevated); font-size: 8.5px; font-style: normal; font-weight: 700; text-transform: uppercase; }
 .vpn-account-head em.premium { color: #d8b45f; background: color-mix(in srgb, #d8b45f 12%, var(--bg-elevated)); }
 .vpn-account-action { width: calc(100% - 20px); min-height: 30px; margin: 0 10px 10px; }
+.vpn-account-actions { display: grid; grid-template-columns: 1fr auto; gap: 7px; padding: 0 10px 10px; }
+.vpn-account-actions .btn { min-height: 30px; }
 .vpn-auth-form { display: grid; gap: 7px; padding: 0 10px 10px; }
 .vpn-auth-form .text-input { width: 100%; min-width: 0; }
 .vpn-auth-actions { display: flex; align-items: center; gap: 8px; }
@@ -5035,6 +5066,34 @@ button.changes-badge:hover {
 .vpn-server-metrics small { color: var(--text-faint); font-size: 9.5px; white-space: nowrap; }
 .vpn-empty { min-height: 100px; display: flex; align-items: center; justify-content: center; gap: 9px; color: var(--text-faint); font-size: 11.5px; }
 .vpn-spinner { width: 15px; height: 15px; border: 2px solid var(--border-strong); border-top-color: var(--vpn-accent); border-radius: 50%; animation: omni-spin .8s linear infinite; }
+
+.vpn-payment-backdrop { z-index: 1500; padding: 18px; backdrop-filter: blur(4px); }
+.vpn-payment-modal { width: min(470px, 100%); max-height: calc(100vh - 36px); overflow: auto; }
+.vpn-payment-modal.form-open { width: min(600px, 100%); }
+.vpn-payment-modal > header { display: flex; min-height: 72px; align-items: center; justify-content: space-between; gap: 15px; padding: 13px 16px; border-bottom: 1px solid var(--border); background: var(--bg); }
+.vpn-payment-modal > header > div { display: flex; min-width: 0; align-items: center; gap: 11px; }
+.vpn-payment-modal > header > div > div { min-width: 0; }
+.vpn-payment-modal h2 { margin: 0; color: var(--text); font-size: 14px; }
+.vpn-payment-modal header p { margin: 4px 0 0; color: var(--text-muted); font-size: 10px; }
+.vpn-payment-symbol { display: grid; width: 38px; height: 38px; flex: 0 0 auto; place-items: center; border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border)); border-radius: 11px; color: var(--accent); background: var(--accent-dim); }
+.vpn-payment-modal .modal-close { width: 30px; height: 30px; margin: 0; border: 1px solid var(--border); font-size: 19px; }
+.vpn-payment-plans { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 16px; }
+.vpn-payment-plans button { display: grid; min-width: 0; grid-template-columns: 16px 1fr; gap: 9px; padding: 13px; border: 1px solid var(--border); border-radius: 9px; color: var(--text); background: var(--bg-input); text-align: left; }
+.vpn-payment-plans button:hover { border-color: var(--border-strong); background: var(--bg-hover); }
+.vpn-payment-plans button.selected { border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); background: var(--accent-dim); }
+.vpn-payment-plans button > i { width: 13px; height: 13px; margin-top: 2px; border: 1px solid var(--border-strong); border-radius: 50%; }
+.vpn-payment-plans button.selected > i { border: 3px solid var(--bg-input); background: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.vpn-payment-plans span { display: flex; min-width: 0; flex-direction: column; gap: 4px; }
+.vpn-payment-plans small { overflow: hidden; color: var(--text-muted); font-size: 8px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; text-transform: uppercase; }
+.vpn-payment-plans strong { font-size: 18px; }
+.vpn-payment-plans em { color: var(--text-faint); font-size: 9px; font-style: normal; }
+.vpn-payment-secure { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 0 16px 14px; color: var(--text-muted); font-size: 9.5px; }
+.vpn-payment-secure svg { color: var(--accent); }
+.vpn-payment-primary { width: calc(100% - 32px); min-height: 35px; margin: 0 16px 16px; }
+.ascora-payment-form-wrap { position: relative; min-height: 390px; margin: 12px 16px; }
+.ascora-payment-form { min-height: 390px; overflow: hidden; border: 1px solid var(--border); border-radius: 9px; background: var(--bg-input); }
+.ascora-payment-form-loading { position: absolute; z-index: 1; inset: 0; display: grid; place-items: center; border: 1px solid var(--border); border-radius: 9px; background: var(--bg-input); }
+.vpn-payment-error { margin: 0 16px 16px; padding: 9px 10px; border: 1px solid color-mix(in srgb, var(--danger) 30%, var(--border)); border-radius: 8px; color: var(--danger); background: color-mix(in srgb, var(--danger) 7%, var(--bg-elevated)); font-size: 10px; line-height: 1.45; }
 
 @media (max-width: 900px) {
   .vpn-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -5428,6 +5487,317 @@ button.changes-badge:hover {
 .connection-settings-modal .modal-body {
   min-height: 0;
   overflow-y: auto;
+}
+
+/* ---------- Developer tools installer ---------- */
+.tools-modal-backdrop {
+  padding: 20px;
+  z-index: 90;
+  backdrop-filter: blur(4px);
+}
+.tools-modal {
+  display: flex;
+  width: min(920px, 96vw);
+  max-height: min(820px, calc(100vh - 40px));
+  flex-direction: column;
+  overflow: hidden;
+}
+.tools-modal-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--border);
+  background:
+    radial-gradient(circle at 12% 0%, color-mix(in srgb, var(--accent) 11%, transparent), transparent 52%),
+    var(--bg-elevated);
+}
+.tools-modal-header > div {
+  min-width: 0;
+  flex: 1;
+}
+.tools-modal-header h2 {
+  font-size: 15px;
+  font-weight: 650;
+}
+.tools-modal-header p {
+  margin-top: 3px;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+.tools-modal-symbol {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--border));
+  border-radius: 11px;
+  color: var(--accent);
+  background: var(--accent-dim);
+}
+.tools-modal .modal-close:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.tools-platform-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+}
+.tools-platform-tabs button {
+  display: flex;
+  min-width: 0;
+  height: 36px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.tools-platform-tabs button:hover {
+  color: var(--text);
+  background: var(--bg-hover);
+}
+.tools-platform-tabs button.active {
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--border));
+  color: var(--text);
+  background: var(--accent-dim);
+}
+.tools-platform-tabs small {
+  overflow: hidden;
+  padding: 2px 5px;
+  border-radius: 999px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  font-size: 8.5px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-transform: uppercase;
+}
+.tools-platform-dot {
+  width: 6px;
+  height: 6px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.7;
+}
+.tools-modal-meta {
+  display: flex;
+  min-height: 38px;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 16px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.tools-modal-meta > span {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: 7px;
+}
+.tools-modal-meta > span svg {
+  flex-shrink: 0;
+  color: var(--accent);
+}
+.tools-modal-meta > span.error,
+.tools-modal-meta > span.error svg {
+  color: var(--danger);
+}
+.tools-modal-meta button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 7px;
+  border-radius: 6px;
+}
+.tools-modal-meta button:hover:not(:disabled) {
+  color: var(--text);
+  background: var(--bg-hover);
+}
+.tools-modal-meta button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.tools-list {
+  display: grid;
+  min-height: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-auto-rows: minmax(104px, auto);
+  align-content: start;
+  gap: 8px;
+  overflow-y: auto;
+  padding: 12px 14px 14px;
+  background: var(--bg);
+}
+.tool-card {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+  padding: 11px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--bg-elevated);
+  transition: border-color 120ms ease, background 120ms ease;
+}
+.tool-card:hover {
+  border-color: var(--border-strong);
+  background: color-mix(in srgb, var(--bg-hover) 46%, var(--bg-elevated));
+}
+.tool-card-icon {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  color: var(--accent);
+  background: var(--bg-input);
+  font: 700 10px var(--font-mono);
+  letter-spacing: -0.03em;
+}
+.tool-card-copy {
+  min-width: 0;
+}
+.tool-card-title {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+}
+.tool-card-title strong {
+  overflow: hidden;
+  font-size: 12.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tool-installed {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 5px;
+  border-radius: 999px;
+  color: var(--accent);
+  background: var(--accent-dim);
+  font-size: 8.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.tool-card-copy p {
+  min-height: 30px;
+  margin: 4px 0 7px;
+  color: var(--text-muted);
+  font-size: 10.5px;
+  line-height: 1.4;
+}
+.tool-card-copy code {
+  display: block;
+  overflow: hidden;
+  padding: 5px 6px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--text-faint);
+  background: var(--bg-input);
+  font: 9px var(--font-mono);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  user-select: text;
+}
+.tool-install-button,
+.tools-install-all {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+  font-size: 10.5px;
+  font-weight: 650;
+}
+.tool-install-button {
+  min-width: 88px;
+  min-height: 30px;
+  padding: 0 9px;
+  color: var(--text-muted);
+  background: var(--bg-input);
+}
+.tool-install-button:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 52%, var(--border));
+  color: var(--accent);
+  background: var(--accent-dim);
+}
+.tool-install-button:disabled,
+.tools-install-all:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
+}
+.tools-modal-footer {
+  display: flex;
+  min-height: 58px;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-elevated);
+}
+.tools-modal-footer > div {
+  min-width: 0;
+  flex: 1;
+}
+.tools-result {
+  display: block;
+  overflow: hidden;
+  font-size: 10.5px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tools-result.success { color: var(--accent); }
+.tools-result.error { color: var(--danger); }
+.tools-install-all {
+  min-width: 150px;
+  min-height: 36px;
+  padding: 0 13px;
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
+  color: var(--accent);
+  background: var(--accent-dim);
+}
+.tools-install-all:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 22%, var(--bg-elevated));
+}
+.tools-spinner {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  border: 1.5px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: tools-spin 0.7s linear infinite;
+}
+@keyframes tools-spin { to { transform: rotate(360deg); } }
+
+@media (max-width: 760px) {
+  .tools-modal-backdrop { padding: 8px; }
+  .tools-modal { width: calc(100vw - 16px); max-height: calc(100vh - 16px); }
+  .tools-list { grid-template-columns: 1fr; }
+  .tools-platform-tabs small { display: none; }
+  .tool-card-copy p { min-height: 0; }
 }
 .modal-copilot-auth {
   width: min(560px, 92%);

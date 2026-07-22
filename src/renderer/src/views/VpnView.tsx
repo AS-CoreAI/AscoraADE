@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState, type FormEvent, type JSX } from 'react'
-import type { PublicIpStatus, VpnProtocol, VpnServer, VpnStatus, VpnTrafficStats } from '@shared/ipc'
+import { useEffect, useMemo, useRef, useState, type FormEvent, type JSX } from 'react'
+import type { PublicIpStatus, VpnPaymentPlanCode, VpnProtocol, VpnServer, VpnStatus, VpnTrafficStats } from '@shared/ipc'
 import { Icon } from '@/components/Icon'
 import { tr, type TranslationKey } from '@/language'
 import { api } from '@/lib/api'
@@ -67,6 +67,7 @@ export function VpnView(): JSX.Element {
   const [authPassword, setAuthPassword] = useState('')
   const [authBusy, setAuthBusy] = useState(false)
   const [traffic, setTraffic] = useState<VpnTrafficStats | null>(null)
+  const [paymentOpen, setPaymentOpen] = useState(false)
 
   useEffect(() => {
     let alive = true
@@ -416,7 +417,10 @@ export function VpnView(): JSX.Element {
                 </em>
               </div>
               {status?.account.authenticated ? (
-                <button className="btn vpn-account-action" type="button" disabled={authBusy || busy} onClick={() => void logout()}>{t('vpn.signOut')}</button>
+                <div className="vpn-account-actions">
+                  {status.account.tier !== 'paid' && <button className="btn primary" type="button" disabled={authBusy || busy} onClick={() => setPaymentOpen(true)}>{t('vpn.upgrade')}</button>}
+                  <button className="btn" type="button" disabled={authBusy || busy} onClick={() => void logout()}>{t('vpn.signOut')}</button>
+                </div>
               ) : authOpen ? (
                 <form className="vpn-auth-form" onSubmit={(event) => void submitAuth(event)}>
                   <input className="text-input" type="email" autoComplete="username" placeholder={t('vpn.email')} value={authEmail} disabled={authBusy} onChange={(event) => setAuthEmail(event.target.value)} />
@@ -461,6 +465,184 @@ export function VpnView(): JSX.Element {
           )}
         </section>
       </div>
+      {paymentOpen && <VpnPaymentModal language={language} onClose={() => setPaymentOpen(false)} onStatus={setStatus} onPaid={async () => {
+        const [serverResult, trafficResult] = await Promise.all([api.vpn.servers(true), api.vpn.traffic()])
+        setServers(serverResult.servers)
+        if (trafficResult.ok) setTraffic(trafficResult.traffic)
+      }} />}
     </div>
   )
+}
+
+type CheckoutWidget = { render(id: string): Promise<void>; destroy(): void | Promise<void> }
+type CheckoutConstructor = new (options: Record<string, unknown>) => CheckoutWidget
+const CHECKOUT_LOAD_TIMEOUT_MS = 20_000
+
+function VpnPaymentModal({ language, onClose, onStatus, onPaid }: {
+  language: Parameters<typeof tr>[0]
+  onClose(): void
+  onStatus(status: VpnStatus): void
+  onPaid(): Promise<void>
+}): JSX.Element {
+  const t = (key: TranslationKey): string => tr(language, key)
+  const [plan, setPlan] = useState<VpnPaymentPlanCode>('plus_month')
+  const [paymentId, setPaymentId] = useState<string | null>(null)
+  const [paymentToken, setPaymentToken] = useState<string | null>(null)
+  const [formOpen, setFormOpen] = useState(false)
+  const [formLoading, setFormLoading] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const widget = useRef<CheckoutWidget | null>(null)
+  const checkoutStarting = useRef(false)
+  const paymentErrorMessage = t('vpn.paymentError')
+
+  useEffect(() => {
+    if (!formOpen || !paymentId || !paymentToken) return
+
+    let disposed = false
+    let rendered = false
+    let renderSettled = false
+    let checkout: CheckoutWidget | null = null
+    let timeout: number | undefined
+    const containerId = `ascora-payment-form-${paymentId}`
+    setFormLoading(true)
+
+    // Waiting one frame guarantees that React has mounted an empty SDK container.
+    const frame = window.requestAnimationFrame(() => {
+      if (disposed) return
+      try {
+        const Widget = (window as unknown as { YooMoneyCheckoutWidget?: CheckoutConstructor }).YooMoneyCheckoutWidget
+        if (!Widget) throw new Error('YooKassa widget did not initialize.')
+        const nextCheckout = new Widget({
+          confirmation_token: paymentToken,
+          return_url: 'https://wandrounik.com/account/billing',
+          error_callback: () => {
+            if (!disposed) {
+              setFormLoading(false)
+              setError(paymentErrorMessage)
+            }
+          }
+        })
+
+        checkout = nextCheckout
+        widget.current = nextCheckout
+        const renderPromise = nextCheckout.render(containerId)
+        void renderPromise.then(() => {
+          renderSettled = true
+          rendered = true
+          if (timeout) window.clearTimeout(timeout)
+          if (disposed) {
+            void safeDestroyCheckout(nextCheckout)
+            return
+          }
+          setFormLoading(false)
+        }).catch((reason: unknown) => {
+          renderSettled = true
+          if (timeout) window.clearTimeout(timeout)
+          console.error('YooKassa render() failed', reason)
+          if (!disposed) {
+            setFormLoading(false)
+            setError(reason instanceof Error ? reason.message : paymentErrorMessage)
+          }
+        })
+
+        timeout = window.setTimeout(() => {
+          if (!disposed && !renderSettled) {
+            setFormLoading(false)
+            setError(paymentErrorMessage)
+          }
+        }, CHECKOUT_LOAD_TIMEOUT_MS)
+      } catch (reason) {
+        renderSettled = true
+        console.error('YooKassa initialization failed', reason)
+        if (!disposed) {
+          setFormLoading(false)
+          setError(reason instanceof Error ? reason.message : paymentErrorMessage)
+        }
+      }
+    })
+
+    return () => {
+      disposed = true
+      window.cancelAnimationFrame(frame)
+      if (timeout) window.clearTimeout(timeout)
+      if (widget.current === checkout) widget.current = null
+      // The SDK throws internally when destroy() runs before render() settles.
+      // If rendering is still pending, its completion handler performs cleanup.
+      if (rendered && checkout) void safeDestroyCheckout(checkout)
+    }
+  }, [formOpen, paymentErrorMessage, paymentId, paymentToken])
+
+  const start = async (): Promise<void> => {
+    if (checkoutStarting.current) return
+    checkoutStarting.current = true
+    setBusy(true); setError(null)
+    try {
+      await loadYooKassaWidget()
+      const result = await api.vpn.paymentCreate(plan)
+      if (!result.ok || !result.payment) throw new Error(result.error ?? t('vpn.error'))
+      if (!result.payment.confirmation_token) throw new Error(t('vpn.paymentError'))
+      setPaymentId(result.payment.id)
+      setPaymentToken(result.payment.confirmation_token)
+      setFormOpen(true)
+    } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)) }
+    finally { checkoutStarting.current = false; setBusy(false) }
+  }
+
+  const verify = async (): Promise<void> => {
+    if (!paymentId) return
+    setBusy(true); setError(null)
+    try {
+      const result = await api.vpn.paymentSync(paymentId)
+      onStatus(result.status)
+      if (!result.ok) throw new Error(result.error ?? t('vpn.error'))
+      if (result.payment?.status === 'succeeded') { await onPaid(); onClose() }
+      else setError(t('vpn.paymentPending'))
+    } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)) }
+    finally { setBusy(false) }
+  }
+
+  return <div className="modal-backdrop vpn-payment-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}><section className={`modal vpn-payment-modal${formOpen ? ' form-open' : ''}`}>
+    <header><div><span className="vpn-payment-symbol"><Icon name="shield" size={20} /></span><div><h2>{t('vpn.paymentTitle')}</h2><p>{t('vpn.paymentSubtitle')}</p></div></div><button className="modal-close" type="button" onClick={onClose} aria-label="Close">×</button></header>
+    {!formOpen ? <><div className="vpn-payment-plans"><button className={plan === 'plus_month' ? 'selected' : ''} onClick={() => setPlan('plus_month')}><i /><span><small>{t('vpn.month')}</small><strong>199 ₽</strong><em>30 days</em></span></button><button className={plan === 'plus_year' ? 'selected' : ''} onClick={() => setPlan('plus_year')}><i /><span><small>{t('vpn.year')}</small><strong>1 490 ₽</strong><em>365 days</em></span></button></div><div className="vpn-payment-secure"><Icon name="key" size={14} />{t('vpn.paymentSecure')}</div><button className="btn primary vpn-payment-primary" disabled={busy} onClick={() => void start()}>{busy ? <span className="vpn-spinner" /> : t('vpn.pay')}</button></> : <><div className="ascora-payment-form-wrap">{formLoading && <div className="ascora-payment-form-loading"><span className="vpn-spinner" /></div>}<div id={`ascora-payment-form-${paymentId}`} className="ascora-payment-form" /></div><button className="btn primary vpn-payment-primary" disabled={busy || formLoading} onClick={() => void verify()}>{busy ? <span className="vpn-spinner" /> : t('vpn.checkPayment')}</button></>}
+    {error && <div className="vpn-payment-error">{error}</div>}
+  </section></div>
+}
+
+let yooKassaScriptPromise: Promise<void> | null = null
+function loadYooKassaWidget(): Promise<void> {
+  if ((window as unknown as { YooMoneyCheckoutWidget?: unknown }).YooMoneyCheckoutWidget) return Promise.resolve()
+  if (yooKassaScriptPromise) return yooKassaScriptPromise
+
+  yooKassaScriptPromise = new Promise((resolve, reject) => {
+    document.querySelector<HTMLScriptElement>('script[data-yookassa-widget]')?.remove()
+    const script = document.createElement('script')
+    const timeout = window.setTimeout(() => {
+      script.remove()
+      yooKassaScriptPromise = null
+      reject(new Error('YooKassa widget timed out.'))
+    }, CHECKOUT_LOAD_TIMEOUT_MS)
+    script.src = 'https://yookassa.ru/checkout-widget/v1/checkout-widget.js'
+    script.dataset.yookassaWidget = 'true'
+    script.onload = () => {
+      window.clearTimeout(timeout)
+      if ((window as unknown as { YooMoneyCheckoutWidget?: unknown }).YooMoneyCheckoutWidget) resolve()
+      else {
+        yooKassaScriptPromise = null
+        reject(new Error('YooKassa widget did not initialize.'))
+      }
+    }
+    script.onerror = () => {
+      window.clearTimeout(timeout)
+      yooKassaScriptPromise = null
+      reject(new Error('YooKassa widget is unavailable.'))
+    }
+    document.head.appendChild(script)
+  })
+  return yooKassaScriptPromise
+}
+
+async function safeDestroyCheckout(checkout: CheckoutWidget): Promise<void> {
+  try { await checkout.destroy() }
+  catch (reason) { console.warn('YooKassa destroy() failed', reason) }
 }

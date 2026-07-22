@@ -171,6 +171,10 @@ export const IPC = {
     data: 'terminal:data',
     exit: 'terminal:exit'
   },
+  developerTools: {
+    inspect: 'developer-tools:inspect',
+    install: 'developer-tools:install'
+  },
   agent: {
     listDir: 'agent:listDir',
     readFile: 'agent:readFile',
@@ -198,6 +202,8 @@ export const IPC = {
     register: 'vpn:register',
     logout: 'vpn:logout',
     traffic: 'vpn:traffic',
+    paymentCreate: 'vpn:payment-create',
+    paymentSync: 'vpn:payment-sync',
     statusChanged: 'vpn:status-changed'
   },
   update: {
@@ -511,6 +517,30 @@ export interface VpnTrafficStats {
 export interface VpnTrafficResult {
   ok: boolean
   traffic: VpnTrafficStats | null
+  error?: string
+}
+
+export type VpnPaymentPlanCode = 'plus_month' | 'plus_year'
+
+export interface VpnPaymentCheckout {
+  id: string
+  plan_code: VpnPaymentPlanCode
+  amount: number
+  currency: string
+  status: string
+  confirmation_token: string
+}
+
+export interface VpnPaymentCreateResult {
+  ok: boolean
+  payment: VpnPaymentCheckout | null
+  error?: string
+}
+
+export interface VpnPaymentSyncResult {
+  ok: boolean
+  payment: { id: string; status: string } | null
+  status: VpnStatus
   error?: string
 }
 
@@ -1089,7 +1119,7 @@ export interface CodexCheckResult {
   loggedIn?: boolean
   /** Human-readable auth note, e.g. "Logged in using ChatGPT". */
   authNote?: string
-  /** Signed-in identity when it can be read locally, e.g. "user@mail.com (Plus)". */
+  /** Signed-in identity when it can be read locally, e.g. "user@mail.com (Unlimited)". */
   account?: string
   error?: string
 }
@@ -1521,6 +1551,47 @@ export interface TerminalDataPayload {
 export interface TerminalExitPayload {
   id: string
   code: number | null
+}
+
+// ---------- Optional developer tools ----------
+
+export const DEVELOPER_TOOL_IDS = [
+  'ripgrep',
+  'fd',
+  'jq',
+  'sevenZip',
+  'llvm',
+  'pandoc',
+  'libreOffice',
+  'imageMagick',
+  'qpdf',
+  'poppler',
+  'graphviz',
+  'tesseract'
+] as const
+
+export type DeveloperToolId = (typeof DEVELOPER_TOOL_IDS)[number]
+export type DeveloperToolsPlatform = 'win32' | 'linux' | 'darwin'
+export type DeveloperToolsManager = 'winget' | 'brew' | 'apt' | 'dnf' | 'pacman'
+
+export interface DeveloperToolStatus {
+  id: DeveloperToolId
+  installed: boolean
+}
+
+export interface DeveloperToolsInfo {
+  platform: NodeJS.Platform
+  manager?: DeveloperToolsManager
+  available: boolean
+  tools: DeveloperToolStatus[]
+  error?: string
+}
+
+export interface DeveloperToolsInstallResult {
+  ok: boolean
+  installed: DeveloperToolId[]
+  failed: DeveloperToolId[]
+  error?: string
 }
 
 // ---------- Agent tools (sandboxed to the active workspace root) ----------

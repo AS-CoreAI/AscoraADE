@@ -61,6 +61,9 @@ import {
   type TerminalStartResult,
   type TerminalDataPayload,
   type TerminalExitPayload,
+  type DeveloperToolId,
+  type DeveloperToolsInfo,
+  type DeveloperToolsInstallResult,
   type AgentListResult,
   type AgentReadRange,
   type AgentReadResult,
@@ -79,6 +82,9 @@ import {
   type VpnServersResult,
   type VpnStatus,
   type VpnTrafficResult,
+  type VpnPaymentCreateResult,
+  type VpnPaymentPlanCode,
+  type VpnPaymentSyncResult,
   type UpdateInfo,
   type ChangelogInfo
 } from '@shared/ipc'
@@ -472,6 +478,11 @@ const api = {
       return () => ipcRenderer.removeListener(IPC.terminal.exit, listener)
     }
   },
+  developerTools: {
+    inspect: (): Promise<DeveloperToolsInfo> => ipcRenderer.invoke(IPC.developerTools.inspect),
+    install: (ids: DeveloperToolId[]): Promise<DeveloperToolsInstallResult> =>
+      ipcRenderer.invoke(IPC.developerTools.install, ids)
+  },
   agent: {
     listDir: (root: string, path: string): Promise<AgentListResult> =>
       ipcRenderer.invoke(IPC.agent.listDir, root, path),
@@ -524,6 +535,10 @@ const api = {
       ipcRenderer.invoke(IPC.vpn.register, request),
     logout: (): Promise<VpnAuthResult> => ipcRenderer.invoke(IPC.vpn.logout),
     traffic: (): Promise<VpnTrafficResult> => ipcRenderer.invoke(IPC.vpn.traffic),
+    paymentCreate: (planCode: VpnPaymentPlanCode): Promise<VpnPaymentCreateResult> =>
+      ipcRenderer.invoke(IPC.vpn.paymentCreate, planCode),
+    paymentSync: (paymentId: string): Promise<VpnPaymentSyncResult> =>
+      ipcRenderer.invoke(IPC.vpn.paymentSync, paymentId),
     onStatusChanged: (cb: (status: VpnStatus) => void): (() => void) => {
       const listener = (_event: IpcRendererEvent, status: VpnStatus): void => cb(status)
       ipcRenderer.on(IPC.vpn.statusChanged, listener)

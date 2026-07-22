@@ -5,8 +5,13 @@
     "sha256": "76fcec042c5989c5b816cd32eaed1e5b1c3b998a4b1c9eca55f299e3314ef7e4"
   },
   "openvpn": {
-    "version": "2.6.14",
-    "url": "https://swupdate.openvpn.org/community/releases/OpenVPN-2.6.14-I001-amd64.msi",
-    "sha256": "19bca902826ef0dc9a6cf849297ce43ba8b2844bdb913c37230308d3274c953c"
+    "version": "2.6.17-I001",
+    "url": "https://build.openvpn.net/downloads/releases/OpenVPN-2.6.17-I001-amd64.msi",
+    "sha256": "961e38b4872f022cc63160bd1490af74e3adc88ec1f2e366964f1bbfaff6fce8"
+  },
+  "wintun": {
+    "version": "0.14.1",
+    "url": "https://www.wintun.net/builds/wintun-0.14.1.zip",
+    "sha256": "07c256185d6ee3652e09fa55c0b673e2624b565e02c4b9091c79ca7d2f24ef51"
   }
 }

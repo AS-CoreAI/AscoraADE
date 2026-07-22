@@ -62,13 +62,16 @@ project.
 
 ## OpenVPN (Windows builds)
 
-Ascora ADE bundles the unmodified official
-[OpenVPN Community](https://openvpn.net/community-downloads/) Windows
-installer package and runs it on the user's behalf; OpenVPN itself executes
-as a separate process and is not linked with Ascora ADE. OpenVPN is
+Ascora ADE bundles `openvpn.exe` and its unmodified runtime libraries from the
+official [OpenVPN Community](https://openvpn.net/community-downloads/)
+Windows distribution. The executable runs directly from Ascora's resources as
+a separate process and is not linked with Ascora ADE. OpenVPN is
 Copyright (c) OpenVPN Inc. and contributors, distributed under the
 GNU General Public License version 2 (with the additional linking exceptions
-granted by its authors). The complete license text is included inside the
-bundled installer package and is available, together with the complete
+granted by its authors). The complete license text is included beside the
+bundled binaries and is available, together with the complete
 corresponding source code, at <https://github.com/OpenVPN/openvpn> and
 <https://openvpn.net/community-resources/>.
+
+The bundled OpenVPN runtime uses the official prebuilt `wintun.dll` version
+0.14.1. Its complete license text is included beside the bundled binaries.

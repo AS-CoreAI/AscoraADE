@@ -2,12 +2,12 @@ import { app, BrowserWindow, safeStorage } from 'electron'
 import { createHash, createHmac, generateKeyPairSync, randomUUID } from 'node:crypto'
 import { execFile, spawn, type ChildProcess } from 'node:child_process'
 import { promisify } from 'node:util'
-import { access, chmod, mkdir, readdir, readFile, readlink, rename, rm, writeFile } from 'node:fs/promises'
+import { access, chmod, mkdir, readFile, readlink, rename, rm, writeFile } from 'node:fs/promises'
 import { constants as fsConstants } from 'node:fs'
 import { isIP } from 'node:net'
 import { createConnection } from 'node:net'
 import path from 'node:path'
-import { IPC, type VpnAccountTier, type VpnAuthRequest, type VpnAuthResult, type VpnConfigureRequest, type VpnConnectRequest, type VpnDependencyStatus, type VpnProtocol, type VpnServer, type VpnServersResult, type VpnSettings, type VpnStatus, type VpnTrafficResult, type VpnTrafficStats } from '../../shared/ipc'
+import { IPC, type VpnAccountTier, type VpnAuthRequest, type VpnAuthResult, type VpnConfigureRequest, type VpnConnectRequest, type VpnDependencyStatus, type VpnPaymentCheckout, type VpnPaymentCreateResult, type VpnPaymentPlanCode, type VpnPaymentSyncResult, type VpnProtocol, type VpnServer, type VpnServersResult, type VpnSettings, type VpnStatus, type VpnTrafficResult, type VpnTrafficStats } from '../../shared/ipc'
 import { getPublicIpStatus } from '../network/public-ip'
 
 const DEFAULT_API_URL = 'https://wandrounikvpn.asted.cloud'
@@ -37,6 +37,8 @@ interface ProcessResult {
   stderr: string
   timedOut: boolean
 }
+
+type OpenvpnWindowsDriver = 'wintun' | 'tap-windows6'
 
 interface TokenPair {
   accessToken: string
@@ -125,6 +127,10 @@ function wireguardConfigPath(): string {
 
 function openvpnConfigPath(): string {
   return path.join(vpnDir(), `${TUNNEL_NAME}.ovpn`)
+}
+
+function openvpnLogPath(): string {
+  return path.join(vpnDir(), `${TUNNEL_NAME}.log`)
 }
 
 function errorMessage(error: unknown): string {
@@ -328,21 +334,20 @@ async function detectDependencies(force = false): Promise<VpnStatus['dependencie
   if (!force && dependencyCache && Date.now() - dependencyCache.at < 30_000) return dependencyCache.value
   const bundled = bundledVpnRoot()
   const wireguard = await firstExecutable([
-    process.env.WIREGUARD_EXE,
     bundled ? path.join(bundled, 'wireguard', 'wireguard.exe') : undefined,
+    process.env.WIREGUARD_EXE,
     process.platform === 'win32' ? 'C:\\Program Files\\WireGuard\\wireguard.exe' : undefined,
     ...pathCandidates(process.platform === 'win32' ? 'wireguard' : 'wg-quick')
   ])
   const openvpn = await firstExecutable([
+    bundled ? path.join(bundled, 'openvpn', 'openvpn.exe') : undefined,
     process.env.OPENVPN_EXE,
     process.platform === 'win32' ? 'C:\\Program Files\\OpenVPN\\bin\\openvpn.exe' : undefined,
     ...pathCandidates('openvpn')
   ])
   const value: VpnStatus['dependencies'] = {
     wireguard: dependency(wireguard, 'WireGuard'),
-    openvpn: !openvpn && (await bundledOpenvpnInstaller())
-      ? { available: false, executable: null, hint: 'OpenVPN will be installed automatically the first time you connect.' }
-      : dependency(openvpn, 'OpenVPN')
+    openvpn: dependency(openvpn, 'OpenVPN')
   }
   dependencyCache = { at: Date.now(), value }
   return value
@@ -378,7 +383,7 @@ function runProcess(executablePath: string, args: string[], timeoutMs = 15_000):
 /**
  * Root of the VPN backends vendored by scripts/vpn/vendor.mjs (Windows only):
  * vpn/wireguard/wireguard.exe (portable, drivers embedded) and
- * vpn/openvpn/<installer>.msi (installed silently on first OpenVPN connect).
+ * vpn/openvpn/openvpn.exe with its runtime DLLs and wintun.dll.
  */
 function bundledVpnRoot(): string | null {
   if (process.platform !== 'win32') return null
@@ -387,16 +392,10 @@ function bundledVpnRoot(): string | null {
     : path.join(app.getAppPath(), '.build', 'vpn')
 }
 
-async function bundledOpenvpnInstaller(): Promise<string | null> {
+function isBundledOpenvpn(executablePath: string): boolean {
   const root = bundledVpnRoot()
-  if (!root) return null
-  try {
-    const entries = await readdir(path.join(root, 'openvpn'))
-    const msi = entries.find((entry) => entry.toLowerCase().endsWith('.msi'))
-    return msi ? path.join(root, 'openvpn', msi) : null
-  } catch {
-    return null
-  }
+  if (!root) return false
+  return path.resolve(executablePath).toLowerCase() === path.resolve(root, 'openvpn', 'openvpn.exe').toLowerCase()
 }
 
 function psQuote(value: string): string {
@@ -467,18 +466,6 @@ async function runProcessElevated(executablePath: string, args: string[], timeou
   } finally {
     await Promise.all([outFile, codeFile].map((file) => rm(file, { force: true }).catch(() => undefined)))
   }
-}
-
-/** Silently installs the bundled OpenVPN MSI (one UAC prompt). Returns false when no MSI is bundled. */
-async function installBundledOpenvpn(): Promise<boolean> {
-  const msi = await bundledOpenvpnInstaller()
-  if (!msi) return false
-  const result = await runProcessElevated('msiexec.exe', ['/i', msi, '/qn', '/norestart'], 300_000)
-  // 3010 = success, reboot required — the tunnel still works for this session.
-  if (result.code !== 0 && result.code !== 3010) {
-    throw new Error(`OpenVPN could not be installed automatically (msiexec exit ${result.code ?? 'unknown'}).`)
-  }
-  return true
 }
 
 function localDateKey(): string {
@@ -925,18 +912,25 @@ async function uninstallWireguard(): Promise<void> {
  * cannot be a ChildProcess of ours, so its pid comes back through a file and
  * lifecycle tracking falls to the pid-based openvpnProcessConnected path.
  */
-async function startOpenvpnElevatedWin(executablePath: string, configFile: string): Promise<number> {
+async function startOpenvpnElevatedWin(
+  executablePath: string,
+  configFile: string,
+  logFile: string,
+  windowsDriver: OpenvpnWindowsDriver
+): Promise<number> {
   const pidFile = path.join(vpnDir(), `openvpn-${randomUUID()}.pid`)
+  const args = openvpnArguments(executablePath, configFile, logFile, windowsDriver)
+  const psArguments = args.map((arg) => psQuote(/\s/.test(arg) ? `"${arg}"` : arg)).join(', ')
   try {
     await runElevatedPs([
-      `$p = Start-Process -FilePath ${psQuote(executablePath)} -ArgumentList @('--config', ${psQuote(`"${configFile}"`)}) -WindowStyle Hidden -PassThru`,
+      `$p = Start-Process -FilePath ${psQuote(executablePath)} -ArgumentList @(${psArguments}) -WindowStyle Hidden -PassThru`,
       `Set-Content -Path ${psQuote(pidFile)} -Value $p.Id`
     ], 120_000)
     const pid = Number((await readFile(pidFile, 'utf8').catch(() => '')).replace(/^\uFEFF/, '').trim())
     if (!Number.isInteger(pid) || pid <= 0) throw new Error('OpenVPN started without a process identifier.')
     await new Promise((resolve) => setTimeout(resolve, 1_500))
     if (!(await openvpnProcessConnected(pid))) {
-      throw new Error('OpenVPN exited before the tunnel was ready.')
+      throw await openvpnExitError(null)
     }
     return pid
   } finally {
@@ -944,22 +938,111 @@ async function startOpenvpnElevatedWin(executablePath: string, configFile: strin
   }
 }
 
+function openvpnArguments(
+  executablePath: string,
+  configFile: string,
+  logFile: string,
+  windowsDriver: OpenvpnWindowsDriver
+): string[] {
+  // Configure the log before reading the profile so even early config/parser
+  // failures are available to the unelevated parent after a UAC launch.
+  const args = ['--log', logFile, '--verb', '3', '--config', configFile]
+  if (process.platform === 'win32' && isBundledOpenvpn(executablePath)) {
+    args.push('--disable-dco', '--windows-driver', windowsDriver)
+  }
+  return args
+}
+
+interface OpenvpnAdapter {
+  guid: string
+  driver: OpenvpnWindowsDriver
+}
+
+async function selectOpenvpnWindowsDriver(executablePath: string): Promise<OpenvpnWindowsDriver> {
+  if (process.platform !== 'win32' || !isBundledOpenvpn(executablePath)) return 'wintun'
+
+  const shown = await runProcess(executablePath, ['--show-adapters'], 5_000).catch(() => null)
+  const adapters: OpenvpnAdapter[] = []
+  for (const match of (shown?.stdout ?? '').matchAll(/^'.*?'\s+\{([0-9a-f-]+)\}\s+(wintun|tap-windows6)\s*$/gim)) {
+    adapters.push({ guid: match[1].toLowerCase(), driver: match[2].toLowerCase() as OpenvpnWindowsDriver })
+  }
+
+  // A Wintun adapter can only be owned by one tunnel at a time. Prefer a
+  // disconnected adapter, and let a free TAP instance coexist with another
+  // VPN that is already holding Wintun (for example PlanetVPN/tun2socks).
+  const statusResult = await runProcess('powershell.exe', [
+    '-NoProfile',
+    '-NonInteractive',
+    '-Command',
+    "Get-NetAdapter -IncludeHidden | ForEach-Object { '{0}|{1}' -f $_.InterfaceGuid, $_.Status }"
+  ], 5_000).catch(() => null)
+  const statuses = new Map<string, string>()
+  for (const line of (statusResult?.stdout ?? '').split(/\r?\n/)) {
+    const [guid, status] = line.trim().split('|', 2)
+    if (guid && status) statuses.set(guid.replace(/[{}]/g, '').toLowerCase(), status.toLowerCase())
+  }
+  const isFree = (adapter: OpenvpnAdapter): boolean => {
+    const status = statuses.get(adapter.guid)
+    return !!status && !['up', 'disabled', 'not present'].includes(status)
+  }
+
+  if (adapters.some((adapter) => adapter.driver === 'wintun' && isFree(adapter))) return 'wintun'
+  if (adapters.some((adapter) => adapter.driver === 'tap-windows6' && isFree(adapter))) return 'tap-windows6'
+  // If adapter status could not be queried, TAP is the safer coexistence
+  // fallback; otherwise retain the bundled Wintun default for diagnostics.
+  if (!statuses.size && adapters.some((adapter) => adapter.driver === 'tap-windows6')) return 'tap-windows6'
+  return 'wintun'
+}
+
+function openvpnLogDetail(raw: string): string | null {
+  const lines = raw
+    .replace(/^\uFEFF/, '')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+  if (!lines.length) return null
+
+  const meaningful = lines.filter((line) =>
+    /options error|error:|failed|cannot|fatal|wintun|adapter|certificate|private key|tls/i.test(line)
+  )
+  const specific = meaningful.filter((line) => !/exiting due to fatal error/i.test(line))
+  const selected = specific.at(-1) ?? meaningful.at(-1) ?? lines.at(-1)
+  if (!selected) return null
+  return selected
+    .replace(/^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}(?:\.\d+)?\s*/, '')
+    .slice(0, 800)
+}
+
+async function openvpnExitError(code: number | null, capturedOutput = ''): Promise<Error> {
+  const log = await readFile(openvpnLogPath(), 'utf8').catch(() => '')
+  const detail = openvpnLogDetail(`${capturedOutput}\n${log}`)
+  if (detail) return new Error(`OpenVPN: ${detail}`)
+  return new Error(`OpenVPN exited before the tunnel was ready (code ${code ?? 'unknown'}). See ${openvpnLogPath()}.`)
+}
+
 async function startOpenvpn(config: string): Promise<number> {
   const executablePath = current.dependencies.openvpn.executable
   if (!executablePath) throw new Error(current.dependencies.openvpn.hint ?? 'OpenVPN is not installed.')
   const configFile = openvpnConfigPath()
+  const logFile = openvpnLogPath()
+  await rm(logFile, { force: true }).catch(() => undefined)
   await writePrivateConfig(configFile, config)
+  const windowsDriver = await selectOpenvpnWindowsDriver(executablePath)
   if (process.platform === 'win32' && !(await isElevated())) {
-    return startOpenvpnElevatedWin(executablePath, configFile)
+    return startOpenvpnElevatedWin(executablePath, configFile, logFile, windowsDriver)
   }
-  const child = spawn(executablePath, ['--config', configFile], {
+  const child = spawn(executablePath, openvpnArguments(executablePath, configFile, logFile, windowsDriver), {
     windowsHide: true,
     shell: false,
-    stdio: ['ignore', 'ignore', 'ignore']
+    stdio: ['ignore', 'pipe', 'pipe']
   })
   openVpnProcess = child
   await new Promise<void>((resolve, reject) => {
     let settled = false
+    let output = ''
+    const append = (chunk: Buffer): void => { output = `${output}${chunk.toString('utf8')}`.slice(-32_000) }
+    child.stdout?.on('data', append)
+    child.stderr?.on('data', append)
     const finish = (error?: Error): void => {
       if (settled) return
       settled = true
@@ -968,7 +1051,10 @@ async function startOpenvpn(config: string): Promise<number> {
     }
     const timer = setTimeout(() => finish(), 1_200)
     child.once('error', (error) => finish(error))
-    child.once('exit', (code) => finish(new Error(`OpenVPN exited before the tunnel was ready (code ${code ?? 'unknown'}).`)))
+    child.once('exit', (code) => {
+      clearTimeout(timer)
+      void openvpnExitError(code, output).then((error) => finish(error), (error) => finish(error))
+    })
   })
   if (!child.pid) throw new Error('OpenVPN started without a process identifier.')
   return child.pid
@@ -1159,7 +1245,7 @@ async function doConnect(request: VpnConnectRequest): Promise<VpnStatus> {
   if (current.account.tier === 'anonymous' && (await anonymousTraffic()).limitExceeded) {
     return publish({ state: 'error', error: 'anonymous_daily_limit_exceeded' })
   }
-  let dependencies = await detectDependencies(true)
+  const dependencies = await detectDependencies(true)
   publish({
     state: 'connecting',
     protocol: request.protocol,
@@ -1171,16 +1257,6 @@ async function doConnect(request: VpnConnectRequest): Promise<VpnStatus> {
     dependencies,
     error: undefined
   })
-  if (request.protocol === 'openvpn' && !dependencies.openvpn.available && process.platform === 'win32') {
-    try {
-      if (await installBundledOpenvpn()) {
-        dependencies = await detectDependencies(true)
-        publish({ dependencies })
-      }
-    } catch (error) {
-      return publish({ state: 'error', error: errorMessage(error), connectedAt: null })
-    }
-  }
   if (!dependencies[request.protocol].available) {
     const message = dependencies[request.protocol].hint ?? `${request.protocol} is not installed.`
     return publish({ state: 'error', error: message })
@@ -1352,4 +1428,53 @@ export async function logoutVpnAccount(): Promise<VpnAuthResult> {
   await saveSettings()
   serverCache = null
   return { ok: true, status: publish({ error: undefined }) }
+}
+
+export async function createVpnPayment(planCode: VpnPaymentPlanCode): Promise<VpnPaymentCreateResult> {
+  await ensureInitialized()
+  if (!current.account.authenticated) return { ok: false, payment: null, error: 'Sign in before purchasing Unlimited.' }
+  try {
+    const body = await apiRequest('/api/portal/payments', {
+      method: 'POST', body: JSON.stringify({ plan_code: planCode, source: 'ascora' })
+    })
+    const raw = body.payment
+    if (!raw || typeof raw !== 'object') throw new Error('The VPN API returned an invalid payment.')
+    const value = raw as ApiRecord
+    const payment: VpnPaymentCheckout = {
+      id: string(value.id),
+      plan_code: string(value.plan_code) === 'plus_year' ? 'plus_year' : 'plus_month',
+      amount: number(value.amount),
+      currency: string(value.currency, 'RUB'),
+      status: string(value.status, 'pending'),
+      confirmation_token: string(value.confirmation_token)
+    }
+    if (!payment.id || !payment.confirmation_token) throw new Error('The VPN API returned an invalid payment token.')
+    return { ok: true, payment }
+  } catch (error) {
+    return { ok: false, payment: null, error: errorMessage(error) }
+  }
+}
+
+export async function syncVpnPayment(paymentId: string): Promise<VpnPaymentSyncResult> {
+  await ensureInitialized()
+  if (!current.account.authenticated) return { ok: false, payment: null, status: current, error: 'Sign in before checking a payment.' }
+  try {
+    const body = await apiRequest(`/api/portal/payments/${encodeURIComponent(paymentId)}/sync`, {
+      method: 'POST', body: JSON.stringify({})
+    })
+    const raw = body.payment
+    if (!raw || typeof raw !== 'object') throw new Error('The VPN API returned an invalid payment.')
+    const value = raw as ApiRecord
+    const payment = { id: string(value.id), status: string(value.status) }
+    if (payment.status === 'succeeded' && tokens) {
+      const profile = await apiRequest('/api/client/me')
+      const tier = normalizeTier(profile.tier)
+      await persistTokens({ ...tokens, tier })
+      serverCache = null
+      publish({ account: { authenticated: true, email: tokens.email, tier }, error: undefined })
+    }
+    return { ok: true, payment, status: current }
+  } catch (error) {
+    return { ok: false, payment: null, status: current, error: errorMessage(error) }
+  }
 }

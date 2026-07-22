@@ -1,7 +1,7 @@
 import { ipcMain } from 'electron'
-import { IPC, type PublicIpStatus, type VpnAuthRequest, type VpnAuthResult, type VpnConfigureRequest, type VpnConnectRequest, type VpnServersResult, type VpnStatus, type VpnTrafficResult } from '../../shared/ipc'
+import { IPC, type PublicIpStatus, type VpnAuthRequest, type VpnAuthResult, type VpnConfigureRequest, type VpnConnectRequest, type VpnPaymentCreateResult, type VpnPaymentPlanCode, type VpnPaymentSyncResult, type VpnServersResult, type VpnStatus, type VpnTrafficResult } from '../../shared/ipc'
 import { getPublicIpStatus } from '../network/public-ip'
-import { configureVpn, connectVpn, disconnectVpn, fetchVpnServers, getVpnStatus, getVpnTraffic, loginVpnAccount, logoutVpnAccount, registerVpnAccount } from '../vpn/service'
+import { configureVpn, connectVpn, createVpnPayment, disconnectVpn, fetchVpnServers, getVpnStatus, getVpnTraffic, loginVpnAccount, logoutVpnAccount, registerVpnAccount, syncVpnPayment } from '../vpn/service'
 
 export function registerNetworkVpnHandlers(): void {
   ipcMain.handle(IPC.network.publicIp, (_event, force = false): Promise<PublicIpStatus> =>
@@ -28,4 +28,10 @@ export function registerNetworkVpnHandlers(): void {
   )
   ipcMain.handle(IPC.vpn.logout, (): Promise<VpnAuthResult> => logoutVpnAccount())
   ipcMain.handle(IPC.vpn.traffic, (): Promise<VpnTrafficResult> => getVpnTraffic())
+  ipcMain.handle(IPC.vpn.paymentCreate, (_event, planCode: VpnPaymentPlanCode): Promise<VpnPaymentCreateResult> =>
+    createVpnPayment(planCode)
+  )
+  ipcMain.handle(IPC.vpn.paymentSync, (_event, paymentId: string): Promise<VpnPaymentSyncResult> =>
+    syncVpnPayment(paymentId)
+  )
 }
