@@ -9,6 +9,7 @@ import {
   type CodexEvent,
   type CodexItem,
   type CodexRunResult,
+  type ClaudeEffort,
   type ClaudePermissionMode,
   type ClaudeRunParams,
   type CodexEventPayload,
@@ -314,13 +315,53 @@ function editLineStat(name: string, input: Record<string, unknown>): { added: nu
   return diffLineStat(str(input.old_string), str(input.new_string)) // Edit / Update
 }
 
+/**
+ * The replaced/replacement hunks of a Claude file-edit tool, so the renderer
+ * can draw a side-by-side diff. MultiEdit hunks are joined with a "⋯" line on
+ * both sides — it diffs as unchanged context, visually separating the hunks.
+ */
+function editDiffText(name: string, input: Record<string, unknown>): { oldText: string; newText: string } {
+  if (name === 'Write') return { oldText: '', newText: str(input.content) }
+  if (name === 'NotebookEdit') return { oldText: '', newText: str(input.new_source) }
+  if (name === 'MultiEdit' && Array.isArray(input.edits)) {
+    const edits = input.edits as Record<string, unknown>[]
+    return {
+      oldText: edits.map((e) => str(e.old_string)).join('\n⋯\n'),
+      newText: edits.map((e) => str(e.new_string)).join('\n⋯\n')
+    }
+  }
+  return { oldText: str(input.old_string), newText: str(input.new_string) } // Edit / Update
+}
+
 /** Map a Claude tool_use to our normalized item fields (matching Codex's vocab). */
 function mapTool(name: string, input: Record<string, unknown>): Partial<CodexItem> & { type: string } {
   if (name === 'Bash') return { type: 'command_execution', command: str(input.command) }
+  // Plan-mode handoff: surface the plan markdown so the renderer can show an
+  // approval card (the VS Code extension's accept/reject flow).
+  if (name === 'ExitPlanMode') return { type: 'plan', text: str(input.plan) }
+  // Working checklist: normalize TodoWrite rows so the renderer can draw the
+  // checkbox card (completed/in_progress/pending) like the VS Code extension.
+  if (name === 'TodoWrite') {
+    const rows = Array.isArray(input.todos) ? (input.todos as Record<string, unknown>[]) : []
+    const todos = rows
+      .map((row) => ({
+        content: str(row.content),
+        status: (['pending', 'in_progress', 'completed'].includes(str(row.status))
+          ? str(row.status)
+          : 'pending') as 'pending' | 'in_progress' | 'completed'
+      }))
+      .filter((row) => row.content)
+    return { type: 'todo_list', todos }
+  }
   if (['Edit', 'Write', 'MultiEdit', 'NotebookEdit', 'Update'].includes(name)) {
     const path = str(input.file_path) || str(input.path) || str(input.notebook_path)
     const { added, removed } = editLineStat(name, input)
-    return { type: 'file_change', changes: [{ path, kind: name === 'Write' ? 'add' : 'update', added, removed }] }
+    const diff = editDiffText(name, input)
+    return {
+      type: 'file_change',
+      changes: [{ path, kind: name === 'Write' ? 'add' : 'update', added, removed }],
+      ...diff
+    }
   }
   if (name === 'Read') return { type: 'read_file', text: str(input.file_path) || str(input.path) }
   if (['Grep', 'Glob', 'LS'].includes(name))
@@ -333,7 +374,13 @@ export function runClaude(
   id: string,
   sender: WebContents,
   params: ClaudeRunParams,
-  config: { claudePath?: string; claudeModel?: string; claudePermission?: ClaudePermissionMode }
+  config: {
+    claudePath?: string
+    claudeModel?: string
+    claudePermission?: ClaudePermissionMode
+    claudeEffort?: ClaudeEffort | ''
+    claudeThinking?: boolean
+  }
 ): Promise<CodexRunResult> {
   killRun(id)
 
@@ -348,9 +395,15 @@ export function runClaude(
 
   const model = (params.model ?? config.claudeModel ?? '').trim()
   const permission: ClaudePermissionMode = params.permission ?? config.claudePermission ?? 'acceptEdits'
+  const effort = params.effort ?? config.claudeEffort ?? ''
+  const thinking = params.thinking ?? config.claudeThinking ?? true
 
   const args = ['-p', '--output-format', 'stream-json', '--verbose']
   if (model && model !== 'default') args.push('--model', model)
+  if (effort) args.push('--effort', effort)
+  // The CLI has no --thinking flag; the toggle lives in settings (same key the
+  // VS Code extension flips). Always pass it so the switch wins both ways.
+  args.push('--settings', JSON.stringify({ alwaysThinkingEnabled: thinking }))
   if (permission === 'bypassPermissions') args.push('--dangerously-skip-permissions')
   else args.push('--permission-mode', permission)
   if (params.sessionId) args.push('--resume', params.sessionId)

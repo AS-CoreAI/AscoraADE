@@ -4,6 +4,7 @@ import {
   DEFAULT_LLM_CONFIG,
   type CodexCheckResult,
   type CodexRunResult,
+  type ClaudeEffort,
   type ClaudePermissionMode,
   type ClaudeRunParams,
   type ClaudeUsageResult,
@@ -17,13 +18,17 @@ function readClaudeConfig(): {
   claudePath: string
   claudeModel: string
   claudePermission: ClaudePermissionMode
+  claudeEffort: ClaudeEffort | ''
+  claudeThinking: boolean
 } {
   const store = getStore()
   return {
     claudePath: store.getSetting<string>('claude.path') ?? DEFAULT_LLM_CONFIG.claudePath,
     claudeModel: store.getSetting<string>('claude.model') ?? DEFAULT_LLM_CONFIG.claudeModel,
     claudePermission:
-      store.getSetting<ClaudePermissionMode>('claude.permission') ?? DEFAULT_LLM_CONFIG.claudePermission
+      store.getSetting<ClaudePermissionMode>('claude.permission') ?? DEFAULT_LLM_CONFIG.claudePermission,
+    claudeEffort: store.getSetting<ClaudeEffort | ''>('claude.effort') ?? DEFAULT_LLM_CONFIG.claudeEffort,
+    claudeThinking: store.getSetting<boolean>('claude.thinking') ?? DEFAULT_LLM_CONFIG.claudeThinking
   }
 }
 

@@ -1,6 +1,6 @@
-import { useEffect, useState, type JSX, type MouseEvent } from 'react'
+import { useEffect, useRef, useState, type JSX, type MouseEvent } from 'react'
 import { createPortal } from 'react-dom'
-import Editor from '@monaco-editor/react'
+import Editor, { type OnMount } from '@monaco-editor/react'
 import { Icon } from './Icon'
 import { FileIcon } from './FileIcon'
 import { useApp } from '@/state/store'
@@ -25,9 +25,28 @@ export function EditorPane(): JSX.Element {
   const appLanguage = useApp((s) => s.appLanguage)
   const t = (key: Parameters<typeof tr>[1], values?: Record<string, string | number>): string =>
     tr(appLanguage, key, values)
+  const revealLine = useApp((s) => s.revealLine)
+  const clearRevealLine = useApp((s) => s.clearRevealLine)
   const [menu, setMenu] = useState<{ x: number; y: number; path: string } | null>(null)
+  const editorRef = useRef<Parameters<OnMount>[0] | null>(null)
 
   const current = openFiles.find((f) => f.path === activeFile)
+
+  // Chat file links land here: once the referenced file is the active tab,
+  // scroll the editor to the requested line and consume the request.
+  useEffect(() => {
+    if (!revealLine || current?.path !== revealLine.path) return
+    const editor = editorRef.current
+    if (!editor) return
+    // Defer one frame so Monaco has switched to the file's model first.
+    const raf = requestAnimationFrame(() => {
+      editor.revealLineInCenter(revealLine.line)
+      editor.setPosition({ lineNumber: revealLine.line, column: 1 })
+      editor.focus()
+      clearRevealLine()
+    })
+    return () => cancelAnimationFrame(raf)
+  }, [revealLine, current?.path, clearRevealLine])
 
   useEffect(() => {
     if (!menu) return
@@ -160,6 +179,9 @@ export function EditorPane(): JSX.Element {
             path={current.path}
             language={current.language}
             value={current.content}
+            onMount={(editor) => {
+              editorRef.current = editor
+            }}
             onChange={(value) => updateOpenFileContent(current.path, value ?? '')}
             options={{
               readOnly: current.truncated,

@@ -2982,6 +2982,14 @@ button {
 .composer-tool.icon-only {
   padding: 6px;
 }
+.composer-tool.active,
+.composer-tool.active svg {
+  color: var(--accent);
+}
+.composer-tool.active:hover {
+  background: var(--bg-hover);
+  color: var(--accent);
+}
 .composer-attach-status {
   max-width: 180px;
   color: var(--text-muted);
@@ -6375,6 +6383,60 @@ button.changes-badge:hover {
   color: var(--danger);
   background: rgba(240, 106, 106, 0.08);
 }
+
+/* ---------- Side-by-side diff (old left, new right) ---------- */
+.side-diff {
+  border-top: 1px solid var(--border);
+  background: var(--bg-rail);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  overflow-x: auto;
+}
+.side-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  min-width: 0;
+}
+.side-cell {
+  padding: 0 8px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  min-width: 0;
+}
+.side-cell + .side-cell {
+  border-left: 1px solid var(--border);
+}
+.side-cell .diff-gutter {
+  display: inline-block;
+  width: 1.2em;
+  color: var(--text-faint);
+  user-select: none;
+}
+.side-cell.add {
+  color: var(--text);
+  background: rgba(63, 207, 142, 0.13);
+}
+.side-cell.del {
+  color: var(--text-muted);
+  background: rgba(240, 106, 106, 0.1);
+}
+.side-cell.filler {
+  background: repeating-linear-gradient(
+    -45deg,
+    transparent,
+    transparent 4px,
+    var(--bg-hover) 4px,
+    var(--bg-hover) 8px
+  );
+}
+.side-diff .side-row:first-child .side-cell {
+  padding-top: 6px;
+}
+.side-diff .side-row:last-child .side-cell {
+  padding-bottom: 6px;
+}
 .tool-note {
   padding: 6px 10px;
   border-top: 1px solid var(--border);
@@ -6420,6 +6482,137 @@ button.changes-badge:hover {
 .tool-reject:hover {
   color: var(--text);
   border-color: var(--border-strong);
+  background: var(--bg-hover);
+}
+
+/* ---------- Agent todo checklist card (TodoWrite) ---------- */
+.todo-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  overflow: hidden;
+}
+.todo-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  font-size: 12px;
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
+}
+.todo-head svg {
+  color: var(--accent);
+  flex-shrink: 0;
+}
+.todo-list {
+  list-style: none;
+  margin: 0;
+  padding: 6px 10px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.todo-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text);
+}
+.todo-box {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  margin-top: 2px;
+  flex-shrink: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  color: var(--accent);
+}
+.todo-row.in_progress .todo-box {
+  border-color: rgba(91, 157, 255, 0.6);
+  color: var(--blue);
+}
+.todo-row.in_progress .todo-text {
+  color: var(--blue);
+  font-weight: 600;
+}
+.todo-row.completed .todo-text {
+  color: var(--text-muted);
+  text-decoration: line-through;
+}
+.todo-row.pending .todo-text {
+  color: var(--text-muted);
+}
+
+/* ---------- Clickable file references in chat markdown ---------- */
+.msg-file-link {
+  display: inline;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+}
+.msg-file-link .msg-inline-code {
+  color: var(--blue);
+  transition: background 120ms ease;
+}
+.msg-file-link:hover .msg-inline-code {
+  text-decoration: underline;
+  background: var(--bg-hover);
+}
+.msg-link {
+  color: var(--blue);
+  text-decoration: none;
+}
+.msg-link:hover {
+  text-decoration: underline;
+}
+
+/* ---------- Claude plan approval card ---------- */
+.plan-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  overflow: hidden;
+}
+.plan-card.awaiting {
+  border-color: rgba(91, 157, 255, 0.4);
+}
+.plan-card.rejected {
+  opacity: 0.75;
+}
+.plan-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  font-size: 12px;
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
+}
+.plan-head svg {
+  color: var(--blue);
+  flex-shrink: 0;
+}
+.plan-head .spacer {
+  flex: 1;
+}
+.plan-body {
+  padding: 4px 12px;
+  font-size: 13px;
+  line-height: 1.55;
+}
+.tool-approve.manual {
+  background: var(--bg-elevated);
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+.tool-approve.manual:hover {
   background: var(--bg-hover);
 }
 

@@ -269,6 +269,12 @@ export interface TaskMessageAttachment {
 }
 
 /** A renderer chat entry persisted as part of a task. */
+/** One row of the agent's working checklist (Claude's TodoWrite tool). */
+export interface TaskTodoItem {
+  content: string
+  status: 'pending' | 'in_progress' | 'completed'
+}
+
 export interface TaskMessage {
   id: string
   role: 'user' | 'assistant'
@@ -283,6 +289,11 @@ export interface TaskMessage {
   provider?: LlmProvider
   /** True for a `text` message that holds the agent's reasoning/thinking. */
   reasoning?: boolean
+  /** True for a `text` message that holds a Claude plan (ExitPlanMode); `status`
+   *  tracks its approval: awaiting → done (accepted) / rejected. */
+  plan?: boolean
+  /** Checklist rows for a `tool: 'update_todos'` card (Claude's TodoWrite). */
+  todos?: TaskTodoItem[]
   /** How long the model reasoned, for the "Thought for 2m" header. */
   reasoningDurationMs?: number
   tool?: string
@@ -617,6 +628,24 @@ export const CLAUDE_PERMISSION_MODES: ClaudePermissionMode[] = [
  * needs updating when a new family ships (e.g. Fable alongside Opus).
  */
 export const CLAUDE_MODEL_PRESETS = ['default', 'fable', 'opus', 'sonnet', 'haiku']
+
+/**
+ * Versioned display labels for the model aliases — what each alias resolves to
+ * today. Purely cosmetic (the CLI still receives the alias), so bump these when
+ * a new model version ships.
+ */
+export const CLAUDE_MODEL_LABEL: Record<string, string> = {
+  fable: 'fable-5',
+  opus: 'opus-4-8',
+  sonnet: 'sonnet-5',
+  haiku: 'haiku-4-5'
+}
+
+/** Effort level for Claude Code (`claude --effort`), like the VS Code extension's cycle. */
+export type ClaudeEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'max'
+
+/** Selectable Claude effort levels, in ascending order of effort. */
+export const CLAUDE_EFFORT_LEVELS: ClaudeEffort[] = ['low', 'medium', 'high', 'xhigh', 'max']
 
 /**
  * GitHub Copilot CLI permission profile. `plan` keeps Copilot in planning mode,
@@ -1003,6 +1032,10 @@ export interface LlmConfig {
   claudeModel: string
   /** Permission mode Claude Code runs under. */
   claudePermission: ClaudePermissionMode
+  /** Effort level for Claude Code (`--effort`); empty → Claude's own default. */
+  claudeEffort: ClaudeEffort | ''
+  /** Extended thinking for Claude Code runs (`alwaysThinkingEnabled`). */
+  claudeThinking: boolean
   /** Path to the `gemini` binary; empty -> auto-detect from PATH. */
   geminiPath: string
   /** Model passed to `gemini --model`; empty -> Gemini CLI's own default. */
@@ -1049,6 +1082,8 @@ export const DEFAULT_LLM_CONFIG: LlmConfig = {
   claudePath: '',
   claudeModel: '',
   claudePermission: 'acceptEdits',
+  claudeEffort: '',
+  claudeThinking: true,
   geminiPath: '',
   geminiModel: '',
   geminiPermission: 'yolo',
@@ -1156,6 +1191,12 @@ export interface CodexItem {
   exitCode?: number | null
   /** file_change: the files touched and how (with per-file line counts when Codex reports them). */
   changes?: TaskFileChange[]
+  /** file_change: the replaced hunk, for the side-by-side diff preview. */
+  oldText?: string
+  /** file_change: the replacement hunk, for the side-by-side diff preview. */
+  newText?: string
+  /** todo_list: the agent's checklist snapshot (Claude's TodoWrite). */
+  todos?: TaskTodoItem[]
   /** "in_progress" | "completed" | "failed". */
   status?: string
 }
@@ -1202,6 +1243,10 @@ export interface ClaudeRunParams {
   model?: string
   /** Overrides the configured permission mode (`--permission-mode`). */
   permission?: ClaudePermissionMode
+  /** Overrides the configured effort level (`--effort`). */
+  effort?: ClaudeEffort | ''
+  /** Overrides the configured extended-thinking switch. */
+  thinking?: boolean
 }
 
 // ---------- GitHub Copilot CLI (`copilot -p --output-format=json`) ----------

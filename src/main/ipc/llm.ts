@@ -6,6 +6,7 @@ import {
   normalizeOpenRouterApiKey,
   type ChatParams,
   type ChatResult,
+  type ClaudeEffort,
   type ClaudePermissionMode,
   type CopilotPermissionMode,
   type CopilotReasoning,
@@ -66,6 +67,10 @@ function readConfig(): LlmConfig {
     claudeModel: store.getSetting<string>('claude.model') ?? DEFAULT_LLM_CONFIG.claudeModel,
     claudePermission:
       store.getSetting<ClaudePermissionMode>('claude.permission') ?? DEFAULT_LLM_CONFIG.claudePermission,
+    claudeEffort:
+      store.getSetting<ClaudeEffort | ''>('claude.effort') ?? DEFAULT_LLM_CONFIG.claudeEffort,
+    claudeThinking:
+      store.getSetting<boolean>('claude.thinking') ?? DEFAULT_LLM_CONFIG.claudeThinking,
     geminiPath: store.getSetting<string>('gemini.path') ?? DEFAULT_LLM_CONFIG.geminiPath,
     geminiModel: store.getSetting<string>('gemini.model') ?? DEFAULT_LLM_CONFIG.geminiModel,
     geminiPermission:
@@ -134,6 +139,8 @@ export function registerLlmHandlers(): void {
     if (typeof patch.claudePath === 'string') store.setSetting('claude.path', patch.claudePath.trim())
     if (typeof patch.claudeModel === 'string') store.setSetting('claude.model', patch.claudeModel.trim())
     if (typeof patch.claudePermission === 'string') store.setSetting('claude.permission', patch.claudePermission)
+    if (typeof patch.claudeEffort === 'string') store.setSetting('claude.effort', patch.claudeEffort)
+    if (typeof patch.claudeThinking === 'boolean') store.setSetting('claude.thinking', patch.claudeThinking)
     if (typeof patch.geminiPath === 'string') store.setSetting('gemini.path', patch.geminiPath.trim())
     if (typeof patch.geminiModel === 'string') store.setSetting('gemini.model', patch.geminiModel.trim())
     if (typeof patch.geminiPermission === 'string') store.setSetting('gemini.permission', patch.geminiPermission)

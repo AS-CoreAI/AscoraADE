@@ -12,7 +12,7 @@ import {
   GLM_MODE_SHORT_KEY,
   MODE_LABEL_KEY
 } from './Composer'
-import { WPROVIDER_SERVICE_INFO, type PublicIpStatus } from '@shared/ipc'
+import { CLAUDE_MODEL_LABEL, WPROVIDER_SERVICE_INFO, type PublicIpStatus } from '@shared/ipc'
 
 /** Re-poll Claude usage every few minutes while it's the active backend. */
 const USAGE_POLL_MS = 3 * 60 * 1000
@@ -290,7 +290,7 @@ export function StatusBar(): JSX.Element {
     : isGemini
       ? geminiModel || t('status.defaultGemini')
     : isClaude
-      ? claudeModel || t('status.defaultClaude')
+      ? (claudeModel ? CLAUDE_MODEL_LABEL[claudeModel] ?? claudeModel : t('status.defaultClaude'))
       : isCopilot
         ? copilotModel || t('status.defaultCopilot')
       : isCodex

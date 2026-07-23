@@ -15,6 +15,7 @@ import type {
   CodexReasoning,
   CopilotPermissionMode,
   CopilotReasoning,
+  ClaudeEffort,
   ClaudePermissionMode,
   GeminiApprovalMode,
   GlmMode,
@@ -37,6 +38,7 @@ import type {
   OmnirouteStatus
 } from '@shared/ipc'
 import {
+  CLAUDE_MODEL_LABEL,
   DEFAULT_LLM_CONFIG,
   EXCLUDED_DIRS,
   WPROVIDER_SERVICES,
@@ -54,7 +56,7 @@ import {
 import { api } from '@/lib/api'
 import { diffStat } from '@/lib/diff'
 import { solveZCodeCaptcha } from '@/lib/zcode-captcha'
-import { isLanguageCode, type LanguageCode } from '@/language'
+import { isLanguageCode, tr, type LanguageCode } from '@/language'
 
 export type View = 'home' | 'workspace' | 'blueprint' | 'analytics' | 'omniroute' | 'vpn'
 /** Agent permission mode — mirrors ZCode's "Ask before changes" control. */
@@ -879,7 +881,9 @@ function modelLabel(s: {
     case 'copilot':
       return s.copilotModel || 'Copilot'
     case 'claude':
-      return s.claudeModel && s.claudeModel !== 'default' ? s.claudeModel : 'Claude'
+      return s.claudeModel && s.claudeModel !== 'default'
+        ? CLAUDE_MODEL_LABEL[s.claudeModel] ?? s.claudeModel
+        : 'Claude'
     case 'gemini':
       return s.geminiModel || 'Gemini'
     case 'glm':
@@ -978,6 +982,10 @@ function codexItemToCard(it: CodexItem): Partial<ChatMessage> {
       status,
       output: changes.map((c) => `${c.kind} ${baseName(c.path)}`).join('\n'),
       changes,
+      // Claude edits carry the replaced/replacement hunks for the split diff.
+      ...(it.oldText !== undefined || it.newText !== undefined
+        ? { oldContent: it.oldText ?? '', newContent: it.newText ?? '' }
+        : {}),
       ...(hasCounts
         ? {
             addedLines: changes.reduce((sum, c) => sum + (c.added ?? 0), 0),
@@ -986,9 +994,39 @@ function codexItemToCard(it: CodexItem): Partial<ChatMessage> {
         : {})
     }
   }
+  if (it.type === 'todo_list') {
+    // Claude's TodoWrite checklist — rendered as a checkbox card, no status chip.
+    return { tool: 'update_todos', status, todos: it.todos ?? [] }
+  }
   // Unknown / other item type (incl. Claude's read_file/list_dir/etc.) — show
   // it generically with a short summary in the header.
   return { tool: it.type, args: { path: it.text ?? '' }, status }
+}
+
+/**
+ * Parse a chat file reference — "src/foo.ts:12", "src/foo.ts:12-34" or
+ * "src/foo.ts#L12-L34" — into a path and the first referenced line.
+ * Returns null for URLs and empty strings. A Windows drive colon is safe:
+ * only a trailing ":<digits>" is treated as a line number.
+ */
+export function parseFileRef(ref: string): { path: string; line?: number } | null {
+  let target = ref.trim()
+  if (!target || /^[a-z][a-z0-9+.-]*:\/\//i.test(target)) return null
+  let line: number | undefined
+  const hash = target.match(/#L(\d+)(?:-L?\d+)?$/i)
+  if (hash) {
+    line = Number(hash[1])
+    target = target.slice(0, hash.index)
+  } else {
+    const colon = target.match(/:(\d+)(?:[-:]\d+)?$/)
+    if (colon) {
+      line = Number(colon[1])
+      target = target.slice(0, colon.index)
+    }
+  }
+  target = target.trim()
+  if (!target) return null
+  return { path: target, line }
 }
 
 /**
@@ -1009,6 +1047,10 @@ interface WorkspaceLlm {
   copilotReasoning: CopilotReasoning | ''
   claudeModel: string
   claudePermission: ClaudePermissionMode
+  /** Optional for compatibility with workspace/task snapshots from pre-1.3.1. */
+  claudeEffort?: ClaudeEffort | ''
+  /** Optional for compatibility with workspace/task snapshots from pre-1.3.1. */
+  claudeThinking?: boolean
   geminiModel: string
   geminiPermission: GeminiApprovalMode
   glmMode: GlmMode
@@ -1031,6 +1073,8 @@ function snapshotLlm(s: {
   copilotReasoning: CopilotReasoning | ''
   claudeModel: string
   claudePermission: ClaudePermissionMode
+  claudeEffort: ClaudeEffort | ''
+  claudeThinking: boolean
   geminiModel: string
   geminiPermission: GeminiApprovalMode
   glmMode: GlmMode
@@ -1050,6 +1094,8 @@ function snapshotLlm(s: {
     copilotReasoning: s.copilotReasoning,
     claudeModel: s.claudeModel,
     claudePermission: s.claudePermission,
+    claudeEffort: s.claudeEffort,
+    claudeThinking: s.claudeThinking,
     geminiModel: s.geminiModel,
     geminiPermission: s.geminiPermission,
     glmMode: s.glmMode,
@@ -1183,6 +1229,8 @@ interface AppState {
 
   openFiles: OpenFile[]
   activeFile: string | null
+  /** One-shot "scroll the editor here" request from a chat file link. */
+  revealLine: { path: string; line: number; nonce: number } | null
 
   // Live Server (built-in HTML preview)
   /** Base URL of the running Live Server, e.g. http://127.0.0.1:5500; null when off. */
@@ -1261,6 +1309,8 @@ interface AppState {
   claudePath: string
   claudeModel: string
   claudePermission: ClaudePermissionMode
+  claudeEffort: ClaudeEffort | ''
+  claudeThinking: boolean
   claudeSessionId: string | null
   claudeCheck: CodexCheckResult | null
   claudeChecking: boolean
@@ -1356,6 +1406,10 @@ interface AppState {
   /** Toggle "Run as root" for the active SSH session and re-list the tree. */
   toggleSshElevation: () => Promise<void>
   openFile: (node: TreeNode) => Promise<void>
+  /** Open a chat file reference like "src/foo.ts:12" in the editor, jumping to the line. */
+  openFileReference: (ref: string) => Promise<void>
+  /** Consume the pending reveal request once the editor has scrolled. */
+  clearRevealLine: () => void
   createFile: (parentPath: string, name: string) => Promise<FileActionResult>
   createDirectory: (parentPath: string, name: string) => Promise<FileActionResult>
   renamePath: (path: string, newName: string, type: 'file' | 'directory') => Promise<FileActionResult>
@@ -1436,6 +1490,8 @@ interface AppState {
   setClaudePath: (path: string) => Promise<void>
   setClaudeModel: (m: string) => void
   setClaudePermission: (p: ClaudePermissionMode) => void
+  setClaudeEffort: (e: ClaudeEffort | '') => void
+  setClaudeThinking: (on: boolean) => void
   checkClaude: () => Promise<void>
   refreshClaudeUsage: () => Promise<void>
   setGeminiPath: (path: string) => Promise<void>
@@ -1483,6 +1539,10 @@ interface AppState {
   ) => Promise<void>
   approveTool: (id: string) => void
   rejectTool: (id: string) => void
+  /** Accept a Claude plan card: switch the permission mode and resume the session. */
+  approvePlan: (id: string, permission: ClaudePermissionMode) => void
+  /** Reject a Claude plan card, staying in plan mode for follow-up feedback. */
+  rejectPlan: (id: string) => void
   /** Stop a run; defaults to the active task when no id is given. */
   stopStreaming: (taskId?: string) => void
   newTask: () => void
@@ -1640,6 +1700,8 @@ export const useApp = create<AppState>((set, get) => {
         copilotReasoning: saved.copilotReasoning ?? DEFAULT_LLM_CONFIG.copilotReasoning,
         claudeModel: saved.claudeModel,
         claudePermission: saved.claudePermission,
+        claudeEffort: saved.claudeEffort ?? DEFAULT_LLM_CONFIG.claudeEffort,
+        claudeThinking: saved.claudeThinking ?? DEFAULT_LLM_CONFIG.claudeThinking,
         geminiModel: saved.geminiModel ?? DEFAULT_LLM_CONFIG.geminiModel,
         geminiPermission: saved.geminiPermission ?? DEFAULT_LLM_CONFIG.geminiPermission,
         glmMode: saved.glmMode,
@@ -1668,6 +1730,8 @@ export const useApp = create<AppState>((set, get) => {
       copilotReasoning: get().copilotReasoning,
       claudeModel: get().claudeModel,
       claudePermission: get().claudePermission,
+      claudeEffort: get().claudeEffort,
+      claudeThinking: get().claudeThinking,
       geminiModel: get().geminiModel,
       geminiPermission: get().geminiPermission,
       glmMode: get().glmMode,
@@ -1712,6 +1776,7 @@ export const useApp = create<AppState>((set, get) => {
   treeError: null,
   openFiles: [],
   activeFile: null,
+  revealLine: null,
 
   liveUrl: null,
   livePort: null,
@@ -1761,6 +1826,8 @@ export const useApp = create<AppState>((set, get) => {
   claudePath: DEFAULT_LLM_CONFIG.claudePath,
   claudeModel: DEFAULT_LLM_CONFIG.claudeModel,
   claudePermission: DEFAULT_LLM_CONFIG.claudePermission,
+  claudeEffort: DEFAULT_LLM_CONFIG.claudeEffort,
+  claudeThinking: DEFAULT_LLM_CONFIG.claudeThinking,
   claudeSessionId: null,
   claudeCheck: null,
   claudeChecking: false,
@@ -1904,6 +1971,8 @@ export const useApp = create<AppState>((set, get) => {
       claudePath: cfg.claudePath,
       claudeModel: cfg.claudeModel,
       claudePermission: cfg.claudePermission,
+      claudeEffort: cfg.claudeEffort,
+      claudeThinking: cfg.claudeThinking,
       geminiPath: cfg.geminiPath,
       geminiModel: cfg.geminiModel,
       geminiPermission: cfg.geminiPermission,
@@ -2471,6 +2540,29 @@ export const useApp = create<AppState>((set, get) => {
       activeFile: file.path,
       view: 'workspace'
     }))
+  },
+
+  async openFileReference(ref) {
+    const parsed = parseFileRef(ref)
+    if (!parsed) return
+    const root = get().active?.path ?? ''
+    const isAbs = /^(?:[a-zA-Z]:[\\/]|\\\\|\/)/.test(parsed.path)
+    if (!isAbs && !root) return
+    const sep = root.includes('\\') || /^[a-zA-Z]:/.test(root) ? '\\' : '/'
+    const abs = isAbs
+      ? parsed.path
+      : `${root.replace(/[\\/]+$/, '')}${sep}${parsed.path.replace(/[\\/]+/g, sep)}`
+    const name = abs.split(/[\\/]/).pop() ?? abs
+    try {
+      await get().openFile({ name, path: abs, type: 'file' })
+    } catch {
+      return // missing/unreadable file — ignore the click
+    }
+    if (parsed.line) set({ revealLine: { path: abs, line: parsed.line, nonce: Date.now() } })
+  },
+
+  clearRevealLine() {
+    set({ revealLine: null })
   },
 
   createFile(parentPath, name) {
@@ -3083,6 +3175,18 @@ export const useApp = create<AppState>((set, get) => {
     get().persistWorkspaceLlm()
   },
 
+  setClaudeEffort(claudeEffort) {
+    set({ claudeEffort })
+    void api.llm.setConfig({ claudeEffort })
+    get().persistWorkspaceLlm()
+  },
+
+  setClaudeThinking(claudeThinking) {
+    set({ claudeThinking })
+    void api.llm.setConfig({ claudeThinking })
+    get().persistWorkspaceLlm()
+  },
+
   async checkClaude() {
     set({ claudeChecking: true })
     try {
@@ -3557,6 +3661,8 @@ export const useApp = create<AppState>((set, get) => {
     const copilotReasoning = get().copilotReasoning
     const claudeModel = get().claudeModel
     const claudePermission = get().claudePermission
+    const claudeEffort = get().claudeEffort
+    const claudeThinking = get().claudeThinking
     const geminiModel = get().geminiModel
     const geminiPermission = get().geminiPermission
     const glmMode = get().glmMode
@@ -3731,6 +3837,31 @@ export const useApp = create<AppState>((set, get) => {
               }
               return
             }
+            if (it.type === 'plan') {
+              // Claude's ExitPlanMode: render the plan as an approval card. The
+              // tool_result phase only refreshes the text — approval state is
+              // driven by approvePlan/rejectPlan, not by the CLI (which cannot
+              // approve plans in non-interactive -p mode).
+              const text = (it.text ?? '').trim()
+              if (!text) return
+              countText(it.id, text)
+              const existingId = itemCards.get(it.id)
+              if (existingId) patch(existingId, { text })
+              else {
+                const cardId = crypto.randomUUID()
+                itemCards.set(it.id, cardId)
+                addMsg({
+                  id: cardId,
+                  role: 'assistant',
+                  kind: 'text',
+                  plan: true,
+                  status: 'awaiting',
+                  model: assistantModel,
+                  text
+                })
+              }
+              return
+            }
             if (it.type === 'agent_message') {
               if (event.phase === 'completed' && it.text?.trim()) {
                 const text = it.text.trim()
@@ -3800,7 +3931,9 @@ export const useApp = create<AppState>((set, get) => {
                     cwd: root,
                     sessionId: readRun(taskId)?.claudeSessionId ?? undefined,
                     model: claudeModel || undefined,
-                    permission: claudePermission
+                    permission: claudePermission,
+                    effort: claudeEffort || undefined,
+                    thinking: claudeThinking
                   },
                   handleEvent
                 )
@@ -4449,6 +4582,26 @@ export const useApp = create<AppState>((set, get) => {
       pendingApprovals.delete(id)
       entry.resolve(false)
     }
+  },
+
+  approvePlan(id, permission) {
+    const taskId = get().activeTaskId
+    if (!taskId || get().streaming) return
+    writeRun(taskId, (r) => ({
+      messages: r.messages.map((m) => (m.id === id ? { ...m, status: 'done' as const } : m))
+    }))
+    get().setClaudePermission(permission)
+    void get().submitTask('The plan is approved. Proceed with the implementation.', {
+      text: tr(get().appLanguage, 'chat.planApprovedMessage')
+    })
+  },
+
+  rejectPlan(id) {
+    const taskId = get().activeTaskId
+    if (!taskId) return
+    writeRun(taskId, (r) => ({
+      messages: r.messages.map((m) => (m.id === id ? { ...m, status: 'rejected' as const } : m))
+    }))
   },
 
   stopStreaming(taskId) {

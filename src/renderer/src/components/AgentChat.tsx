@@ -3,8 +3,8 @@ import type { GitBranch, GitStatusResult } from '@shared/ipc'
 import { Composer } from './Composer'
 import { FileIcon } from './FileIcon'
 import { Icon } from './Icon'
-import { useApp, type ChatMessage, type ToolStatus } from '@/state/store'
-import { lineDiff } from '@/lib/diff'
+import { useApp, parseFileRef, type ChatMessage, type ToolStatus } from '@/state/store'
+import { lineDiff, type DiffLine } from '@/lib/diff'
 import { api } from '@/lib/api'
 import { tr, type TranslationKey } from '@/language'
 
@@ -45,19 +45,67 @@ const STATUS_TEXT_KEY: Record<ToolStatus, TranslationKey> = {
   error: 'chat.status.error'
 }
 
+interface SideRow {
+  left?: DiffLine
+  right?: DiffLine
+}
+
+/**
+ * Align a unified diff into side-by-side rows: context spans both columns,
+ * paired del/add runs sit opposite each other, and the shorter side of an
+ * uneven run gets hatched filler cells (like the VS Code extension's diff).
+ */
+function sideRows(lines: DiffLine[]): SideRow[] {
+  const rows: SideRow[] = []
+  let dels: DiffLine[] = []
+  let adds: DiffLine[] = []
+  const flush = (): void => {
+    const max = Math.max(dels.length, adds.length)
+    for (let i = 0; i < max; i += 1) rows.push({ left: dels[i], right: adds[i] })
+    dels = []
+    adds = []
+  }
+  for (const line of lines) {
+    if (line.type === 'del') dels.push(line)
+    else if (line.type === 'add') adds.push(line)
+    else {
+      flush()
+      rows.push({ left: line, right: line })
+    }
+  }
+  flush()
+  return rows
+}
+
+/** Side-by-side diff: old hunk on the left, new on the right. */
 function Diff({ oldText, newText }: { oldText: string; newText: string }): JSX.Element {
   const appLanguage = useApp((s) => s.appLanguage)
   const lines = lineDiff(oldText, newText)
   if (lines.length === 0) return <div className="tool-note">{tr(appLanguage, 'chat.noChanges')}</div>
+  const rows = sideRows(lines)
   return (
-    <pre className="tool-diff">
-      {lines.map((l, i) => (
-        <div key={i} className={`diff-line ${l.type}`}>
-          <span className="diff-gutter">{l.type === 'add' ? '+' : l.type === 'del' ? '-' : ' '}</span>
-          {l.text}
+    <div className="side-diff">
+      {rows.map((row, i) => (
+        <div key={i} className="side-row">
+          <div className={`side-cell ${row.left ? row.left.type : 'filler'}`}>
+            {row.left && (
+              <>
+                <span className="diff-gutter">{row.left.type === 'del' ? '-' : ' '}</span>
+                {row.left.text || ' '}
+              </>
+            )}
+          </div>
+          <div className={`side-cell ${row.right ? row.right.type : 'filler'}`}>
+            {row.right && (
+              <>
+                <span className="diff-gutter">{row.right.type === 'add' ? '+' : ' '}</span>
+                {row.right.text || ' '}
+              </>
+            )}
+          </div>
         </div>
       ))}
-    </pre>
+    </div>
   )
 }
 
@@ -112,6 +160,12 @@ function ToolCard({ m }: { m: ChatMessage }): JSX.Element {
 
       {m.tool === 'apply_patch' && m.output && <pre className="tool-output">{m.output}</pre>}
 
+      {m.tool === 'apply_patch' &&
+        (m.oldContent !== undefined || m.newContent !== undefined) &&
+        m.oldContent !== m.newContent && (
+          <Diff oldText={m.oldContent ?? ''} newText={m.newContent ?? ''} />
+        )}
+
       {status === 'error' && m.error && <div className="tool-error">{m.error}</div>}
 
       {status === 'awaiting' && (
@@ -129,6 +183,88 @@ function ToolCard({ m }: { m: ChatMessage }): JSX.Element {
 }
 
 /** Grok-style compact duration: 37s, 2m, 2m 10s. */
+/**
+ * The agent's working checklist (Claude's TodoWrite): checked+struck rows for
+ * completed items, an arrow for the one in progress, empty boxes for pending —
+ * the same card the VS Code extension shows for "Update Todos".
+ */
+function TodoCard({ m }: { m: ChatMessage }): JSX.Element {
+  const appLanguage = useApp((s) => s.appLanguage)
+  const todos = m.todos ?? []
+  return (
+    <div className="todo-card">
+      <div className="todo-head">
+        <Icon name="check" size={14} />
+        <span className="tool-name">{tr(appLanguage, 'chat.todoUpdate')}</span>
+      </div>
+      <ul className="todo-list">
+        {todos.map((todo, i) => (
+          <li key={i} className={`todo-row ${todo.status}`}>
+            <span className="todo-box">
+              {todo.status === 'completed' ? (
+                <Icon name="check" size={11} />
+              ) : todo.status === 'in_progress' ? (
+                <Icon name="chevronRight" size={11} />
+              ) : null}
+            </span>
+            <span className="todo-text">{todo.content}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+/**
+ * Claude plan-mode handoff card (ExitPlanMode): the plan markdown plus the
+ * VS Code extension's approval choices — accept with auto-edits, accept with
+ * manual approval, or reject and keep planning.
+ */
+function PlanCard({ m }: { m: ChatMessage }): JSX.Element {
+  const approvePlan = useApp((s) => s.approvePlan)
+  const rejectPlan = useApp((s) => s.rejectPlan)
+  const streaming = useApp((s) => s.streaming)
+  const provider = useApp((s) => s.provider)
+  const appLanguage = useApp((s) => s.appLanguage)
+  const t = (key: TranslationKey, values?: Record<string, string | number>): string =>
+    tr(appLanguage, key, values)
+  const status = m.status ?? 'awaiting'
+  const actionable = status === 'awaiting' && provider === 'claude' && !streaming
+  const statusKey: TranslationKey =
+    status === 'done'
+      ? 'chat.planAccepted'
+      : status === 'rejected'
+        ? 'chat.planRejected'
+        : 'chat.planAwaiting'
+
+  return (
+    <div className={`plan-card ${status}`}>
+      <div className="plan-head">
+        <Icon name="file" size={14} />
+        <span className="tool-name">{t('chat.plan')}</span>
+        <span className="spacer" />
+        <span className={`tool-status ${status}`}>{t(statusKey)}</span>
+      </div>
+      <div className="plan-body">
+        <AssistantMarkdown text={m.text} />
+      </div>
+      {actionable && (
+        <div className="tool-actions">
+          <button className="tool-approve" onClick={() => approvePlan(m.id, 'acceptEdits')}>
+            <Icon name="check" size={14} /> {t('chat.planAcceptAuto')}
+          </button>
+          <button className="tool-approve manual" onClick={() => approvePlan(m.id, 'default')}>
+            <Icon name="check" size={14} /> {t('chat.planAcceptManual')}
+          </button>
+          <button className="tool-reject" onClick={() => rejectPlan(m.id)}>
+            <Icon name="x" size={14} /> {t('chat.reject')}
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function formatReasoningDuration(ms: number): string {
   const totalSeconds = Math.max(1, Math.round(ms / 1000))
   if (totalSeconds < 60) return `${totalSeconds}s`
@@ -176,12 +312,40 @@ async function copyText(text: string): Promise<void> {
   if (!copied) throw new Error('Clipboard write failed')
 }
 
+/**
+ * True when a link target / code span points at a workspace file — a path with
+ * a separator, or a bare file name with an explicit line ("runner.ts:321").
+ * Plain words and URLs stay non-clickable.
+ */
+function isFileRefTarget(target: string): boolean {
+  const parsed = parseFileRef(target)
+  if (!parsed) return false
+  if (/[\\/]/.test(parsed.path)) return true
+  return parsed.line !== undefined && /\.[A-Za-z0-9]{1,8}$/.test(parsed.path)
+}
+
+function FileRefLink({ target, label }: { target: string; label: string }): JSX.Element {
+  const openFileReference = useApp((s) => s.openFileReference)
+  return (
+    <button
+      type="button"
+      className="msg-file-link"
+      title={target}
+      onClick={() => void openFileReference(target)}
+    >
+      <code className="msg-inline-code">{label}</code>
+    </button>
+  )
+}
+
 /** Render the small, common Markdown subset used in agent replies without
  * trusting model-generated HTML. Code is tokenized before emphasis so markers
- * inside backticks remain literal. */
+ * inside backticks remain literal. File references — markdown links, code
+ * spans, or bare paths with a line number — open in the editor at that line. */
 function renderInlineMarkdown(text: string, keyPrefix: string): Array<string | JSX.Element> {
   const nodes: Array<string | JSX.Element> = []
-  const tokenPattern = /(`[^`\n]+`|\*\*[^*\n]+?\*\*|__[^_\n]+?__)/g
+  const tokenPattern =
+    /(`[^`\n]+`|\[[^\]\n]+\]\([^)\n]+\)|\*\*[^*\n]+?\*\*|__[^_\n]+?__|(?<![\w/\\.:~-])(?:[\w.-]+[/\\])+[\w.-]+\.[A-Za-z0-9]{1,8}(?::\d+(?:[-:]\d+)?)?)/g
   let cursor = 0
   let tokenIndex = 0
   for (const match of text.matchAll(tokenPattern)) {
@@ -190,13 +354,45 @@ function renderInlineMarkdown(text: string, keyPrefix: string): Array<string | J
     const token = match[0]
     const key = `${keyPrefix}-${tokenIndex}`
     if (token.startsWith('`')) {
-      nodes.push(<code className="msg-inline-code" key={key}>{token.slice(1, -1)}</code>)
-    } else {
+      const inner = token.slice(1, -1)
+      if (isFileRefTarget(inner)) {
+        nodes.push(<FileRefLink key={key} target={inner} label={inner} />)
+      } else {
+        nodes.push(<code className="msg-inline-code" key={key}>{inner}</code>)
+      }
+    } else if (token.startsWith('[')) {
+      const link = token.match(/^\[([^\]]+)\]\(([^)]+)\)$/)
+      const label = link?.[1] ?? token
+      const href = (link?.[2] ?? '').trim()
+      if (/^https?:\/\//i.test(href)) {
+        nodes.push(
+          <a
+            key={key}
+            className="msg-link"
+            href={href}
+            title={href}
+            onClick={(e) => {
+              e.preventDefault()
+              void api.live.openExternal(href)
+            }}
+          >
+            {renderInlineMarkdown(label, `${key}-link`)}
+          </a>
+        )
+      } else if (isFileRefTarget(href)) {
+        nodes.push(<FileRefLink key={key} target={href} label={label} />)
+      } else {
+        nodes.push(token)
+      }
+    } else if (token.startsWith('**') || token.startsWith('__')) {
       nodes.push(
         <strong key={key}>
           {renderInlineMarkdown(token.slice(2, -2), `${key}-strong`)}
         </strong>
       )
+    } else {
+      // Bare path token like src/main/claude/runner.ts:321
+      nodes.push(<FileRefLink key={key} target={token} label={token} />)
     }
     cursor = index + token.length
     tokenIndex += 1
@@ -418,7 +614,13 @@ function Messages({ messages }: { messages: ChatMessage[] }): JSX.Element {
     <>
       {messages.map((m) =>
         isLeakedWProviderToolCall(m) ? null : m.kind === 'tool' ? (
-          <ToolCard key={m.id} m={m} />
+          m.tool === 'update_todos' ? (
+            <TodoCard key={m.id} m={m} />
+          ) : (
+            <ToolCard key={m.id} m={m} />
+          )
+        ) : m.plan ? (
+          <PlanCard key={m.id} m={m} />
         ) : m.reasoning ? (
           <ReasoningBlock key={m.id} text={m.text} durationMs={m.reasoningDurationMs} />
         ) : (

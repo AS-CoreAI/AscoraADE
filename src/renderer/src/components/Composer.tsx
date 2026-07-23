@@ -14,6 +14,8 @@ import {
   CODEX_REASONING_LEVELS,
   COPILOT_PERMISSION_MODES,
   COPILOT_REASONING_LEVELS,
+  CLAUDE_EFFORT_LEVELS,
+  CLAUDE_MODEL_LABEL,
   CLAUDE_MODEL_PRESETS,
   CLAUDE_PERMISSION_MODES,
   GEMINI_APPROVAL_MODES,
@@ -23,6 +25,7 @@ import {
   type CodexSandbox,
   type CopilotPermissionMode,
   type CopilotReasoning,
+  type ClaudeEffort,
   type ClaudePermissionMode,
   type GeminiApprovalMode,
   type GlmMode,
@@ -163,6 +166,10 @@ export const COPILOT_REASONING_LABEL_KEY: Record<CopilotReasoning, TranslationKe
   max: 'composer.reasoning.max'
 }
 
+/** Claude's `--effort` shares Copilot's level names, so the labels are reused. */
+export const CLAUDE_EFFORT_LABEL_KEY: Record<ClaudeEffort, TranslationKey> =
+  COPILOT_REASONING_LABEL_KEY
+
 export function openRouterModelOptions(models: string[], selectedModel: string): string[] {
   const seen = new Set<string>()
   return [selectedModel, DEFAULT_LLM_CONFIG.openRouterModel, ...models]
@@ -248,6 +255,10 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
   const setClaudeModel = useApp((s) => s.setClaudeModel)
   const claudePermission = useApp((s) => s.claudePermission)
   const setClaudePermission = useApp((s) => s.setClaudePermission)
+  const claudeEffort = useApp((s) => s.claudeEffort)
+  const setClaudeEffort = useApp((s) => s.setClaudeEffort)
+  const claudeThinking = useApp((s) => s.claudeThinking)
+  const setClaudeThinking = useApp((s) => s.setClaudeThinking)
   const geminiModel = useApp((s) => s.geminiModel)
   const setGeminiModel = useApp((s) => s.setGeminiModel)
   const geminiPermission = useApp((s) => s.geminiPermission)
@@ -640,20 +651,32 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
             </select>
           </div>
         ) : provider === 'claude' ? (
-          <div className="composer-tool" title={t('composer.claudePermission')}>
-            <Icon name="hand" size={15} />
-            <select
-              className="composer-tool-select"
-              value={claudePermission}
-              onChange={(e) => setClaudePermission(e.target.value as ClaudePermissionMode)}
+          <>
+            <div className="composer-tool" title={t('composer.claudePermission')}>
+              <Icon name="hand" size={15} />
+              <select
+                className="composer-tool-select"
+                value={claudePermission}
+                onChange={(e) => setClaudePermission(e.target.value as ClaudePermissionMode)}
+              >
+                {CLAUDE_PERMISSION_MODES.map((p) => (
+                  <option key={p} value={p}>
+                    {t(PERMISSION_SHORT_KEY[p])}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <button
+              type="button"
+              className={`composer-tool${claudeThinking ? ' active' : ''}`}
+              title={t('composer.thinkingHint')}
+              aria-pressed={claudeThinking}
+              onClick={() => setClaudeThinking(!claudeThinking)}
             >
-              {CLAUDE_PERMISSION_MODES.map((p) => (
-                <option key={p} value={p}>
-                  {t(PERMISSION_SHORT_KEY[p])}
-                </option>
-              ))}
-            </select>
-          </div>
+              <Icon name="bulb" size={15} />
+              {t('composer.thinking')}
+            </button>
+          </>
         ) : provider === 'gemini' ? (
           <div className="composer-tool" title={t('composer.geminiApproval')}>
             <Icon name="hand" size={15} />
@@ -777,21 +800,36 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
             </select>
           </>
         ) : provider === 'claude' ? (
-          <select
-            className="composer-select"
-            value={claudeModel || 'default'}
-            onChange={(e) => setClaudeModel(e.target.value === 'default' ? '' : e.target.value)}
-            title={t('composer.claudeModel')}
-          >
-            {CLAUDE_MODEL_PRESETS.map((m) => (
-              <option key={m} value={m}>
-                {m === 'default' ? t('composer.claudeDefault') : m}
-              </option>
-            ))}
-            {claudeModel && !CLAUDE_MODEL_PRESETS.includes(claudeModel) && (
-              <option value={claudeModel}>{claudeModel}</option>
-            )}
-          </select>
+          <>
+            <select
+              className="composer-select"
+              value={claudeEffort}
+              onChange={(e) => setClaudeEffort(e.target.value as ClaudeEffort | '')}
+              title={t('composer.claudeEffort')}
+            >
+              <option value="">{t('composer.reasoningAuto')}</option>
+              {CLAUDE_EFFORT_LEVELS.map((r) => (
+                <option key={r} value={r}>
+                  {t(CLAUDE_EFFORT_LABEL_KEY[r])}
+                </option>
+              ))}
+            </select>
+            <select
+              className="composer-select"
+              value={claudeModel || 'default'}
+              onChange={(e) => setClaudeModel(e.target.value === 'default' ? '' : e.target.value)}
+              title={t('composer.claudeModel')}
+            >
+              {CLAUDE_MODEL_PRESETS.map((m) => (
+                <option key={m} value={m}>
+                  {m === 'default' ? t('composer.claudeDefault') : (CLAUDE_MODEL_LABEL[m] ?? m)}
+                </option>
+              ))}
+              {claudeModel && !CLAUDE_MODEL_PRESETS.includes(claudeModel) && (
+                <option value={claudeModel}>{claudeModel}</option>
+              )}
+            </select>
+          </>
         ) : provider === 'gemini' ? (
           <select
             className="composer-select"

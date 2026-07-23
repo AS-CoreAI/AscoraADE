@@ -9,6 +9,7 @@ import {
   openRouterModelOptions,
   REASONING_LABEL_KEY,
   COPILOT_REASONING_LABEL_KEY,
+  CLAUDE_EFFORT_LABEL_KEY,
   SANDBOX_SHORT_KEY,
   COPILOT_PERMISSION_SHORT_KEY,
   PERMISSION_SHORT_KEY,
@@ -25,6 +26,8 @@ import {
   CODEX_REASONING_LEVELS,
   COPILOT_PERMISSION_MODES,
   COPILOT_REASONING_LEVELS,
+  CLAUDE_EFFORT_LEVELS,
+  CLAUDE_MODEL_LABEL,
   CLAUDE_MODEL_PRESETS,
   CLAUDE_PERMISSION_MODES,
   GEMINI_APPROVAL_MODES,
@@ -34,6 +37,7 @@ import {
   type CodexSandbox,
   type CopilotPermissionMode,
   type CopilotReasoning,
+  type ClaudeEffort,
   type ClaudePermissionMode,
   type GeminiApprovalMode,
   type GlmMode,
@@ -713,6 +717,10 @@ function ClaudePanel(): JSX.Element {
   const setClaudeModel = useApp((s) => s.setClaudeModel)
   const claudePermission = useApp((s) => s.claudePermission)
   const setClaudePermission = useApp((s) => s.setClaudePermission)
+  const claudeEffort = useApp((s) => s.claudeEffort)
+  const setClaudeEffort = useApp((s) => s.setClaudeEffort)
+  const claudeThinking = useApp((s) => s.claudeThinking)
+  const setClaudeThinking = useApp((s) => s.setClaudeThinking)
   const check = useApp((s) => s.claudeCheck)
   const checking = useApp((s) => s.claudeChecking)
   const checkClaude = useApp((s) => s.checkClaude)
@@ -757,7 +765,9 @@ function ClaudePanel(): JSX.Element {
         />
         <datalist id="claude-model-presets">
           {CLAUDE_MODEL_PRESETS.map((m) => (
-            <option key={m} value={m} />
+            <option key={m} value={m}>
+              {CLAUDE_MODEL_LABEL[m] ?? m}
+            </option>
           ))}
         </datalist>
       </label>
@@ -779,6 +789,39 @@ function ClaudePanel(): JSX.Element {
           {t('settings.claudePolicyHint')}
         </span>
       </label>
+
+      <label className="field">
+        <span className="field-label">{t('composer.claudeEffort')}</span>
+        <select
+          className="text-input"
+          value={claudeEffort}
+          onChange={(e) => setClaudeEffort(e.target.value as ClaudeEffort | '')}
+        >
+          <option value="">{t('settings.autoClaudeDefault')}</option>
+          {CLAUDE_EFFORT_LEVELS.map((r) => (
+            <option key={r} value={r}>
+              {t(CLAUDE_EFFORT_LABEL_KEY[r])}
+            </option>
+          ))}
+        </select>
+        <span className="field-hint">
+          {t('settings.claudeEffortHint')}
+        </span>
+      </label>
+
+      <div className="field">
+        <span className="field-label">{t('composer.thinking')}</span>
+        <div className="field-row" style={{ alignItems: 'center' }}>
+          <label className="skill-toggle" title={t('composer.thinkingHint')}>
+            <input
+              type="checkbox"
+              checked={claudeThinking}
+              onChange={(e) => setClaudeThinking(e.target.checked)}
+            />
+          </label>
+          <span className="field-hint">{t('settings.claudeThinkingHint')}</span>
+        </div>
+      </div>
 
       <div
         className={`conn-line ${
