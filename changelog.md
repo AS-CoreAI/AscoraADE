@@ -1,3 +1,13 @@
+## Ascora ADE 1.3.1
+What's new?
+
+### Changed
+- **Version bump to 1.3.1** — package metadata and release notes now report version 1.3.1.
+
+### Fixed
+- **Premium VPN reconnects keep their account identity** — Ascora proactively refreshes expiring access tokens, serializes concurrent refresh attempts, and verifies the account through the required-auth profile endpoint before every connection. A Premium session can no longer be silently provisioned as anonymous and rejected by the shared 100 MB machine limit after disconnecting and reconnecting.
+- **Premium traffic is attributed to the account** — traffic responses that were anonymously downgraded by older Wandrounik control panels are detected and retried after account validation. Misclassified persisted sessions are cleaned up on launch, anonymous session credentials remain usable for cleanup after a token refresh, and new Premium traffic is recorded in the account statistics instead of remaining at zero.
+
 ## Ascora ADE 1.3.0
 What's new?
 

@@ -92,6 +92,7 @@ let openVpnProcess: ChildProcess | null = null
 let serverCache: { at: number; servers: VpnServer[] } | null = null
 let dependencyCache: { at: number; value: VpnStatus['dependencies'] } | null = null
 let tokens: TokenPair | null = null
+let tokenRefresh: Promise<boolean> | null = null
 let anonymousUsage: AnonymousUsageData | null = null
 let anonymousBaseline: number | null = null
 let usageTimer: ReturnType<typeof setInterval> | null = null
@@ -163,6 +164,18 @@ async function writePrivateJson(file: string, value: unknown): Promise<void> {
 
 function normalizeTier(value: unknown): Exclude<VpnAccountTier, 'anonymous'> {
   return ['paid', 'premium', 'pro', 'advanced'].includes(string(value).toLowerCase()) ? 'paid' : 'free'
+}
+
+function accessTokenExpiresSoon(accessToken: string, skewSeconds = 30): boolean {
+  try {
+    const [, encodedPayload] = accessToken.split('.')
+    if (!encodedPayload) return false
+    const payload = JSON.parse(Buffer.from(encodedPayload, 'base64url').toString('utf8')) as { exp?: unknown }
+    return typeof payload.exp === 'number' && payload.exp <= Math.floor(Date.now() / 1000) + skewSeconds
+  } catch {
+    // Opaque/non-JWT access tokens are refreshed through the normal 401 path.
+    return false
+  }
 }
 
 function encryptToken(value: string): string {
@@ -590,6 +603,9 @@ function startUsageMonitor(): void {
 }
 
 async function apiRequest(pathname: string, init?: RequestInit, authenticate = true, retryAuth = true): Promise<ApiRecord> {
+  if (authenticate && tokens?.accessToken && accessTokenExpiresSoon(tokens.accessToken)) {
+    if (!(await refreshAccessToken())) throw new VpnApiError('vpn_session_expired', 401)
+  }
   const headers: Record<string, string> = {
     Accept: 'application/json',
     'Content-Type': 'application/json',
@@ -625,7 +641,7 @@ async function apiRequest(pathname: string, init?: RequestInit, authenticate = t
   return body
 }
 
-async function refreshAccessToken(): Promise<boolean> {
+async function doRefreshAccessToken(): Promise<boolean> {
   if (!tokens?.refreshToken) return false
   const previous = tokens
   try {
@@ -648,6 +664,22 @@ async function refreshAccessToken(): Promise<boolean> {
     await clearTokens()
     return false
   }
+}
+
+function refreshAccessToken(): Promise<boolean> {
+  if (tokenRefresh) return tokenRefresh
+  tokenRefresh = doRefreshAccessToken().finally(() => { tokenRefresh = null })
+  return tokenRefresh
+}
+
+async function syncAccountProfile(): Promise<void> {
+  if (!tokens) return
+  const body = await apiRequest('/api/client/me')
+  if (!tokens) throw new VpnApiError('vpn_session_expired', 401)
+  const email = string(body.email, tokens.email)
+  const tier = normalizeTier(body.tier ?? tokens.tier)
+  await persistTokens({ ...tokens, email, tier })
+  publish({ account: { authenticated: true, email, tier } })
 }
 
 function number(value: unknown, fallback = 0): number {
@@ -740,7 +772,15 @@ export async function getVpnTraffic(): Promise<VpnTrafficResult> {
     }
   }
   try {
-    const body = await apiRequest('/api/client/traffic')
+    let body = await apiRequest('/api/client/traffic')
+    // Older control-panel versions accepted an expired Bearer token as an
+    // anonymous request. Detect that identity downgrade and force the normal
+    // /me -> refresh flow before trusting quota or traffic data.
+    if (current.account.tier === 'paid' && body.free_tier && tokens) {
+      await syncAccountProfile()
+      body = await apiRequest('/api/client/traffic')
+      if (body.free_tier) throw new VpnApiError('vpn_account_not_recognized', 401)
+    }
     const stats = body.stats && typeof body.stats === 'object' ? body.stats as ApiRecord : {}
     const freeTier = body.free_tier && typeof body.free_tier === 'object' ? body.free_tier as ApiRecord : null
     const usedBytes = freeTier ? number(freeTier.used_bytes) : null
@@ -1098,7 +1138,13 @@ async function releaseRemoteSession(stored: StoredSession | null): Promise<void>
   const body: ApiRecord = {}
   if (stored.peerId) body.peer_id = stored.peerId
   if (stored.anonymousSessionId) body.anonymous_session_id = stored.anonymousSessionId
-  await apiRequest('/api/client/disconnect', { method: 'POST', body: JSON.stringify(body) }).catch(() => undefined)
+  // An anonymous session must be released with its own session secret even if
+  // the local account has since refreshed and become authenticated.
+  await apiRequest(
+    '/api/client/disconnect',
+    { method: 'POST', body: JSON.stringify(body) },
+    !stored.anonymousSessionId
+  ).catch(() => undefined)
 }
 
 function storedSession(body: ApiRecord, request: VpnConnectRequest, processPid?: number): StoredSession {
@@ -1141,11 +1187,7 @@ async function ensureInitialized(): Promise<void> {
         account: { authenticated: true, email: tokens.email, tier: tokens.tier }
       }
       try {
-        const me = await apiRequest('/api/client/me')
-        const email = string(me.email, tokens.email)
-        const tier = normalizeTier(me.tier ?? tokens.tier)
-        await persistTokens({ ...tokens, email, tier })
-        current = { ...current, account: { authenticated: true, email, tier } }
+        await syncAccountProfile()
       } catch (error) {
         // Preserve the encrypted session during temporary network outages. A
         // definitive 401 is handled by apiRequest's refresh/clear flow.
@@ -1155,7 +1197,15 @@ async function ensureInitialized(): Promise<void> {
     const savedSession = await readJson<StoredSession>(sessionPath())
     if (savedSession && isProtocol(savedSession.protocol)) {
       session = savedSession
-      if (await sessionConnected(savedSession)) {
+      if (current.account.authenticated && savedSession.anonymousSessionId) {
+        // Repair a session created by an older Control Panel that silently
+        // downgraded an expired account token to anonymous. It cannot be
+        // attributed to the account, so tear it down before the next connect.
+        if (savedSession.protocol === 'openvpn') await stopOpenvpn(savedSession.processPid).catch(() => undefined)
+        else await uninstallWireguard().catch(() => undefined)
+        await releaseRemoteSession(savedSession)
+        await clearSession()
+      } else if (await sessionConnected(savedSession)) {
         current = {
           ...current,
           state: 'connected',
@@ -1239,6 +1289,16 @@ async function doConnect(request: VpnConnectRequest): Promise<VpnStatus> {
   await ensureInitialized()
   if (!isProtocol(request.protocol)) throw new Error('Unsupported VPN protocol.')
   if (current.state === 'connected') return current
+  if (current.account.authenticated) {
+    try {
+      // /connect accepts anonymous calls, so an expired optional Bearer token
+      // used to be silently downgraded and subjected Premium users to the
+      // anonymous machine limit. A required-auth preflight prevents that.
+      await syncAccountProfile()
+    } catch (error) {
+      return publish({ state: 'error', error: errorMessage(error), connectedAt: null })
+    }
+  }
   settings.protocol = request.protocol
   settings.serverId = current.account.tier === 'paid' ? request.serverId?.trim() || null : null
   await saveSettings()
@@ -1273,13 +1333,16 @@ async function doConnect(request: VpnConnectRequest): Promise<VpnStatus> {
     }
     if (settings.serverId && current.account.tier === 'paid') body.server_id = settings.serverId
     const response = await apiRequest('/api/client/connect', { method: 'POST', body: JSON.stringify(body) })
+    provisioned = storedSession(response, request)
+    if (current.account.authenticated && provisioned.anonymousSessionId) {
+      throw new VpnApiError('vpn_account_not_recognized', 401)
+    }
     if (request.protocol === 'wireguard') {
-      provisioned = storedSession(response, request)
       await installWireguard(buildWireguardConfig(privateKey, response))
     } else {
       const config = safeOpenvpnConfig(response.openvpn_config)
       const pid = await startOpenvpn(config)
-      provisioned = storedSession(response, request, pid)
+      provisioned.processPid = pid
     }
     await saveSession(provisioned)
     if (current.account.tier === 'anonymous') await startAnonymousUsage().catch(() => undefined)
