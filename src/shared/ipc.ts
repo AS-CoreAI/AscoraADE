@@ -109,6 +109,14 @@ export const IPC = {
     abort: 'gemini:abort',
     event: 'gemini:event'
   },
+  grok: {
+    check: 'grok:check',
+    login: 'grok:login',
+    logout: 'grok:logout',
+    run: 'grok:run',
+    abort: 'grok:abort',
+    event: 'grok:event'
+  },
   glm: {
     check: 'glm:check',
     captchaConfig: 'glm:captchaConfig',
@@ -324,6 +332,7 @@ export interface TaskSessions {
   copilotSessionId?: string | null
   claudeSessionId?: string | null
   geminiSessionId?: string | null
+  grokSessionId?: string | null
   glmSessionId?: string | null
 }
 
@@ -347,6 +356,7 @@ export type LlmProvider =
   | 'copilot'
   | 'claude'
   | 'gemini'
+  | 'grok'
   | 'glm'
   | 'wprovider'
   | 'omniroute'
@@ -668,6 +678,31 @@ export type GeminiApprovalMode = 'plan' | 'default' | 'auto_edit' | 'yolo'
 
 /** Selectable Gemini CLI approval modes, from most to least restrictive. */
 export const GEMINI_APPROVAL_MODES: GeminiApprovalMode[] = ['plan', 'default', 'auto_edit', 'yolo']
+
+/** Grok Build CLI permission mode (`grok --permission-mode`). */
+export type GrokPermissionMode =
+  | 'plan'
+  | 'default'
+  | 'acceptEdits'
+  | 'auto'
+  | 'dontAsk'
+  | 'bypassPermissions'
+
+/** Selectable Grok permission modes, from most to least restrictive. */
+export const GROK_PERMISSION_MODES: GrokPermissionMode[] = [
+  'plan',
+  'default',
+  'acceptEdits',
+  'auto',
+  'dontAsk',
+  'bypassPermissions'
+]
+
+/** Reasoning effort for Grok Build models (`--reasoning-effort` / `--effort`). */
+export type GrokReasoning = 'low' | 'medium' | 'high'
+
+/** Selectable Grok reasoning levels, in ascending order of effort. */
+export const GROK_REASONING_LEVELS: GrokReasoning[] = ['low', 'medium', 'high']
 
 /**
  * Permission mode for the GLM / ZCode CLI (`zcode --prompt … --mode <mode>`).
@@ -1042,6 +1077,14 @@ export interface LlmConfig {
   geminiModel: string
   /** Approval mode Gemini CLI runs under. */
   geminiPermission: GeminiApprovalMode
+  /** Path to the `grok` binary; empty → auto-detect (PATH / ~/.grok/bin). */
+  grokPath: string
+  /** Model passed to `grok --model`; empty → Grok CLI's own default. */
+  grokModel: string
+  /** Permission mode Grok Build runs under (`--permission-mode`). */
+  grokPermission: GrokPermissionMode
+  /** Reasoning effort for Grok; empty → use Grok's own default. */
+  grokReasoning: GrokReasoning | ''
   /**
    * Path to the ZCode install (folder, `ZCode.exe`, or `zcode.cjs`); empty →
    * auto-detect the per-user install. The bundled `zcode.cjs` is driven via
@@ -1087,6 +1130,10 @@ export const DEFAULT_LLM_CONFIG: LlmConfig = {
   geminiPath: '',
   geminiModel: '',
   geminiPermission: 'yolo',
+  grokPath: '',
+  grokModel: '',
+  grokPermission: 'bypassPermissions',
+  grokReasoning: '',
   glmPath: '',
   glmMode: 'yolo',
   wproviderService: 'qwen',
@@ -1288,6 +1335,25 @@ export interface GeminiRunParams {
   model?: string
   /** Overrides the configured approval mode (`--approval-mode`). */
   permission?: GeminiApprovalMode
+}
+
+// ---------- Grok Build CLI (`grok -p --output-format streaming-json`) ----------
+// The Grok backend reuses Codex's normalized CodexEvent / CodexItem /
+// CodexRunResult / CodexCheckResult shapes so the renderer drives every CLI
+// backend with one code path.
+
+export interface GrokRunParams {
+  prompt: string
+  /** Working root the spawned `grok` runs in (`--cwd`). */
+  cwd: string
+  /** Resume this Grok session instead of starting fresh (`--resume`). */
+  sessionId?: string
+  /** Overrides the configured model (`--model`); empty → config/default. */
+  model?: string
+  /** Overrides the configured permission mode (`--permission-mode`). */
+  permission?: GrokPermissionMode
+  /** Overrides the configured reasoning effort (`--reasoning-effort`). */
+  reasoning?: GrokReasoning | ''
 }
 
 /** One normalized account rate-limit window for the status-bar usage indicator. */

@@ -18,6 +18,8 @@ import type {
   ClaudeEffort,
   ClaudePermissionMode,
   GeminiApprovalMode,
+  GrokPermissionMode,
+  GrokReasoning,
   GlmMode,
   CodexEvent,
   CodexItem,
@@ -866,6 +868,7 @@ function modelLabel(s: {
   copilotModel: string
   claudeModel: string
   geminiModel: string
+  grokModel: string
   wproviderService: WProviderService
   omnirouteModel: string
 }): string {
@@ -886,6 +889,8 @@ function modelLabel(s: {
         : 'Claude'
     case 'gemini':
       return s.geminiModel || 'Gemini'
+    case 'grok':
+      return s.grokModel || 'Grok'
     case 'glm':
       return 'GLM'
     case 'wprovider':
@@ -1053,6 +1058,10 @@ interface WorkspaceLlm {
   claudeThinking?: boolean
   geminiModel: string
   geminiPermission: GeminiApprovalMode
+  /** Optional for compatibility with workspace/task snapshots from pre-Grok CLI. */
+  grokModel?: string
+  grokPermission?: GrokPermissionMode
+  grokReasoning?: GrokReasoning | ''
   glmMode: GlmMode
   wproviderService: WProviderService
   /** Optional for compatibility with workspace/task snapshots from pre-1.3.0. */
@@ -1077,6 +1086,9 @@ function snapshotLlm(s: {
   claudeThinking: boolean
   geminiModel: string
   geminiPermission: GeminiApprovalMode
+  grokModel: string
+  grokPermission: GrokPermissionMode
+  grokReasoning: GrokReasoning | ''
   glmMode: GlmMode
   wproviderService: WProviderService
   omnirouteModel: string
@@ -1098,6 +1110,9 @@ function snapshotLlm(s: {
     claudeThinking: s.claudeThinking,
     geminiModel: s.geminiModel,
     geminiPermission: s.geminiPermission,
+    grokModel: s.grokModel,
+    grokPermission: s.grokPermission,
+    grokReasoning: s.grokReasoning,
     glmMode: s.glmMode,
     wproviderService: s.wproviderService,
     omnirouteModel: s.omnirouteModel
@@ -1182,6 +1197,7 @@ interface RunState {
   copilotSessionId: string | null
   claudeSessionId: string | null
   geminiSessionId: string | null
+  grokSessionId: string | null
   glmSessionId: string | null
 }
 
@@ -1199,6 +1215,7 @@ type RunFields = Pick<
   | 'copilotSessionId'
   | 'claudeSessionId'
   | 'geminiSessionId'
+  | 'grokSessionId'
   | 'glmSessionId'
 >
 
@@ -1323,6 +1340,14 @@ interface AppState {
   geminiSessionId: string | null
   geminiCheck: CodexCheckResult | null
   geminiChecking: boolean
+  // Grok Build CLI
+  grokPath: string
+  grokModel: string
+  grokPermission: GrokPermissionMode
+  grokReasoning: GrokReasoning | ''
+  grokSessionId: string | null
+  grokCheck: CodexCheckResult | null
+  grokChecking: boolean
   // GLM / ZCode
   glmPath: string
   glmMode: GlmMode
@@ -1498,6 +1523,11 @@ interface AppState {
   setGeminiModel: (m: string) => void
   setGeminiPermission: (p: GeminiApprovalMode) => void
   checkGemini: () => Promise<void>
+  setGrokPath: (path: string) => Promise<void>
+  setGrokModel: (m: string) => void
+  setGrokPermission: (p: GrokPermissionMode) => void
+  setGrokReasoning: (r: GrokReasoning | '') => void
+  checkGrok: () => Promise<void>
   setGlmPath: (path: string) => Promise<void>
   setGlmMode: (m: GlmMode) => void
   checkGlm: () => Promise<void>
@@ -1590,6 +1620,7 @@ export const useApp = create<AppState>((set, get) => {
     copilotSessionId: s.copilotSessionId,
     claudeSessionId: s.claudeSessionId,
     geminiSessionId: s.geminiSessionId,
+    grokSessionId: s.grokSessionId,
     glmSessionId: s.glmSessionId
   })
 
@@ -1704,6 +1735,9 @@ export const useApp = create<AppState>((set, get) => {
         claudeThinking: saved.claudeThinking ?? DEFAULT_LLM_CONFIG.claudeThinking,
         geminiModel: saved.geminiModel ?? DEFAULT_LLM_CONFIG.geminiModel,
         geminiPermission: saved.geminiPermission ?? DEFAULT_LLM_CONFIG.geminiPermission,
+        grokModel: saved.grokModel ?? DEFAULT_LLM_CONFIG.grokModel,
+        grokPermission: saved.grokPermission ?? DEFAULT_LLM_CONFIG.grokPermission,
+        grokReasoning: saved.grokReasoning ?? DEFAULT_LLM_CONFIG.grokReasoning,
         glmMode: saved.glmMode,
         wproviderService: saved.wproviderService ?? DEFAULT_LLM_CONFIG.wproviderService,
         omnirouteModel: saved.omnirouteModel ?? DEFAULT_LLM_CONFIG.omnirouteModel
@@ -1734,6 +1768,9 @@ export const useApp = create<AppState>((set, get) => {
       claudeThinking: get().claudeThinking,
       geminiModel: get().geminiModel,
       geminiPermission: get().geminiPermission,
+      grokModel: get().grokModel,
+      grokPermission: get().grokPermission,
+      grokReasoning: get().grokReasoning,
       glmMode: get().glmMode,
       wproviderService: get().wproviderService,
       omnirouteModel: get().omnirouteModel
@@ -1742,6 +1779,7 @@ export const useApp = create<AppState>((set, get) => {
     else if (provider === 'copilot') await get().checkCopilot()
     else if (provider === 'claude') await get().checkClaude()
     else if (provider === 'gemini') await get().checkGemini()
+    else if (provider === 'grok') await get().checkGrok()
     else if (provider === 'glm') await get().checkGlm()
     else if (provider === 'wprovider') await get().checkWProvider()
     else if (provider === 'omniroute') {
@@ -1838,6 +1876,13 @@ export const useApp = create<AppState>((set, get) => {
   geminiSessionId: null,
   geminiCheck: null,
   geminiChecking: false,
+  grokPath: DEFAULT_LLM_CONFIG.grokPath,
+  grokModel: DEFAULT_LLM_CONFIG.grokModel,
+  grokPermission: DEFAULT_LLM_CONFIG.grokPermission,
+  grokReasoning: DEFAULT_LLM_CONFIG.grokReasoning,
+  grokSessionId: null,
+  grokCheck: null,
+  grokChecking: false,
   glmPath: DEFAULT_LLM_CONFIG.glmPath,
   glmMode: DEFAULT_LLM_CONFIG.glmMode,
   glmSessionId: null,
@@ -1976,6 +2021,10 @@ export const useApp = create<AppState>((set, get) => {
       geminiPath: cfg.geminiPath,
       geminiModel: cfg.geminiModel,
       geminiPermission: cfg.geminiPermission,
+      grokPath: cfg.grokPath,
+      grokModel: cfg.grokModel,
+      grokPermission: cfg.grokPermission,
+      grokReasoning: cfg.grokReasoning,
       glmPath: cfg.glmPath,
       glmMode: cfg.glmMode,
       wproviderService: cfg.wproviderService,
@@ -1995,6 +2044,7 @@ export const useApp = create<AppState>((set, get) => {
       if (cfg.provider === 'copilot') await get().checkCopilot()
       if (cfg.provider === 'claude') await get().checkClaude()
       if (cfg.provider === 'gemini') await get().checkGemini()
+      if (cfg.provider === 'grok') await get().checkGrok()
       if (cfg.provider === 'glm') await get().checkGlm()
       if (cfg.provider === 'wprovider') await get().checkWProvider()
     }
@@ -2053,6 +2103,7 @@ export const useApp = create<AppState>((set, get) => {
       copilotSessionId: null,
       claudeSessionId: null,
       geminiSessionId: null,
+      grokSessionId: null,
       glmSessionId: null,
       // Selecting a workspace makes it the active context, not an SSH host.
       activeSsh: null,
@@ -2085,6 +2136,7 @@ export const useApp = create<AppState>((set, get) => {
       copilotSessionId: null,
       claudeSessionId: null,
       geminiSessionId: null,
+      grokSessionId: null,
       glmSessionId: null,
       view: 'workspace'
     })
@@ -2191,6 +2243,7 @@ export const useApp = create<AppState>((set, get) => {
         copilotSessionId: task.sessions?.copilotSessionId ?? null,
         claudeSessionId: task.sessions?.claudeSessionId ?? null,
         geminiSessionId: task.sessions?.geminiSessionId ?? null,
+        grokSessionId: task.sessions?.grokSessionId ?? null,
         glmSessionId: task.sessions?.glmSessionId ?? null,
         // Opening a task returns the active context to its workspace, not an SSH host.
         activeSsh: null,
@@ -2243,6 +2296,7 @@ export const useApp = create<AppState>((set, get) => {
             copilotSessionId: null,
             claudeSessionId: null,
             geminiSessionId: null,
+            grokSessionId: null,
             glmSessionId: null,
             // Deleting the open chat of an SSH host keeps its context on
             // screen (the terminal is still connected) with a blank composer.
@@ -2318,6 +2372,7 @@ export const useApp = create<AppState>((set, get) => {
               copilotSessionId: null,
               claudeSessionId: null,
               geminiSessionId: null,
+              grokSessionId: null,
               glmSessionId: null,
               treeRoots: [],
               childrenByPath: {},
@@ -2382,6 +2437,7 @@ export const useApp = create<AppState>((set, get) => {
           copilotSessionId: run.copilotSessionId,
           claudeSessionId: run.claudeSessionId,
           geminiSessionId: run.geminiSessionId,
+          grokSessionId: run.grokSessionId,
           glmSessionId: run.glmSessionId
         }
       })
@@ -2903,6 +2959,7 @@ export const useApp = create<AppState>((set, get) => {
         copilotSessionId: null,
         claudeSessionId: null,
         geminiSessionId: null,
+        grokSessionId: null,
         glmSessionId: null
       })
     }
@@ -2933,6 +2990,7 @@ export const useApp = create<AppState>((set, get) => {
       copilotSessionId: null,
       claudeSessionId: null,
       geminiSessionId: null,
+      grokSessionId: null,
       glmSessionId: null,
       view: 'workspace'
     })
@@ -3031,6 +3089,7 @@ export const useApp = create<AppState>((set, get) => {
     else if (provider === 'copilot') await get().checkCopilot()
     else if (provider === 'claude') await get().checkClaude()
     else if (provider === 'gemini') await get().checkGemini()
+    else if (provider === 'grok') await get().checkGrok()
     else if (provider === 'glm') await get().checkGlm()
     else if (provider === 'wprovider') await get().checkWProvider()
     else if (provider === 'omniroute') {
@@ -3240,6 +3299,43 @@ export const useApp = create<AppState>((set, get) => {
       set({
         geminiCheck: { ok: false, installed: false, error: err instanceof Error ? err.message : String(err) },
         geminiChecking: false
+      })
+    }
+  },
+
+  async setGrokPath(path) {
+    set({ grokPath: path })
+    await api.llm.setConfig({ grokPath: path })
+    await get().checkGrok()
+  },
+
+  setGrokModel(grokModel) {
+    set({ grokModel })
+    void api.llm.setConfig({ grokModel })
+    get().persistWorkspaceLlm()
+  },
+
+  setGrokPermission(grokPermission) {
+    set({ grokPermission })
+    void api.llm.setConfig({ grokPermission })
+    get().persistWorkspaceLlm()
+  },
+
+  setGrokReasoning(grokReasoning) {
+    set({ grokReasoning })
+    void api.llm.setConfig({ grokReasoning })
+    get().persistWorkspaceLlm()
+  },
+
+  async checkGrok() {
+    set({ grokChecking: true })
+    try {
+      const res = await api.grok.check()
+      set({ grokCheck: res, grokChecking: false })
+    } catch (err) {
+      set({
+        grokCheck: { ok: false, installed: false, error: err instanceof Error ? err.message : String(err) },
+        grokChecking: false
       })
     }
   },
@@ -3665,6 +3761,9 @@ export const useApp = create<AppState>((set, get) => {
     const claudeThinking = get().claudeThinking
     const geminiModel = get().geminiModel
     const geminiPermission = get().geminiPermission
+    const grokModel = get().grokModel
+    const grokPermission = get().grokPermission
+    const grokReasoning = get().grokReasoning
     const glmMode = get().glmMode
     const wproviderService = get().wproviderService
     const omnirouteModel = get().omnirouteModel
@@ -3734,18 +3833,20 @@ export const useApp = create<AppState>((set, get) => {
         })
         return
       }
-      // ===== Codex / Copilot / Claude / GLM CLI backends: delegate the turn to the agent CLI =====
+      // ===== Codex / Copilot / Claude / Gemini / Grok / GLM CLI backends =====
       if (
         agentProvider === 'codex' ||
         agentProvider === 'copilot' ||
         agentProvider === 'claude' ||
         agentProvider === 'gemini' ||
+        agentProvider === 'grok' ||
         agentProvider === 'glm'
       ) {
         const isCodex = agentProvider === 'codex'
         const isCopilot = agentProvider === 'copilot'
         const isClaude = agentProvider === 'claude'
         const isGemini = agentProvider === 'gemini'
+        const isGrok = agentProvider === 'grok'
         const isGlm = agentProvider === 'glm'
         let glmCaptcha: { captchaVerifyParam?: string; captchaRegion?: string } = {}
         if (isGlm) {
@@ -3779,13 +3880,15 @@ export const useApp = create<AppState>((set, get) => {
             taskId,
             isGlm
               ? { glmSessionId: threadId }
-              : isClaude
-                ? { claudeSessionId: threadId }
-                : isGemini
-                  ? { geminiSessionId: threadId }
-                  : isCopilot
-                    ? { copilotSessionId: threadId }
-                    : { codexThreadId: threadId }
+              : isGrok
+                ? { grokSessionId: threadId }
+                : isClaude
+                  ? { claudeSessionId: threadId }
+                  : isGemini
+                    ? { geminiSessionId: threadId }
+                    : isCopilot
+                      ? { copilotSessionId: threadId }
+                      : { codexThreadId: threadId }
           )
         const runId = crypto.randomUUID()
         writeRun(taskId, { streamId: runId })
@@ -3899,69 +4002,82 @@ export const useApp = create<AppState>((set, get) => {
         const skillsPrompt = (hasSession: boolean): string =>
           !hasSession && skillsBlock ? `${skillsBlock}\n\n${trimmed}` : trimmed
 
-        const res = isGemini
-          ? await api.gemini.run(
+        const res = isGrok
+          ? await api.grok.run(
               runId,
               {
-                prompt: skillsPrompt(!!readRun(taskId)?.geminiSessionId),
+                prompt: skillsPrompt(!!readRun(taskId)?.grokSessionId),
                 cwd: root,
-                sessionId: readRun(taskId)?.geminiSessionId ?? undefined,
-                model: geminiModel || undefined,
-                permission: geminiPermission
+                sessionId: readRun(taskId)?.grokSessionId ?? undefined,
+                model: grokModel || undefined,
+                permission: grokPermission,
+                reasoning: grokReasoning || undefined
               },
               handleEvent
             )
-          : isGlm
-            ? await api.glm.run(
+          : isGemini
+            ? await api.gemini.run(
                 runId,
                 {
-                  prompt: skillsPrompt(!!readRun(taskId)?.glmSessionId),
+                  prompt: skillsPrompt(!!readRun(taskId)?.geminiSessionId),
                   cwd: root,
-                  sessionId: readRun(taskId)?.glmSessionId ?? undefined,
-                  mode: glmMode,
-                  ...glmCaptcha
+                  sessionId: readRun(taskId)?.geminiSessionId ?? undefined,
+                  model: geminiModel || undefined,
+                  permission: geminiPermission
                 },
                 handleEvent
               )
-            : isClaude
-              ? await api.claude.run(
+            : isGlm
+              ? await api.glm.run(
                   runId,
                   {
-                    prompt: skillsPrompt(!!readRun(taskId)?.claudeSessionId),
+                    prompt: skillsPrompt(!!readRun(taskId)?.glmSessionId),
                     cwd: root,
-                    sessionId: readRun(taskId)?.claudeSessionId ?? undefined,
-                    model: claudeModel || undefined,
-                    permission: claudePermission,
-                    effort: claudeEffort || undefined,
-                    thinking: claudeThinking
+                    sessionId: readRun(taskId)?.glmSessionId ?? undefined,
+                    mode: glmMode,
+                    ...glmCaptcha
                   },
                   handleEvent
                 )
-              : isCopilot
-                ? await api.copilot.run(
+              : isClaude
+                ? await api.claude.run(
                     runId,
                     {
-                      prompt: skillsPrompt(hadCopilotSession),
+                      prompt: skillsPrompt(!!readRun(taskId)?.claudeSessionId),
                       cwd: root,
-                      sessionId: copilotRunSessionId,
-                      model: copilotModel || undefined,
-                      permission: copilotPermission,
-                      reasoning: copilotReasoning || undefined
+                      sessionId: readRun(taskId)?.claudeSessionId ?? undefined,
+                      model: claudeModel || undefined,
+                      permission: claudePermission,
+                      effort: claudeEffort || undefined,
+                      thinking: claudeThinking
                     },
                     handleEvent
                   )
-                : await api.codex.run(
-                    runId,
-                    {
-                      prompt: skillsPrompt(!!readRun(taskId)?.codexThreadId),
-                      cwd: root,
-                      threadId: readRun(taskId)?.codexThreadId ?? undefined,
-                      model: codexModel || undefined,
-                      sandbox: codexSandbox,
-                      reasoning: codexReasoning || undefined
-                    },
-                    handleEvent
-                  )
+                : isCopilot
+                  ? await api.copilot.run(
+                      runId,
+                      {
+                        prompt: skillsPrompt(hadCopilotSession),
+                        cwd: root,
+                        sessionId: copilotRunSessionId,
+                        model: copilotModel || undefined,
+                        permission: copilotPermission,
+                        reasoning: copilotReasoning || undefined
+                      },
+                      handleEvent
+                    )
+                  : await api.codex.run(
+                      runId,
+                      {
+                        prompt: skillsPrompt(!!readRun(taskId)?.codexThreadId),
+                        cwd: root,
+                        threadId: readRun(taskId)?.codexThreadId ?? undefined,
+                        model: codexModel || undefined,
+                        sandbox: codexSandbox,
+                        reasoning: codexReasoning || undefined
+                      },
+                      handleEvent
+                    )
 
         writeRun(taskId, { streamId: null, thinking: false })
         if (res.threadId) setSession(res.threadId)
@@ -3979,15 +4095,17 @@ export const useApp = create<AppState>((set, get) => {
             provider: agentProvider,
             model: isGlm
               ? 'glm'
-              : isClaude
-                ? claudeModel && claudeModel !== 'default'
-                  ? claudeModel
-                  : 'claude'
-                : isGemini
-                  ? geminiModel || 'gemini'
-                : isCopilot
-                  ? copilotModel || 'copilot'
-                  : codexModel || 'codex',
+              : isGrok
+                ? grokModel || 'grok'
+                : isClaude
+                  ? claudeModel && claudeModel !== 'default'
+                    ? claudeModel
+                    : 'claude'
+                  : isGemini
+                    ? geminiModel || 'gemini'
+                    : isCopilot
+                      ? copilotModel || 'copilot'
+                      : codexModel || 'codex',
             inputTokens: usage.inputTokens,
             outputTokens: usage.outputTokens,
             userMessages: 1,
@@ -4002,13 +4120,15 @@ export const useApp = create<AppState>((set, get) => {
             res.error ??
             (isGlm
               ? 'ZCode run failed.'
-              : isClaude
-                ? 'Claude run failed.'
-                : isGemini
-                  ? 'Gemini run failed.'
-                  : isCopilot
-                    ? 'Copilot run failed.'
-                    : 'Codex run failed.')
+              : isGrok
+                ? 'Grok run failed.'
+                : isClaude
+                  ? 'Claude run failed.'
+                  : isGemini
+                    ? 'Gemini run failed.'
+                    : isCopilot
+                      ? 'Copilot run failed.'
+                      : 'Codex run failed.')
           if (isClaude && (claudeAuthMessageId || isClaudeAuthFailure(error))) {
             addClaudeAuthError(error)
           } else {
@@ -4616,6 +4736,7 @@ export const useApp = create<AppState>((set, get) => {
       else if (p === 'copilot') void api.copilot.abort(streamId)
       else if (p === 'claude') void api.claude.abort(streamId)
       else if (p === 'gemini') void api.gemini.abort(streamId)
+      else if (p === 'grok') void api.grok.abort(streamId)
       else if (p === 'glm') void api.glm.abort(streamId)
       else if (p === 'wprovider') void api.wprovider.abort(streamId)
       else void api.llm.abort(streamId)
@@ -4646,6 +4767,7 @@ export const useApp = create<AppState>((set, get) => {
       copilotSessionId: null,
       claudeSessionId: null,
       geminiSessionId: null,
+      grokSessionId: null,
       glmSessionId: null,
       view: 'home'
     })

@@ -6,14 +6,17 @@ import {
   CODEX_MODEL_PRESETS,
   COPILOT_MODEL_PRESETS,
   GEMINI_MODEL_PRESETS,
+  GROK_MODEL_PRESETS,
   openRouterModelOptions,
   REASONING_LABEL_KEY,
   COPILOT_REASONING_LABEL_KEY,
   CLAUDE_EFFORT_LABEL_KEY,
+  GROK_REASONING_LABEL_KEY,
   SANDBOX_SHORT_KEY,
   COPILOT_PERMISSION_SHORT_KEY,
   PERMISSION_SHORT_KEY,
   GEMINI_PERMISSION_SHORT_KEY,
+  GROK_PERMISSION_SHORT_KEY,
   GLM_MODE_SHORT_KEY
 } from './Composer'
 import { useApp } from '@/state/store'
@@ -31,6 +34,8 @@ import {
   CLAUDE_MODEL_PRESETS,
   CLAUDE_PERMISSION_MODES,
   GEMINI_APPROVAL_MODES,
+  GROK_PERMISSION_MODES,
+  GROK_REASONING_LEVELS,
   GLM_MODES,
   normalizeOpenRouterApiKey,
   type CodexReasoning,
@@ -40,6 +45,8 @@ import {
   type ClaudeEffort,
   type ClaudePermissionMode,
   type GeminiApprovalMode,
+  type GrokPermissionMode,
+  type GrokReasoning,
   type GlmMode,
   type LlmProvider,
   type WProviderAuthorization,
@@ -969,6 +976,147 @@ function GeminiPanel(): JSX.Element {
   )
 }
 
+function GrokPanel(): JSX.Element {
+  const t = useT()
+  const grokPath = useApp((s) => s.grokPath)
+  const setGrokPath = useApp((s) => s.setGrokPath)
+  const grokModel = useApp((s) => s.grokModel)
+  const setGrokModel = useApp((s) => s.setGrokModel)
+  const grokPermission = useApp((s) => s.grokPermission)
+  const setGrokPermission = useApp((s) => s.setGrokPermission)
+  const grokReasoning = useApp((s) => s.grokReasoning)
+  const setGrokReasoning = useApp((s) => s.setGrokReasoning)
+  const check = useApp((s) => s.grokCheck)
+  const checking = useApp((s) => s.grokChecking)
+  const checkGrok = useApp((s) => s.checkGrok)
+  const auth = useCliAuth(api.grok.login, api.grok.logout, check?.loggedIn, checkGrok)
+
+  const [path, setPath] = useState(grokPath)
+  const apply = async (): Promise<void> => {
+    await setGrokPath(path.trim())
+  }
+
+  return (
+    <>
+      <label className="field">
+        <span className="field-label">{t('settings.grokBinary')}</span>
+        <div className="field-row">
+          <input
+            className="text-input"
+            value={path}
+            spellCheck={false}
+            placeholder={t('settings.autoDetectPath')}
+            onChange={(e) => setPath(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && void apply()}
+          />
+          <button className="btn" onClick={() => void apply()} disabled={checking}>
+            {checking ? t('common.checking') : t('common.check')}
+          </button>
+        </div>
+        <span className="field-hint">{t('settings.grokHint')}</span>
+      </label>
+
+      <label className="field">
+        <span className="field-label">{t('common.model')}</span>
+        <input
+          className="text-input"
+          list="grok-model-presets"
+          value={grokModel}
+          spellCheck={false}
+          placeholder={t('settings.grokModelPlaceholder')}
+          onChange={(e) => setGrokModel(e.target.value)}
+        />
+        <datalist id="grok-model-presets">
+          {GROK_MODEL_PRESETS.map((m) => (
+            <option key={m} value={m} />
+          ))}
+        </datalist>
+      </label>
+
+      <label className="field">
+        <span className="field-label">{t('settings.permissionMode')}</span>
+        <select
+          className="text-input"
+          value={grokPermission}
+          onChange={(e) => setGrokPermission(e.target.value as GrokPermissionMode)}
+        >
+          {GROK_PERMISSION_MODES.map((p) => (
+            <option key={p} value={p}>
+              {t(GROK_PERMISSION_SHORT_KEY[p])}
+            </option>
+          ))}
+        </select>
+        <span className="field-hint">{t('settings.grokPolicyHint')}</span>
+      </label>
+
+      <label className="field">
+        <span className="field-label">{t('composer.grokReasoning')}</span>
+        <select
+          className="text-input"
+          value={grokReasoning}
+          onChange={(e) => setGrokReasoning(e.target.value as GrokReasoning | '')}
+        >
+          <option value="">{t('composer.reasoningAuto')}</option>
+          {GROK_REASONING_LEVELS.map((r) => (
+            <option key={r} value={r}>
+              {t(GROK_REASONING_LABEL_KEY[r])}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <div
+        className={`conn-line ${
+          checking
+            ? 'connecting'
+            : !check
+              ? 'unknown'
+              : check.installed && check.loggedIn
+                ? 'connected'
+                : 'error'
+        }`}
+      >
+        {checking && t('settings.checkingName', { name: 'Grok' })}
+        {!checking && !check && t('settings.notCheckedYet')}
+        {!checking && check && !check.installed && `✗ ${check.error ?? 'Grok CLI not found.'}`}
+        {!checking && check && check.installed && (
+          <>
+            ✓ {check.version ?? 'grok'} ·{' '}
+            {check.account
+              ? check.account
+              : check.loggedIn
+                ? (check.authNote ?? t('settings.ready'))
+                : t('status.signInNeeded')}
+            {check.path ? <div className="field-hint">{check.path}</div> : null}
+          </>
+        )}
+      </div>
+
+      {!checking && check?.installed && !check.loggedIn && (
+        <div className="field-hint">{t('settings.grokLoginHint')}</div>
+      )}
+
+      <div className="field-row" style={{ alignSelf: 'flex-start' }}>
+        {check?.installed && !check.loggedIn && (
+          <button className="btn btn-icon" onClick={() => void auth.signIn()} disabled={auth.busy || checking}>
+            <Icon name="terminal" size={14} />
+            {t('settings.signIn')}
+          </button>
+        )}
+        {check?.installed && check.loggedIn && (
+          <button className="btn" onClick={() => void auth.signOut()} disabled={auth.busy || checking}>
+            {t('settings.signOut')}
+          </button>
+        )}
+        <button className="btn" onClick={() => void checkGrok()} disabled={checking}>
+          {t('settings.recheck')}
+        </button>
+      </div>
+      {auth.status && <div className="field-hint">{auth.status}</div>}
+    </>
+  )
+}
+
 function GlmPanel(): JSX.Element {
   const t = useT()
   const glmPath = useApp((s) => s.glmPath)
@@ -1478,6 +1626,12 @@ export function ConnectionSettings(): JSX.Element | null {
       tooltip: sshBlockedTitle('gemini')
     },
     {
+      value: 'grok',
+      label: t('settings.providerGrok'),
+      disabled: blockedBySsh('grok'),
+      tooltip: sshBlockedTitle('grok')
+    },
+    {
       value: 'glm',
       label: t('settings.providerGlm'),
       disabled: blockedBySsh('glm'),
@@ -1527,6 +1681,8 @@ export function ConnectionSettings(): JSX.Element | null {
             <ClaudePanel />
           ) : provider === 'gemini' ? (
             <GeminiPanel />
+          ) : provider === 'grok' ? (
+            <GrokPanel />
           ) : provider === 'glm' ? (
             <GlmPanel />
           ) : provider === 'wprovider' ? (

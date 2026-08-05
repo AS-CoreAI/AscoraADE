@@ -19,6 +19,8 @@ import {
   CLAUDE_MODEL_PRESETS,
   CLAUDE_PERMISSION_MODES,
   GEMINI_APPROVAL_MODES,
+  GROK_PERMISSION_MODES,
+  GROK_REASONING_LEVELS,
   GLM_MODES,
   type LlmProvider,
   type CodexReasoning,
@@ -28,6 +30,8 @@ import {
   type ClaudeEffort,
   type ClaudePermissionMode,
   type GeminiApprovalMode,
+  type GrokPermissionMode,
+  type GrokReasoning,
   type GlmMode,
   type AttachmentFile,
   type WProviderService
@@ -104,6 +108,24 @@ export const GEMINI_PERMISSION_SHORT_KEY: Record<GeminiApprovalMode, Translation
   yolo: 'composer.permission.fullAccess'
 }
 
+/** Short access labels for the Grok Build CLI permission selector. */
+export const GROK_PERMISSION_SHORT: Record<GrokPermissionMode, string> = {
+  plan: 'Plan only',
+  default: 'Ask',
+  acceptEdits: 'Auto-edit',
+  auto: 'Auto',
+  dontAsk: "Don't ask",
+  bypassPermissions: 'Full access'
+}
+export const GROK_PERMISSION_SHORT_KEY: Record<GrokPermissionMode, TranslationKey> = {
+  plan: 'composer.permission.planOnly',
+  default: 'composer.permission.ask',
+  acceptEdits: 'composer.permission.autoEdit',
+  auto: 'composer.permission.auto',
+  dontAsk: 'composer.permission.dontAsk',
+  bypassPermissions: 'composer.permission.fullAccess'
+}
+
 /**
  * Suggested Codex models (current gpt-5.x family, mirroring the Codex VS Code
  * extension's picker). An empty value lets Codex use the model from its own
@@ -135,6 +157,8 @@ export const GEMINI_MODEL_PRESETS = [
   'gemini-2.5-pro',
   'gemini-2.5-flash'
 ]
+
+export const GROK_MODEL_PRESETS = ['grok-4.5']
 
 export const REASONING_LABEL: Record<CodexReasoning, string> = {
   minimal: 'Minimal',
@@ -169,6 +193,13 @@ export const COPILOT_REASONING_LABEL_KEY: Record<CopilotReasoning, TranslationKe
 /** Claude's `--effort` shares Copilot's level names, so the labels are reused. */
 export const CLAUDE_EFFORT_LABEL_KEY: Record<ClaudeEffort, TranslationKey> =
   COPILOT_REASONING_LABEL_KEY
+
+/** Grok's reasoning effort uses low/medium/high — reuse the shared vocabulary. */
+export const GROK_REASONING_LABEL_KEY: Record<GrokReasoning, TranslationKey> = {
+  low: 'composer.reasoning.low',
+  medium: 'composer.reasoning.medium',
+  high: 'composer.reasoning.high'
+}
 
 export function openRouterModelOptions(models: string[], selectedModel: string): string[] {
   const seen = new Set<string>()
@@ -257,6 +288,12 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
   const setClaudePermission = useApp((s) => s.setClaudePermission)
   const claudeEffort = useApp((s) => s.claudeEffort)
   const setClaudeEffort = useApp((s) => s.setClaudeEffort)
+  const grokModel = useApp((s) => s.grokModel)
+  const setGrokModel = useApp((s) => s.setGrokModel)
+  const grokPermission = useApp((s) => s.grokPermission)
+  const setGrokPermission = useApp((s) => s.setGrokPermission)
+  const grokReasoning = useApp((s) => s.grokReasoning)
+  const setGrokReasoning = useApp((s) => s.setGrokReasoning)
   const claudeThinking = useApp((s) => s.claudeThinking)
   const setClaudeThinking = useApp((s) => s.setClaudeThinking)
   const geminiModel = useApp((s) => s.geminiModel)
@@ -355,6 +392,12 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
       label: 'Gemini CLI',
       disabled: blockedBySsh('gemini'),
       tooltip: sshBlockedTitle('gemini')
+    },
+    {
+      value: 'grok',
+      label: 'Grok CLI',
+      disabled: blockedBySsh('grok'),
+      tooltip: sshBlockedTitle('grok')
     },
     {
       value: 'glm',
@@ -692,6 +735,21 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
               ))}
             </select>
           </div>
+        ) : provider === 'grok' ? (
+          <div className="composer-tool" title={t('composer.grokPermission')}>
+            <Icon name="hand" size={15} />
+            <select
+              className="composer-tool-select"
+              value={grokPermission}
+              onChange={(e) => setGrokPermission(e.target.value as GrokPermissionMode)}
+            >
+              {GROK_PERMISSION_MODES.map((p) => (
+                <option key={p} value={p}>
+                  {t(GROK_PERMISSION_SHORT_KEY[p])}
+                </option>
+              ))}
+            </select>
+          </div>
         ) : provider === 'glm' ? (
           <div className="composer-tool" title={t('composer.glmPermission')}>
             <Icon name="hand" size={15} />
@@ -847,6 +905,38 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
               <option value={geminiModel}>{geminiModel}</option>
             )}
           </select>
+        ) : provider === 'grok' ? (
+          <>
+            <select
+              className="composer-select"
+              value={grokReasoning}
+              onChange={(e) => setGrokReasoning(e.target.value as GrokReasoning | '')}
+              title={t('composer.grokReasoning')}
+            >
+              <option value="">{t('composer.reasoningAuto')}</option>
+              {GROK_REASONING_LEVELS.map((r) => (
+                <option key={r} value={r}>
+                  {t(GROK_REASONING_LABEL_KEY[r])}
+                </option>
+              ))}
+            </select>
+            <select
+              className="composer-select"
+              value={grokModel}
+              onChange={(e) => setGrokModel(e.target.value)}
+              title={t('composer.grokModel')}
+            >
+              <option value="">{t('composer.grokDefault')}</option>
+              {GROK_MODEL_PRESETS.map((m) => (
+                <option key={m} value={m}>
+                  {m}
+                </option>
+              ))}
+              {grokModel && !GROK_MODEL_PRESETS.includes(grokModel) && (
+                <option value={grokModel}>{grokModel}</option>
+              )}
+            </select>
+          </>
         ) : provider === 'glm' ? (
           <select
             className="composer-select"

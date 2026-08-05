@@ -7,6 +7,7 @@ import { registerCodexHandlers } from './codex'
 import { registerCopilotHandlers } from './copilot'
 import { registerClaudeHandlers } from './claude'
 import { registerGeminiHandlers } from './gemini'
+import { registerGrokHandlers } from './grok'
 import { registerGlmHandlers } from './glm'
 import { registerWProviderHandlers } from './wprovider'
 import { registerOmnirouteHandlers } from './omniroute'
@@ -33,6 +34,7 @@ export function registerIpc(): void {
   registerCopilotHandlers()
   registerClaudeHandlers()
   registerGeminiHandlers()
+  registerGrokHandlers()
   registerGlmHandlers()
   registerWProviderHandlers()
   registerOmnirouteHandlers()

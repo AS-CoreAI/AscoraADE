@@ -22,6 +22,7 @@ const PROVIDER_LABEL: Record<string, string> = {
   codex: 'Codex',
   claude: 'Claude Code',
   gemini: 'Gemini CLI',
+  grok: 'Grok CLI',
   glm: 'GLM (ZCode)'
 }
 const providerLabel = (p: string): string => PROVIDER_LABEL[p] ?? p

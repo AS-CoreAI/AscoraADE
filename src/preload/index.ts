@@ -31,6 +31,7 @@ import {
   type ClaudeRunParams,
   type ClaudeUsageResult,
   type GeminiRunParams,
+  type GrokRunParams,
   type GlmRunParams,
   type GlmCaptchaConfigResult,
   type WProviderChatParams,
@@ -334,6 +335,28 @@ const api = {
         .finally(() => ipcRenderer.removeListener(IPC.gemini.event, listener))
     },
     abort: (id: string): Promise<void> => ipcRenderer.invoke(IPC.gemini.abort, id)
+  },
+  grok: {
+    check: (): Promise<CodexCheckResult> => ipcRenderer.invoke(IPC.grok.check),
+    /** Opens a terminal running `grok login` (browser OAuth / SuperGrok). */
+    login: (): Promise<CopilotLoginResult> => ipcRenderer.invoke(IPC.grok.login),
+    /** Signs the Grok CLI out (`grok logout`). */
+    logout: (): Promise<CopilotLoginResult> => ipcRenderer.invoke(IPC.grok.logout),
+    /** Runs a Grok Build turn; `onEvent` fires per normalized stream event. */
+    run: (
+      id: string,
+      params: GrokRunParams,
+      onEvent: (event: CodexEvent) => void
+    ): Promise<CodexRunResult> => {
+      const listener = (_e: IpcRendererEvent, payload: CodexEventPayload): void => {
+        if (payload.id === id) onEvent(payload.event)
+      }
+      ipcRenderer.on(IPC.grok.event, listener)
+      return ipcRenderer
+        .invoke(IPC.grok.run, id, params)
+        .finally(() => ipcRenderer.removeListener(IPC.grok.event, listener))
+    },
+    abort: (id: string): Promise<void> => ipcRenderer.invoke(IPC.grok.abort, id)
   },
   glm: {
     check: (): Promise<CodexCheckResult> => ipcRenderer.invoke(IPC.glm.check),

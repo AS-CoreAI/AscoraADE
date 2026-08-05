@@ -11,6 +11,8 @@ import {
   type CopilotPermissionMode,
   type CopilotReasoning,
   type GeminiApprovalMode,
+  type GrokPermissionMode,
+  type GrokReasoning,
   type CodexReasoning,
   type CodexSandbox,
   type GlmMode,
@@ -75,6 +77,12 @@ function readConfig(): LlmConfig {
     geminiModel: store.getSetting<string>('gemini.model') ?? DEFAULT_LLM_CONFIG.geminiModel,
     geminiPermission:
       store.getSetting<GeminiApprovalMode>('gemini.permission') ?? DEFAULT_LLM_CONFIG.geminiPermission,
+    grokPath: store.getSetting<string>('grok.path') ?? DEFAULT_LLM_CONFIG.grokPath,
+    grokModel: store.getSetting<string>('grok.model') ?? DEFAULT_LLM_CONFIG.grokModel,
+    grokPermission:
+      store.getSetting<GrokPermissionMode>('grok.permission') ?? DEFAULT_LLM_CONFIG.grokPermission,
+    grokReasoning:
+      store.getSetting<GrokReasoning | ''>('grok.reasoning') ?? DEFAULT_LLM_CONFIG.grokReasoning,
     glmPath: store.getSetting<string>('glm.path') ?? DEFAULT_LLM_CONFIG.glmPath,
     glmMode: store.getSetting<GlmMode>('glm.mode') ?? DEFAULT_LLM_CONFIG.glmMode,
     wproviderService:
@@ -144,6 +152,10 @@ export function registerLlmHandlers(): void {
     if (typeof patch.geminiPath === 'string') store.setSetting('gemini.path', patch.geminiPath.trim())
     if (typeof patch.geminiModel === 'string') store.setSetting('gemini.model', patch.geminiModel.trim())
     if (typeof patch.geminiPermission === 'string') store.setSetting('gemini.permission', patch.geminiPermission)
+    if (typeof patch.grokPath === 'string') store.setSetting('grok.path', patch.grokPath.trim())
+    if (typeof patch.grokModel === 'string') store.setSetting('grok.model', patch.grokModel.trim())
+    if (typeof patch.grokPermission === 'string') store.setSetting('grok.permission', patch.grokPermission)
+    if (typeof patch.grokReasoning === 'string') store.setSetting('grok.reasoning', patch.grokReasoning)
     if (typeof patch.glmPath === 'string') store.setSetting('glm.path', patch.glmPath.trim())
     if (typeof patch.glmMode === 'string') store.setSetting('glm.mode', patch.glmMode)
     if (typeof patch.wproviderService === 'string' && WPROVIDER_SERVICES.includes(patch.wproviderService)) {

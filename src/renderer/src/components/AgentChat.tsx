@@ -119,7 +119,7 @@ function ToolCard({ m }: { m: ChatMessage }): JSX.Element {
   const toolLabelKey = TOOL_LABEL_KEY[m.tool ?? '']
 
   return (
-    <div className={`tool-card ${status}`}>
+    <div className={`agent-tool-card ${status}`}>
       <div className="tool-head">
         <Icon name={toolIcon(m.tool)} size={14} />
         <span className="tool-name">{toolLabelKey ? t(toolLabelKey) : m.tool}</span>

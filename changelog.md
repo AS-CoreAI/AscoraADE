@@ -1,6 +1,9 @@
 ## Ascora ADE 1.3.1
 What's new?
 
+### Added
+- **Grok Build CLI backend** — xAI's `grok` coding agent is now a selectable agent provider (`grok -p --output-format streaming-json`), with auto-detect from PATH / `~/.grok/bin`, optional binary path, model and reasoning-effort pickers, permission modes (`plan` / `default` / `acceptEdits` / `auto` / `dontAsk` / `bypassPermissions`), Sign in / Sign out (`grok login` / `grok logout`) with account display from `~/.grok/auth.json`, session resume via `--resume`, and the same normalized tool/reasoning cards as Codex and Claude. SuperGrok / X Premium+ subscription auth or `XAI_API_KEY` are both supported.
+
 ### Changed
 - **Version bump to 1.3.1** — package metadata and release notes now report version 1.3.1.
 

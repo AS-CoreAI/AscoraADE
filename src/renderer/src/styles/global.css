@@ -6269,16 +6269,16 @@ button.changes-badge:hover {
 }
 
 /* ---------- Agent tool cards ---------- */
-.tool-card {
+.agent-tool-card {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--bg-elevated);
   overflow: hidden;
 }
-.tool-card.awaiting {
+.agent-tool-card.awaiting {
   border-color: rgba(91, 157, 255, 0.4);
 }
-.tool-card.error {
+.agent-tool-card.error {
   border-color: rgba(240, 106, 106, 0.35);
 }
 .tool-head {
