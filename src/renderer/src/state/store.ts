@@ -85,6 +85,8 @@ export type ChatMessage = TaskMessage
 
 /** How many tool round-trips a single task may take before we stop. */
 const MAX_STEPS = 16
+/** OmniRoute may be resumed this many times after a blank turn or step cap. */
+const OMNIROUTE_MAX_CONTINUES = 3
 const SSH_WORKSPACE_PREFIX = 'ssh:'
 const MAX_EDITOR_FILE_BYTES = 2 * 1024 * 1024
 
@@ -4150,7 +4152,35 @@ export const useApp = create<AppState>((set, get) => {
       const isOllama = agentProvider === 'ollama'
       const isWProvider = agentProvider === 'wprovider'
       const isOmniroute = agentProvider === 'omniroute'
-      for (let step = 0; step < MAX_STEPS && !aborted(); step += 1) {
+      let omnirouteContinues = 0
+      const maxSteps = isOmniroute ? MAX_STEPS * (OMNIROUTE_MAX_CONTINUES + 1) : MAX_STEPS
+      const autoContinueOmniroute = async (messageId?: string): Promise<boolean> => {
+        if (!isOmniroute || omnirouteContinues >= OMNIROUTE_MAX_CONTINUES || aborted()) return false
+        omnirouteContinues += 1
+        const text =
+          get().appLanguage === 'ru'
+            ? `Ответ прервался. Автоматически продолжаю работу (попытка ${omnirouteContinues}/${OMNIROUTE_MAX_CONTINUES})…`
+            : `The response paused. Continuing automatically (attempt ${omnirouteContinues}/${OMNIROUTE_MAX_CONTINUES})…`
+        if (messageId) patch(messageId, { text, reasoning: true })
+        else {
+          addMsg({
+            id: crypto.randomUUID(),
+            role: 'assistant',
+            kind: 'text',
+            reasoning: true,
+            text
+          })
+        }
+        // Keep the service response out of the conversation and resume as if
+        // the user had typed Continue. A little jitter avoids an immediate
+        // retry against the same temporarily exhausted route.
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 2000 + Math.random() * 1000))
+        if (aborted()) return false
+        pushConvo({ role: 'user', content: 'Continue' })
+        return true
+      }
+
+      for (let step = 0; step < maxSteps && !aborted(); step += 1) {
         // 1) Stream one model turn into a fresh assistant bubble.
         const replyId = crypto.randomUUID()
         addMsg({ id: replyId, role: 'assistant', kind: 'text', model: assistantModel, text: '' })
@@ -4342,6 +4372,7 @@ export const useApp = create<AppState>((set, get) => {
         // Tidy the bubble: keep prose, drop it if the turn was tool-only.
         if (displayText.trim()) patch(replyId, { text: displayText.trim() })
         else if (calls.length > 0 || invalidTextToolCall) removeMsg(replyId)
+        else if (await autoContinueOmniroute(replyId)) continue
         else patch(replyId, { text: '_(no content returned)_' })
 
         if (calls.length === 0) {
@@ -4658,12 +4689,26 @@ export const useApp = create<AppState>((set, get) => {
             appendResult(call, r.ok ? truncate(body.join('\n'), 16000) : `Error: ${r.error}`)
           }
         }
+
+        // Reaching the per-turn tool budget is recoverable on OmniRoute. Hide
+        // the service notice and transparently start another budget window.
+        if (isOmniroute && (step + 1) % MAX_STEPS === 0) {
+          if (await autoContinueOmniroute()) continue
+          addMsg({
+            id: crypto.randomUUID(),
+            role: 'assistant',
+            kind: 'text',
+            model: assistantModel,
+            text: '_Reached the tool-step limit for this task._'
+          })
+          break
+        }
       }
 
       if (!aborted() && (readRun(taskId)?.convo.length ?? 0) > 0) {
         // Surface a hint if we bailed out at the step cap mid-task.
         const last = readRun(taskId)?.messages.at(-1)
-        if (last?.kind === 'tool') {
+        if (last?.kind === 'tool' && !isOmniroute) {
           addMsg({
             id: crypto.randomUUID(), role: 'assistant', kind: 'text', model: assistantModel,
             text: '_Reached the tool-step limit for this task._'
