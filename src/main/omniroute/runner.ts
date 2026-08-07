@@ -12,6 +12,7 @@ import {
   statSync,
   type WriteStream
 } from 'node:fs'
+import { request as httpRequest } from 'node:http'
 import { createConnection, createServer } from 'node:net'
 import { join } from 'node:path'
 import type { OmnirouteStatus } from '../../shared/ipc'
@@ -323,6 +324,28 @@ function sidecarEnv(port: number): NodeJS.ProcessEnv {
   }
 }
 
+function nativeFetch(url: string, options: any = {}): Promise<any> {
+  return new Promise((resolve, reject) => {
+    const { method = 'GET', body, headers, signal } = options
+    const req = httpRequest(url, { method, headers, signal }, (res) => {
+      let data = ''
+      res.on('data', (chunk) => {
+        data += chunk
+      })
+      res.on('end', () => {
+        resolve({
+          status: res.statusCode,
+          ok: res.statusCode && res.statusCode >= 200 && res.statusCode < 300,
+          text: async () => data
+        })
+      })
+    })
+    req.on('error', reject)
+    if (body) req.write(body)
+    req.end()
+  })
+}
+
 async function waitForHealth(port: number): Promise<void> {
   const startedAt = Date.now()
   while (Date.now() - startedAt < BOOT_BUDGET_MS) {
@@ -330,7 +353,7 @@ async function waitForHealth(port: number): Promise<void> {
       throw new Error(`sidecar exited during startup\n${ringTail(20)}`)
     }
     try {
-      const res = await fetch(`http://127.0.0.1:${port}/api/monitoring/health`, {
+      const res = await nativeFetch(`http://127.0.0.1:${port}/api/monitoring/health`, {
         signal: AbortSignal.timeout(HEALTH_PROBE_TIMEOUT_MS)
       })
       const child = sidecar.child
@@ -349,7 +372,7 @@ async function waitForHealth(port: number): Promise<void> {
  * first-run bootstrap and the setting persists in the sidecar data directory. */
 async function disableManagementLogin(port: number): Promise<void> {
   const url = `http://127.0.0.1:${port}/api/settings/require-login`
-  const res = await fetch(url, {
+  const res = await nativeFetch(url, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ requireLogin: false }),

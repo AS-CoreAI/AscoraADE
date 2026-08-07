@@ -15,6 +15,29 @@ import {
   stopOmniroute
 } from '../omniroute/runner'
 import { getStore } from '../store'
+import { request as httpRequest } from 'node:http'
+
+function nativeFetch(url: string, options: any = {}): Promise<any> {
+  return new Promise((resolve, reject) => {
+    const { method = 'GET', body, headers, signal } = options
+    const req = httpRequest(url, { method, headers, signal }, (res) => {
+      let data = ''
+      res.on('data', (chunk) => {
+        data += chunk
+      })
+      res.on('end', () => {
+        resolve({
+          status: res.statusCode,
+          ok: res.statusCode && res.statusCode >= 200 && res.statusCode < 300,
+          text: async () => data
+        })
+      })
+    })
+    req.on('error', reject)
+    if (body) req.write(body)
+    req.end()
+  })
+}
 
 // Model calls made by the native Playground can legitimately take longer
 // than ordinary management requests (cold provider/model, reasoning, etc.).
@@ -66,7 +89,7 @@ async function adminRequest(req: OmnirouteAdminRequest): Promise<OmnirouteAdminR
     return { ok: false, status: 0, body: null, error: 'admin paths must start with /api/' }
   }
   try {
-    const res = await fetch(`http://127.0.0.1:${status.port}${req.path}`, {
+    const res = await nativeFetch(`http://127.0.0.1:${status.port}${req.path}`, {
       method: req.method,
       headers: req.body !== undefined ? { 'content-type': 'application/json' } : undefined,
       body: req.body !== undefined ? JSON.stringify(req.body) : undefined,
