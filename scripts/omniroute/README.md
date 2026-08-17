@@ -53,7 +53,7 @@ must stay in sync with it (cross-referenced comments in both files).
 
 ## What the trimmer removes (delete-only, never reshapes the tree)
 
-- docs/locales for languages the app does not ship (keeps `en,ru,uk,de,fr,it` of 42)
+- docs/locales for languages the app does not ship (keeps `en,ru,uk,de,fr,it,pl,zh,ko,ja,hi` of 42)
 - tests/e2e/CI/examples inside the `omniroute` package, `*.map` everywhere, `prebuilds/`
 - every `*.md` except `LICENSE*`/`NOTICE*`/`COPYING*` (license files MUST ship — attribution)
 - whole feature packages we never use, at every `node_modules` level including their

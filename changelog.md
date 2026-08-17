@@ -2,6 +2,7 @@
 What's new?
 
 ### Added
+- **Chinese (Mainland), Korean, Japanese, Polish, and Hindi interface languages** — the language switcher now includes Simplified Chinese (`zh` / `zh-CN`), Korean, Japanese, Polish, and Hindi catalogs covering the full UI, with CJK and Devanagari font fallbacks and date/number formatting mapped to each matching locale.
 - **Grok Build CLI backend** — xAI's `grok` coding agent is now a selectable agent provider (`grok -p --output-format streaming-json`), with auto-detect from PATH / `~/.grok/bin`, optional binary path, model and reasoning-effort pickers, permission modes (`plan` / `default` / `acceptEdits` / `auto` / `dontAsk` / `bypassPermissions`), Sign in / Sign out (`grok login` / `grok logout`) with account display from `~/.grok/auth.json`, session resume via `--resume`, and the same normalized tool/reasoning cards as Codex and Claude. SuperGrok / X Premium+ subscription auth or `XAI_API_KEY` are both supported.
 
 ### Changed

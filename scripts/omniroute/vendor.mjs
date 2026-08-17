@@ -33,7 +33,7 @@ const OUT = join(ROOT, '.build', 'omniroute')
 const MANIFEST = join(OUT, 'VENDOR_MANIFEST.json')
 
 // Docs/locale languages that ship with the app (matches src/renderer/src/language/index.ts).
-const KEEP_LANGS = new Set(['en', 'ru', 'uk', 'de', 'fr', 'it'])
+const KEEP_LANGS = new Set(['en', 'ru', 'uk', 'de', 'fr', 'it', 'pl', 'zh', 'ko', 'ja', 'hi'])
 const LANG_DIR_RE = /^[a-z]{2}(?:[-_][A-Za-z]{2,4})?$/
 const LICENSE_RE = /^(licen[cs]e|notice|copying)(\.|$)/i
 

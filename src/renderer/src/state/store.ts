@@ -58,7 +58,7 @@ import {
 import { api } from '@/lib/api'
 import { diffStat } from '@/lib/diff'
 import { solveZCodeCaptcha } from '@/lib/zcode-captcha'
-import { isLanguageCode, tr, type LanguageCode } from '@/language'
+import { isLanguageCode, localeForLanguage, tr, type LanguageCode } from '@/language'
 
 export type View = 'home' | 'workspace' | 'blueprint' | 'analytics' | 'omniroute' | 'vpn'
 /** Agent permission mode — mirrors ZCode's "Ask before changes" control. */
@@ -948,7 +948,7 @@ function applyTheme(preference: ThemePreference): ResolvedTheme {
 }
 
 function applyLanguage(language: AppLanguage): void {
-  document.documentElement.lang = language
+  document.documentElement.lang = localeForLanguage(language)
 }
 
 /** Map a Codex `status` string onto our tool-card lifecycle. */
