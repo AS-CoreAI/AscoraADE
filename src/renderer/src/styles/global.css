@@ -6618,6 +6618,140 @@ button.changes-badge:hover {
   background: var(--bg-hover);
 }
 
+/* ---------- Codex compact activity panel ---------- */
+.codex-activity {
+  min-width: 0;
+  padding: 2px 1px;
+  color: var(--text-muted);
+}
+.codex-activity-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: fit-content;
+  max-width: 100%;
+  padding: 2px 1px 5px;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.4;
+  text-align: left;
+}
+.codex-activity-head:hover,
+.codex-activity.active .codex-activity-head {
+  color: var(--text);
+}
+.codex-activity-head svg {
+  flex: 0 0 auto;
+  color: var(--text-faint);
+}
+.codex-activity-list {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+}
+.codex-activity-item {
+  min-width: 0;
+}
+.codex-activity-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  min-width: 0;
+  min-height: 22px;
+  padding: 2px 2px;
+  border-radius: 4px;
+  color: var(--text-faint);
+  font-size: 12.5px;
+  line-height: 1.4;
+  text-align: left;
+}
+button.codex-activity-row:hover {
+  color: var(--text-muted);
+  background: var(--bg-hover);
+}
+.codex-activity-item.running .codex-activity-row,
+.codex-activity-item.awaiting .codex-activity-row {
+  color: var(--text-muted);
+}
+.codex-activity-item.error .codex-activity-row,
+.codex-activity-item.rejected .codex-activity-row {
+  color: var(--danger);
+}
+.codex-activity-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  color: var(--text-faint);
+}
+.codex-activity-item.running .codex-activity-icon,
+.codex-activity-item.awaiting .codex-activity-icon {
+  color: var(--blue);
+}
+.codex-activity-item.error .codex-activity-icon,
+.codex-activity-item.rejected .codex-activity-icon {
+  color: var(--danger);
+}
+.codex-activity-icon svg {
+  width: 9px;
+  height: 9px;
+}
+.codex-activity-label {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+.codex-activity-summary,
+.codex-activity-reasoning {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  color: inherit;
+  font: inherit;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.codex-activity-reasoning {
+  color: var(--text-faint);
+}
+.codex-activity-row > svg {
+  flex: 0 0 auto;
+  color: var(--text-faint);
+}
+.codex-activity-row .tool-stat {
+  margin-left: auto;
+}
+.codex-activity-details {
+  margin: 3px 2px 7px 21px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.codex-activity-details .agent-tool-card {
+  border: 0;
+  border-radius: 0;
+}
+.codex-activity-details .tool-head {
+  display: none;
+}
+.codex-activity-details .tool-output,
+.codex-activity-details .tool-diff,
+.codex-activity-details .side-diff,
+.codex-activity-details .tool-note,
+.codex-activity-details .tool-error,
+.codex-activity-details .tool-actions {
+  border-top: 0;
+}
+.codex-activity.active .codex-activity-head > span {
+  animation: thinking-blink 1.1s ease-in-out infinite;
+}
+
 /* ---------- Agent reasoning (collapsible) ---------- */
 .reasoning-block {
   border: 1px solid var(--border);
@@ -6703,7 +6837,8 @@ button.changes-badge:hover {
 }
 @media (prefers-reduced-motion: reduce) {
   .thinking-dot,
-  .thinking-label {
+  .thinking-label,
+  .codex-activity.active .codex-activity-head > span {
     animation: none;
   }
 }

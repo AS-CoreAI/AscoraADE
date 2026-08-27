@@ -182,6 +182,147 @@ function ToolCard({ m }: { m: ChatMessage }): JSX.Element {
   )
 }
 
+function hasToolDetails(m: ChatMessage): boolean {
+  return Boolean(
+    m.output?.trim() ||
+    m.stderr?.trim() ||
+    m.error?.trim() ||
+    m.status === 'awaiting' ||
+    m.oldContent !== undefined ||
+    m.newContent !== undefined
+  )
+}
+
+function codexActivityLabel(
+  m: ChatMessage,
+  t: (key: TranslationKey, values?: Record<string, string | number>) => string
+): string {
+  const state =
+    m.status === 'done'
+      ? 'done'
+      : m.status === 'error' || m.status === 'rejected'
+        ? 'error'
+        : 'running'
+  const commandKeys = {
+    running: 'chat.codex.command.running',
+    done: 'chat.codex.command.done',
+    error: 'chat.codex.command.error'
+  } as const satisfies Record<typeof state, TranslationKey>
+  const fileKeys = {
+    running: 'chat.codex.files.running',
+    done: 'chat.codex.files.done',
+    error: 'chat.codex.files.error'
+  } as const satisfies Record<typeof state, TranslationKey>
+  const actionKeys = {
+    running: 'chat.codex.action.running',
+    done: 'chat.codex.action.done',
+    error: 'chat.codex.action.error'
+  } as const satisfies Record<typeof state, TranslationKey>
+  if (m.tool === 'run_command' || m.tool === 'run_typescript') {
+    return t(commandKeys[state])
+  }
+  if (m.tool === 'write_file' || m.tool === 'edit_file' || m.tool === 'apply_patch') {
+    return t(fileKeys[state])
+  }
+  const toolLabelKey = TOOL_LABEL_KEY[m.tool ?? '']
+  const action = toolLabelKey ? t(toolLabelKey) : m.tool || t('chat.codex.actionFallback')
+  return t(actionKeys[state], { action })
+}
+
+function CodexActivityTool({ m }: { m: ChatMessage }): JSX.Element {
+  const [open, setOpen] = useState(false)
+  const appLanguage = useApp((s) => s.appLanguage)
+  const t = (key: TranslationKey, values?: Record<string, string | number>): string =>
+    tr(appLanguage, key, values)
+  const expandable = hasToolDetails(m)
+  const summary = toolSummary(m)
+  const status = m.status ?? 'done'
+  const rowContents = (
+    <>
+      <span className="codex-activity-icon"><Icon name={toolIcon(m.tool)} size={11} /></span>
+      <span className="codex-activity-label">{codexActivityLabel(m, t)}</span>
+      {summary && <code className="codex-activity-summary">{summary}</code>}
+      {m.addedLines || m.removedLines ? (
+        <span className="tool-stat">
+          {m.addedLines ? <span className="stat-add">+{m.addedLines}</span> : null}
+          {m.removedLines ? <span className="stat-del">-{m.removedLines}</span> : null}
+        </span>
+      ) : null}
+      {expandable && <Icon name={open ? 'chevronDown' : 'chevronRight'} size={11} />}
+    </>
+  )
+
+  return (
+    <div className={`codex-activity-item ${status}${open ? ' open' : ''}`}>
+      {expandable ? (
+        <button
+          type="button"
+          className="codex-activity-row"
+          aria-expanded={open}
+          title={summary || undefined}
+          onClick={() => setOpen((value) => !value)}
+        >
+          {rowContents}
+        </button>
+      ) : (
+        <div className="codex-activity-row" title={summary || undefined}>{rowContents}</div>
+      )}
+      {open && (
+        <div className="codex-activity-details">
+          <ToolCard m={m} />
+        </div>
+      )}
+    </div>
+  )
+}
+
+function reasoningSummary(text: string): string {
+  return text
+    .replace(/^[#>*_`\-\s]+/, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function CodexActivityPanel({
+  messages,
+  active
+}: {
+  messages: ChatMessage[]
+  active: boolean
+}): JSX.Element {
+  const [open, setOpen] = useState(true)
+  const appLanguage = useApp((s) => s.appLanguage)
+  const label = tr(appLanguage, active ? 'chat.codex.working' : 'chat.codex.workLog')
+
+  return (
+    <section className={`codex-activity${active ? ' active' : ''}${open ? ' open' : ''}`} aria-live={active ? 'polite' : undefined}>
+      <button
+        type="button"
+        className="codex-activity-head"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <span>{label}</span>
+        <Icon name={open ? 'chevronDown' : 'chevronRight'} size={12} />
+      </button>
+      {open && (
+        <div className="codex-activity-list">
+          {messages.map((m) =>
+            m.reasoning ? (
+              <div className="codex-activity-row reasoning" key={m.id} title={m.text}>
+                <span className="codex-activity-icon"><Icon name="bulb" size={11} /></span>
+                <span className="codex-activity-reasoning">{reasoningSummary(m.text)}</span>
+              </div>
+            ) : (
+              <CodexActivityTool key={m.id} m={m} />
+            )
+          )}
+        </div>
+      )}
+    </section>
+  )
+}
+
 /** Grok-style compact duration: 37s, 2m, 2m 10s. */
 /**
  * The agent's working checklist (Claude's TodoWrite): checked+struck rows for
@@ -603,6 +744,7 @@ function TextMessage({ m }: { m: ChatMessage }): JSX.Element {
 
 function Messages({ messages }: { messages: ChatMessage[] }): JSX.Element {
   const appLanguage = useApp((s) => s.appLanguage)
+  const thinking = useApp((s) => s.thinking)
   if (messages.length === 0) {
     return (
       <div className="chat-empty">
@@ -610,25 +752,46 @@ function Messages({ messages }: { messages: ChatMessage[] }): JSX.Element {
       </div>
     )
   }
-  return (
-    <>
-      {messages.map((m) =>
-        isLeakedWProviderToolCall(m) ? null : m.kind === 'tool' ? (
-          m.tool === 'update_todos' ? (
-            <TodoCard key={m.id} m={m} />
-          ) : (
-            <ToolCard key={m.id} m={m} />
-          )
-        ) : m.plan ? (
-          <PlanCard key={m.id} m={m} />
-        ) : m.reasoning ? (
-          <ReasoningBlock key={m.id} text={m.text} durationMs={m.reasoningDurationMs} />
+  const rendered: JSX.Element[] = []
+  for (let index = 0; index < messages.length; index += 1) {
+    const m = messages[index]
+    const isCodexActivity = m.provider === 'codex' && (m.kind === 'tool' || m.reasoning)
+    if (isCodexActivity) {
+      const activity: ChatMessage[] = [m]
+      while (index + 1 < messages.length) {
+        const next = messages[index + 1]
+        if (next.provider !== 'codex' || (next.kind !== 'tool' && !next.reasoning)) break
+        activity.push(next)
+        index += 1
+      }
+      rendered.push(
+        <CodexActivityPanel
+          key={`codex-activity-${activity[0].id}`}
+          messages={activity}
+          active={thinking && index === messages.length - 1}
+        />
+      )
+      continue
+    }
+    rendered.push(
+      isLeakedWProviderToolCall(m) ? (
+        <span key={m.id} hidden />
+      ) : m.kind === 'tool' ? (
+        m.tool === 'update_todos' ? (
+          <TodoCard key={m.id} m={m} />
         ) : (
-          <TextMessage key={m.id} m={m} />
+          <ToolCard key={m.id} m={m} />
         )
-      )}
-    </>
-  )
+      ) : m.plan ? (
+        <PlanCard key={m.id} m={m} />
+      ) : m.reasoning ? (
+        <ReasoningBlock key={m.id} text={m.text} durationMs={m.reasoningDurationMs} />
+      ) : (
+        <TextMessage key={m.id} m={m} />
+      )
+    )
+  }
+  return <>{rendered}</>
 }
 
 /** Compact token count: 942 → "942", 1240 → "1.2k", 23000 → "23k". */
@@ -678,6 +841,7 @@ function ThinkingIndicator(): JSX.Element | null {
   const tokens = useApp((s) => s.thinkingTokens)
   const startedAt = useApp((s) => s.thinkingStartedAt)
   const provider = useApp((s) => s.provider)
+  const messages = useApp((s) => s.messages)
   const appLanguage = useApp((s) => s.appLanguage)
   const [elapsed, setElapsed] = useState(0)
   const [verb, setVerb] = useState(pickStatusVerb)
@@ -699,6 +863,19 @@ function ThinkingIndicator(): JSX.Element | null {
   }, [thinking, provider])
 
   if (!thinking) return null
+  if (provider === 'codex') {
+    let lastUser = -1
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      if (messages[index].role === 'user') {
+        lastUser = index
+        break
+      }
+    }
+    const panelHasCurrentActivity = messages
+      .slice(lastUser + 1)
+      .some((m) => m.provider === 'codex' && (m.kind === 'tool' || m.reasoning))
+    if (panelHasCurrentActivity) return null
+  }
   const label = provider === 'claude' && appLanguage === 'en' ? `${verb}…` : tr(appLanguage, 'chat.thinking')
   return (
     <div className="thinking" aria-live="polite">

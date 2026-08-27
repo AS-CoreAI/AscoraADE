@@ -2,6 +2,7 @@
 What's new?
 
 ### Added
+- **Compact Codex activity panel** — consecutive Codex reasoning, command, and file-change events are now grouped into a single collapsible work log modeled on the Codex UI. While a turn is active the panel shows a localized “Thinking” heading and live one-line action rows; completed turns keep a compact “Work log,” long commands truncate cleanly, and each row can expand to reveal the existing command output, errors, approvals, or side-by-side diff without duplicating the standalone thinking indicator. The panel and its running/completed/error labels are localized in all eleven interface languages.
 - **Chinese (Mainland), Korean, Japanese, Polish, and Hindi interface languages** — the language switcher now includes Simplified Chinese (`zh` / `zh-CN`), Korean, Japanese, Polish, and Hindi catalogs covering the full UI, with CJK and Devanagari font fallbacks and date/number formatting mapped to each matching locale.
 - **Grok Build CLI backend** — xAI's `grok` coding agent is now a selectable agent provider (`grok -p --output-format streaming-json`), with auto-detect from PATH / `~/.grok/bin`, optional binary path, model and reasoning-effort pickers, permission modes (`plan` / `default` / `acceptEdits` / `auto` / `dontAsk` / `bypassPermissions`), Sign in / Sign out (`grok login` / `grok logout`) with account display from `~/.grok/auth.json`, session resume via `--resume`, and the same normalized tool/reasoning cards as Codex and Claude. SuperGrok / X Premium+ subscription auth or `XAI_API_KEY` are both supported.
 
