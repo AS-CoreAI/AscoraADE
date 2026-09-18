@@ -1,23 +1,15 @@
-#!/usr/bin/env python3
-"""Antigravity SDK bridge for Ascora ADE.
-
-Streams agent responses as newline-delimited JSON events on stdout,
-matching the ZCode/Codex normalized event shape so the renderer can
-reuse the same CLI-backend code path.
-
-Usage:
-  python bridge.py --prompt "..." --cwd /path [--model flash] [--resume conv_id]
-"""
 import argparse
 import asyncio
 import json
 import os
+import subprocess
 import sys
+import time
 import traceback
+from pathlib import Path
 
 
 def emit(obj: dict) -> None:
-    """Write one NDJSON line to stdout and flush."""
     try:
         sys.stdout.write(json.dumps(obj, ensure_ascii=False) + '\n')
         sys.stdout.flush()
@@ -25,87 +17,230 @@ def emit(obj: dict) -> None:
         sys.exit(0)
 
 
-async def run(args: argparse.Namespace) -> int:
+def find_agentapi() -> str | None:
+    home = Path.home()
+    candidates = [
+        home / '.gemini' / 'antigravity' / 'bin' / 'agentapi.bat',
+        home / '.gemini' / 'antigravity' / 'bin' / 'agentapi',
+    ]
+    local_app_data = os.environ.get('LOCALAPPDATA')
+    if local_app_data:
+        candidates.append(
+            Path(local_app_data) / 'Programs' / 'antigravity' / 'resources' / 'bin' / 'language_server.exe'
+        )
+    for candidate in candidates:
+        if candidate.is_file():
+            return str(candidate)
+    return None
+
+
+async def run_agentapi(args: argparse.Namespace) -> int:
+    agentapi_cmd = find_agentapi()
+    if not agentapi_cmd:
+        emit({'type': 'error', 'message': 'Antigravity CLI (agentapi) not found.'})
+        return 1
+
+    model = args.model or 'flash'
+    prompt = args.prompt
+    conv_id = args.resume
+
+    is_raw_ls = agentapi_cmd.lower().endswith('language_server.exe')
+
+    if conv_id:
+        cmd = [agentapi_cmd, 'agentapi', 'send-message', conv_id, prompt] if is_raw_ls else [agentapi_cmd, 'send-message', conv_id, prompt]
+    else:
+        cmd = [agentapi_cmd, 'agentapi', 'new-conversation', f'--model={model}', prompt] if is_raw_ls else [agentapi_cmd, 'new-conversation', f'--model={model}', prompt]
+
+    cwd = args.cwd if args.cwd and os.path.isdir(args.cwd) else '.'
+
+    proc = subprocess.Popen(
+        cmd,
+        cwd=cwd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        shell=agentapi_cmd.lower().endswith('.bat')
+    )
+    stdout, stderr = proc.communicate()
+
+    if proc.returncode != 0:
+        err_msg = stderr.strip() or stdout.strip() or f'agentapi exited with code {proc.returncode}'
+        emit({'type': 'error', 'message': err_msg})
+        return proc.returncode
+
+    try:
+        resp_data = json.loads(stdout)
+    except Exception:
+        emit({'type': 'text', 'text': stdout})
+        emit({'type': 'step-finish', 'tokens': {'input': 0, 'output': len(stdout)}})
+        return 0
+
+    actual_conv_id = (
+        conv_id
+        or resp_data.get('response', {}).get('newConversation', {}).get('conversationId')
+        or resp_data.get('response', {}).get('sendMessage', {}).get('recipientId')
+    )
+
+    if actual_conv_id:
+        emit({'type': 'session', 'sessionID': actual_conv_id})
+
+    brain_dir = Path.home() / '.gemini' / 'antigravity' / 'brain'
+    transcript_file = brain_dir / actual_conv_id / '.system_generated' / 'logs' / 'transcript.jsonl' if actual_conv_id else None
+
+    max_wait = 40
+    start_time = time.time()
+    response_content = ''
+    thinking_content = ''
+
+    if transcript_file:
+        while time.time() - start_time < max_wait:
+            if transcript_file.exists():
+                try:
+                    with open(transcript_file, 'r', encoding='utf-8') as f:
+                        lines = [line.strip() for line in f if line.strip()]
+                    
+                    found_model = False
+                    for line in reversed(lines):
+                        try:
+                            record = json.loads(line)
+                            if record.get('source') == 'MODEL' and record.get('type') == 'PLANNER_RESPONSE':
+                                thinking = record.get('thinking')
+                                content = record.get('content')
+                                tool_calls = record.get('tool_calls')
+                                
+                                if thinking and thinking != thinking_content:
+                                    thinking_content = thinking
+                                    emit({'type': 'reasoning', 'text': thinking_content})
+                                
+                                if tool_calls:
+                                    for tc in tool_calls:
+                                        emit({
+                                            'type': 'tool',
+                                            'tool': tc.get('name', 'tool'),
+                                            'callID': tc.get('id', f'call_{int(time.time())}'),
+                                            'state': {
+                                                'status': 'completed',
+                                                'input': tc.get('args', {}),
+                                                'output': ''
+                                            }
+                                        })
+                                
+                                if content:
+                                    response_content = content
+                                    found_model = True
+                                    break
+                        except Exception:
+                            continue
+                    
+                    if found_model and response_content:
+                        break
+                except Exception:
+                    pass
+            await asyncio.sleep(0.3)
+
+    if response_content:
+        chunk_size = 20
+        acc = ''
+        for i in range(0, len(response_content), chunk_size):
+            chunk = response_content[i:i+chunk_size]
+            acc += chunk
+            emit({'type': 'text', 'text': acc})
+            await asyncio.sleep(0.01)
+    else:
+        emit({'type': 'text', 'text': stdout})
+
+    emit({
+        'type': 'step-finish',
+        'tokens': {
+            'input': len(prompt) // 4,
+            'output': len(response_content or stdout) // 4
+        }
+    })
+    return 0
+
+
+async def run_sdk(args: argparse.Namespace) -> int:
     try:
         from google.antigravity import Agent, LocalAgentConfig, CapabilitiesConfig
     except ImportError:
-        emit({"type": "error", "message": "google-antigravity SDK is not installed. Run: pip install google-antigravity"})
+        emit({'type': 'error', 'message': 'google-antigravity SDK is not installed. Run: pip install google-antigravity'})
         return 1
 
-    api_key = args.api_key or os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
-    if not api_key:
-        emit({
-            "type": "error",
-            "message": "Antigravity SDK requires a Gemini API key. Please set GEMINI_API_KEY in your environment or launch Ascora with GEMINI_API_KEY=<your-key>."
-        })
-        return 1
+    api_key = args.api_key or os.environ.get('GEMINI_API_KEY') or os.environ.get('GOOGLE_API_KEY')
+    model_name = args.model
+    if model_name == 'flash_lite':
+        model_target = 'gemini-2.0-flash-lite'
+    elif model_name == 'flash':
+        model_target = 'gemini-2.0-flash'
+    elif model_name == 'pro':
+        model_target = 'gemini-2.5-pro'
+    else:
+        model_target = model_name
 
+    config_kwargs = {
+        'system_instructions': 'You are an expert coding assistant in Ascora ADE. Help the user analyze, write, and debug code.',
+        'capabilities': CapabilitiesConfig(),
+        'api_key': api_key,
+    }
+    if model_target:
+        config_kwargs['model'] = model_target
+
+    config = LocalAgentConfig(**config_kwargs)
+
+    if args.cwd and os.path.isdir(args.cwd):
+        os.chdir(args.cwd)
+
+    async with Agent(config) as agent:
+        session_id = args.resume or f'agy_{id(agent)}'
+        emit({'type': 'session', 'sessionID': session_id})
+        response = await agent.chat(args.prompt)
+        text_acc = ''
+        async for token in response:
+            text_acc += token
+            emit({'type': 'text', 'text': text_acc})
+
+        emit({'type': 'step-finish', 'tokens': {'input': len(args.prompt) // 4, 'output': len(text_acc) // 4}})
+
+    return 0
+
+
+async def run(args: argparse.Namespace) -> int:
     try:
-        # Map friendly model names if necessary
-        model_name = args.model
-        if model_name == "flash_lite":
-            model_target = "gemini-2.0-flash-lite"
-        elif model_name == "flash":
-            model_target = "gemini-2.0-flash"
-        elif model_name == "pro":
-            model_target = "gemini-2.5-pro"
+        has_api_key = bool(args.api_key or os.environ.get('GEMINI_API_KEY') or os.environ.get('GOOGLE_API_KEY'))
+        creds_file = Path.home() / '.gemini' / 'oauth_creds.json'
+        has_subscription = creds_file.is_file()
+
+        if has_subscription and not has_api_key:
+            return await run_agentapi(args)
+        elif has_api_key:
+            return await run_sdk(args)
+        elif has_subscription:
+            return await run_agentapi(args)
         else:
-            model_target = model_name
-
-        config_kwargs = {
-            "system_instructions": "You are an expert coding assistant in Ascora ADE. Help the user analyze, write, and debug code.",
-            "capabilities": CapabilitiesConfig(),
-            "api_key": api_key,
-        }
-        if model_target:
-            config_kwargs["model"] = model_target
-
-        config = LocalAgentConfig(**config_kwargs)
-
-        # Set working directory
-        if args.cwd and os.path.isdir(args.cwd):
-            os.chdir(args.cwd)
-
-        async with Agent(config) as agent:
-            # Emit session info
-            session_id = args.resume or f"agy_{id(agent)}"
-            emit({"type": "session", "sessionID": session_id})
-
-            # Send the prompt
-            response = await agent.chat(args.prompt)
-
-            text_acc = ""
-
-            # Stream content tokens
-            async for token in response:
-                text_acc += token
-                emit({"type": "text", "text": text_acc})
-
-            # Emit final step-finish with usage
-            emit({"type": "step-finish", "tokens": {"input": len(args.prompt) // 4, "output": len(text_acc) // 4}})
-
-        return 0
-
+            emit({
+                'type': 'error',
+                'message': 'Neither Antigravity authorization nor GEMINI_API_KEY found. Please authorize in Antigravity or provide an API key.'
+            })
+            return 1
     except KeyboardInterrupt:
         return 130
     except Exception as exc:
-        emit({"type": "error", "message": str(exc)})
+        emit({'type': 'error', 'message': str(exc)})
         print(traceback.format_exc(), file=sys.stderr)
         return 1
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Antigravity SDK bridge")
-    parser.add_argument("--prompt", required=True, help="The user prompt")
-    parser.add_argument("--cwd", default=".", help="Working directory")
-    parser.add_argument("--model", choices=["flash_lite", "flash", "pro"], default=None,
-                        help="Model tier to use")
-    parser.add_argument("--resume", default=None, help="Conversation ID to resume")
-    parser.add_argument("--api-key", default=None, help="Gemini API key override")
+    parser = argparse.ArgumentParser(description='Antigravity bridge')
+    parser.add_argument('--prompt', required=True, help='The user prompt')
+    parser.add_argument('--cwd', default='.', help='Working directory')
+    parser.add_argument('--model', choices=['flash_lite', 'flash', 'pro'], default=None,
+                        help='Model tier to use')
+    parser.add_argument('--resume', default=None, help='Conversation ID to resume')
+    parser.add_argument('--api-key', default=None, help='Gemini API key override')
     args = parser.parse_args()
     sys.exit(asyncio.run(run(args)))
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
-
