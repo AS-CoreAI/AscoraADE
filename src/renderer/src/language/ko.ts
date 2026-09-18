@@ -1,4 +1,4 @@
-import en, { type Translation } from './en'
+﻿import en, { type Translation } from './en'
 
 const ko: Translation = {
   ...en,
@@ -104,7 +104,7 @@ const ko: Translation = {
   'tools.graphvizDescription': '그래프 설명으로 다이어그램을 만듭니다.',
   'tools.tesseractDescription': '이미지와 스캔 문서의 텍스트를 인식합니다.',
   'rail.about': 'Ascora ADE 정보',
-  'rail.version': '버전 1.3.0',
+  'rail.version': '버전 1.3.1',
   'rail.createdAt': 'AS CORE AI에서 제작',
   'rail.author': '저자 및 개발자: Artur Strazewicz',
   'rail.website': '웹사이트:',

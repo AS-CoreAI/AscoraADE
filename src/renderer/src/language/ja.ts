@@ -1,4 +1,4 @@
-import en, { type Translation } from './en'
+﻿import en, { type Translation } from './en'
 
 const ja: Translation = {
   ...en,
@@ -104,7 +104,7 @@ const ja: Translation = {
   'tools.graphvizDescription': 'グラフ記述から図を作成します。',
   'tools.tesseractDescription': '画像やスキャン文書の文字を認識します。',
   'rail.about': 'Ascora ADE について',
-  'rail.version': 'バージョン 1.3.0',
+  'rail.version': 'バージョン 1.3.1',
   'rail.createdAt': 'AS CORE AI で作成',
   'rail.author': '作者・開発者: Artur Strazewicz',
   'rail.website': 'ウェブサイト:',

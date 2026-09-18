@@ -1,4 +1,4 @@
-export const en = {
+﻿export const en = {
   'app.language.english': 'English',
   'app.language.russian': 'Russian',
   'app.language.french': 'French',
@@ -100,7 +100,7 @@ export const en = {
   'tools.graphvizDescription': 'Build diagrams from graph descriptions.',
   'tools.tesseractDescription': 'Recognize text in images and scanned documents.',
   'rail.about': 'About Ascora ADE',
-  'rail.version': 'Version 1.3.0',
+  'rail.version': 'Version 1.3.1',
   'rail.createdAt': 'Created at AS CORE AI',
   'rail.author': 'Author & developer: Artur Strazewicz',
   'rail.website': 'Website:',

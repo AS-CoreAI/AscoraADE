@@ -1,4 +1,4 @@
-import en, { type Translation } from './en'
+﻿import en, { type Translation } from './en'
 
 const zh: Translation = {
   ...en,
@@ -104,7 +104,7 @@ const zh: Translation = {
   'tools.graphvizDescription': '根据图描述生成图表。',
   'tools.tesseractDescription': '识别图像和扫描文档中的文字。',
   'rail.about': '关于 Ascora ADE',
-  'rail.version': '版本 1.3.0',
+  'rail.version': '版本 1.3.1',
   'rail.createdAt': '由 AS CORE AI 创建',
   'rail.author': '作者与开发者：Artur Strazewicz',
   'rail.website': '网站：',

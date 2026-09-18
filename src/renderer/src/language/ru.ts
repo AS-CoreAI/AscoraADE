@@ -1,4 +1,4 @@
-import type { Translation } from './en'
+﻿import type { Translation } from './en'
 
 const ru: Translation = {
   'app.language.english': 'Английский',
@@ -102,7 +102,7 @@ const ru: Translation = {
   'tools.graphvizDescription': 'Построение диаграмм по описаниям графов.',
   'tools.tesseractDescription': 'Распознавание текста на изображениях и сканах.',
   'rail.about': 'О Ascora ADE',
-  'rail.version': 'Версия 1.3.0',
+  'rail.version': 'Версия 1.3.1',
   'rail.createdAt': 'Создано в AS CORE AI',
   'rail.author': 'Автор и разработчик: Artur Strazewicz',
   'rail.website': 'Сайт:',

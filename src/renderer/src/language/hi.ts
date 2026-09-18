@@ -1,4 +1,4 @@
-import en, { type Translation } from './en'
+﻿import en, { type Translation } from './en'
 
 const hi: Translation = {
   ...en,
@@ -104,7 +104,7 @@ const hi: Translation = {
   'tools.graphvizDescription': 'ग्राफ़ विवरण से आरेख बनाएँ।',
   'tools.tesseractDescription': 'छवियों और स्कैन किए गए दस्तावेज़ों में टेक्स्ट पहचानें।',
   'rail.about': 'Ascora ADE के बारे में',
-  'rail.version': 'संस्करण 1.3.0',
+  'rail.version': 'संस्करण 1.3.1',
   'rail.createdAt': 'AS CORE AI में बनाया गया',
   'rail.author': 'लेखक और डेवलपर: Artur Strazewicz',
   'rail.website': 'वेबसाइट:',

@@ -1,4 +1,4 @@
-import en, { type Translation } from './en'
+﻿import en, { type Translation } from './en'
 
 const pl: Translation = {
   ...en,
@@ -104,7 +104,7 @@ const pl: Translation = {
   'tools.graphvizDescription': 'Tworzenie diagramów na podstawie opisów grafów.',
   'tools.tesseractDescription': 'Rozpoznawanie tekstu na obrazach i zeskanowanych dokumentach.',
   'rail.about': 'O Ascora ADE',
-  'rail.version': 'Wersja 1.3.0',
+  'rail.version': 'Wersja 1.3.1',
   'rail.createdAt': 'Utworzono w AS CORE AI',
   'rail.author': 'Autor i deweloper: Artur Strazewicz',
   'rail.website': 'Strona:',

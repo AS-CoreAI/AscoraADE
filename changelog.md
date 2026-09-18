@@ -15,6 +15,7 @@ What's new?
 - **Premium VPN reconnects keep their account identity** — Ascora proactively refreshes expiring access tokens, serializes concurrent refresh attempts, and verifies the account through the required-auth profile endpoint before every connection. A Premium session can no longer be silently provisioned as anonymous and rejected by the shared 100 MB machine limit after disconnecting and reconnecting.
 - **Premium traffic is attributed to the account** — traffic responses that were anonymously downgraded by older Wandrounik control panels are detected and retried after account validation. Misclassified persisted sessions are cleaned up on launch, anonymous session credentials remain usable for cleanup after a token refresh, and new Premium traffic is recorded in the account statistics instead of remaining at zero.
 - **OmniRoute health checks and IPC bypass VPN interception** — replaced Electron's global `fetch` with Node's native `node:http` module for loopback connections to the OmniRoute sidecar. This prevents the Chromium network stack from routing `127.0.0.1` requests through active VPNs or system proxies, which previously caused the health endpoint to time out after 180 seconds on startup and blocked admin requests.
+- **Antigravity Python bridge bundled in unpackaged resources** — `bridge.py` is bundled as an extra resource outside the virtual `app.asar` container so that Windows `python.exe` can execute it directly without encountering missing file or directory errors.
 
 ## Ascora ADE 1.3.0
 What's new?
