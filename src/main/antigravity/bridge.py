@@ -34,15 +34,21 @@ def find_agentapi() -> str | None:
     return None
 
 
-def resolve_ls_address(agentapi_cmd: str) -> str | None:
-    """Finds the active language_server port if ANTIGRAVITY_LS_ADDRESS is not set."""
-    if os.environ.get('ANTIGRAVITY_LS_ADDRESS'):
-        return os.environ['ANTIGRAVITY_LS_ADDRESS']
+def resolve_ls_credentials(agentapi_cmd: str) -> tuple[str | None, str | None]:
+    """Finds active language_server address and CSRF token."""
+    addr = os.environ.get('ANTIGRAVITY_LS_ADDRESS')
+    token = os.environ.get('ANTIGRAVITY_CSRF_TOKEN')
+
+    if addr and token:
+        return addr, token
 
     try:
         import psutil
+        import re
         hub_ports = []
         other_ports = []
+        found_token = None
+
         for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
             try:
                 name = (proc.info.get('name') or '').lower()
@@ -50,6 +56,12 @@ def resolve_ls_address(agentapi_cmd: str) -> str | None:
                     cmd_list = proc.info.get('cmdline') or []
                     cmd = ' '.join(cmd_list)
                     is_hub = '--subclient_type hub' in cmd or 'antigravity' in cmd
+                    
+                    if not found_token:
+                        m = re.search(r'--csrf_token(?:=|\s+)([^\s]+)', cmd)
+                        if m:
+                            found_token = m.group(1)
+
                     pid = proc.info['pid']
                     for conn in psutil.net_connections():
                         if conn.pid == pid and conn.status == 'LISTEN' and conn.laddr.port > 1024:
@@ -60,10 +72,14 @@ def resolve_ls_address(agentapi_cmd: str) -> str | None:
             except Exception:
                 continue
 
+        final_token = token or found_token
         candidate_ports = hub_ports or other_ports
         for p in sorted(set(candidate_ports), reverse=True):
             test_env = os.environ.copy()
             test_env['ANTIGRAVITY_LS_ADDRESS'] = f'localhost:{p}'
+            if final_token:
+                test_env['ANTIGRAVITY_CSRF_TOKEN'] = final_token
+
             res = subprocess.run(
                 [agentapi_cmd, 'get-conversation-metadata', 'probe-test'],
                 env=test_env,
@@ -75,11 +91,11 @@ def resolve_ls_address(agentapi_cmd: str) -> str | None:
             )
             out = res.stderr + res.stdout
             if 'ANTIGRAVITY_LS_ADDRESS is not set' not in out:
-                return f'localhost:{p}'
+                return f'localhost:{p}', final_token
     except Exception:
         pass
 
-    return None
+    return addr, token
 
 
 async def run_agentapi(args: argparse.Namespace) -> int:
@@ -89,13 +105,15 @@ async def run_agentapi(args: argparse.Namespace) -> int:
         return 1
 
     env = os.environ.copy()
-    if not env.get('ANTIGRAVITY_LS_ADDRESS'):
-        addr = resolve_ls_address(agentapi_cmd)
-        if addr:
-            env['ANTIGRAVITY_LS_ADDRESS'] = addr
-        else:
-            emit({'type': 'error', 'message': 'Antigravity language_server port not found. Please ensure Antigravity is running.'})
-            return 1
+    addr, token = resolve_ls_credentials(agentapi_cmd)
+    if addr:
+        env['ANTIGRAVITY_LS_ADDRESS'] = addr
+    else:
+        emit({'type': 'error', 'message': 'Antigravity language_server port not found. Please ensure Antigravity is running.'})
+        return 1
+
+    if token:
+        env['ANTIGRAVITY_CSRF_TOKEN'] = token
 
     model = args.model or 'flash'
     prompt = args.prompt
