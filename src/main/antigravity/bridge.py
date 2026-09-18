@@ -95,7 +95,27 @@ def resolve_ls_credentials(agentapi_cmd: str) -> tuple[str | None, str | None]:
     except Exception:
         pass
 
-    return addr, token
+def resolve_project_id() -> str | None:
+    """Finds current/recent active project_id from env or conversation summaries."""
+    if os.environ.get('ANTIGRAVITY_PROJECT_ID'):
+        return os.environ['ANTIGRAVITY_PROJECT_ID']
+
+    db_path = Path.home() / '.gemini' / 'antigravity' / 'conversation_summaries.db'
+    if db_path.exists():
+        try:
+            import sqlite3
+            conn = sqlite3.connect(str(db_path))
+            cursor = conn.cursor()
+            cursor.execute(
+                'SELECT project_id FROM conversation_summaries WHERE length(project_id) > 0 ORDER BY last_modified_time DESC LIMIT 1;'
+            )
+            row = cursor.fetchone()
+            if row and row[0]:
+                return row[0]
+        except Exception:
+            pass
+
+    return None
 
 
 async def run_agentapi(args: argparse.Namespace) -> int:
@@ -114,6 +134,10 @@ async def run_agentapi(args: argparse.Namespace) -> int:
 
     if token:
         env['ANTIGRAVITY_CSRF_TOKEN'] = token
+
+    project_id = resolve_project_id()
+    if project_id:
+        env['ANTIGRAVITY_PROJECT_ID'] = project_id
 
     model = args.model or 'flash'
     prompt = args.prompt
