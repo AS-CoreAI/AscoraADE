@@ -82,15 +82,19 @@ export function resolveAntigravityPath(configured?: string): { path: string; fou
 
 /** Resolve the bridge.py script bundled alongside the app. */
 function bridgePath(): string {
-  // In production the script is next to the compiled JS in the asar.
-  // In dev it sits in src/main/antigravity/.
-  const prodPath = join(app.isPackaged ? process.resourcesPath : app.getAppPath(), 'src', 'main', 'antigravity', 'bridge.py')
-  if (existsSync(prodPath)) return prodPath
-  // Fallback: look relative to __dirname (compiled output)
-  const devPath = join(__dirname, '..', 'src', 'main', 'antigravity', 'bridge.py')
-  if (existsSync(devPath)) return devPath
-  // Final fallback for electron-vite dev mode
-  return join(app.getAppPath(), 'src', 'main', 'antigravity', 'bridge.py')
+  // External python process cannot read inside app.asar.
+  // In packaged builds, bridge.py is placed in resources/antigravity/bridge.py.
+  const packagedPath = join(process.resourcesPath, 'antigravity', 'bridge.py')
+  if (existsSync(packagedPath)) return packagedPath
+
+  // In dev / repo it sits in src/main/antigravity/
+  const repoPath = join(app.getAppPath(), 'src', 'main', 'antigravity', 'bridge.py')
+  if (existsSync(repoPath)) return repoPath
+
+  const fallbackPath = join(__dirname, '..', '..', 'src', 'main', 'antigravity', 'bridge.py')
+  if (existsSync(fallbackPath)) return fallbackPath
+
+  return repoPath
 }
 
 // ---------- install / auth probe ----------

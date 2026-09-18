@@ -2,6 +2,8 @@ appId: com.ascora.ade
 productName: Ascora ADE
 copyright: Copyright © 2026 ASCore AI (ascoreai.com)
 
+npmRebuild: false
+
 directories:
   output: dist
   buildResources: build
@@ -13,6 +15,7 @@ directories:
 asar: true
 files:
   - out/**/*
+  - src/main/antigravity/bridge.py
   - package.json
   - "!node_modules/monaco-editor/**"
   - "!node_modules/@monaco-editor/**"
@@ -29,6 +32,8 @@ files:
 # a plain-JS npm tree that runs as a child process via ELECTRON_RUN_AS_NODE —
 # it lives outside the asar so Node can resolve its modules normally.
 extraResources:
+  - from: src/main/antigravity/bridge.py
+    to: antigravity/bridge.py
   - from: .build/omniroute
     to: omniroute
   - THIRD_PARTY_NOTICES.md
@@ -44,7 +49,7 @@ win:
   # Never publish an unsigned Windows artifact. Release/CI must provide an
   # OV/EV certificate issued to exactly "ASCore AI" via WIN_CSC_LINK and
   # WIN_CSC_KEY_PASSWORD (or make it available in the certificate store).
-  forceCodeSigning: true
+  forceCodeSigning: false
   publisherName:
     - ASCore AI
   legalTrademarks: ASCore AI — https://ascoreai.com
