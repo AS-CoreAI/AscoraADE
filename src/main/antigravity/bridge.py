@@ -34,11 +34,68 @@ def find_agentapi() -> str | None:
     return None
 
 
+def resolve_ls_address(agentapi_cmd: str) -> str | None:
+    """Finds the active language_server port if ANTIGRAVITY_LS_ADDRESS is not set."""
+    if os.environ.get('ANTIGRAVITY_LS_ADDRESS'):
+        return os.environ['ANTIGRAVITY_LS_ADDRESS']
+
+    try:
+        import psutil
+        hub_ports = []
+        other_ports = []
+        for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+            try:
+                name = (proc.info.get('name') or '').lower()
+                if 'language_server' in name:
+                    cmd_list = proc.info.get('cmdline') or []
+                    cmd = ' '.join(cmd_list)
+                    is_hub = '--subclient_type hub' in cmd or 'antigravity' in cmd
+                    pid = proc.info['pid']
+                    for conn in psutil.net_connections():
+                        if conn.pid == pid and conn.status == 'LISTEN' and conn.laddr.port > 1024:
+                            if is_hub:
+                                hub_ports.append(conn.laddr.port)
+                            else:
+                                other_ports.append(conn.laddr.port)
+            except Exception:
+                continue
+
+        candidate_ports = hub_ports or other_ports
+        for p in sorted(set(candidate_ports), reverse=True):
+            test_env = os.environ.copy()
+            test_env['ANTIGRAVITY_LS_ADDRESS'] = f'localhost:{p}'
+            res = subprocess.run(
+                [agentapi_cmd, 'get-conversation-metadata', 'probe-test'],
+                env=test_env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                shell=agentapi_cmd.lower().endswith('.bat'),
+                timeout=3
+            )
+            out = res.stderr + res.stdout
+            if 'ANTIGRAVITY_LS_ADDRESS is not set' not in out:
+                return f'localhost:{p}'
+    except Exception:
+        pass
+
+    return None
+
+
 async def run_agentapi(args: argparse.Namespace) -> int:
     agentapi_cmd = find_agentapi()
     if not agentapi_cmd:
         emit({'type': 'error', 'message': 'Antigravity CLI (agentapi) not found.'})
         return 1
+
+    env = os.environ.copy()
+    if not env.get('ANTIGRAVITY_LS_ADDRESS'):
+        addr = resolve_ls_address(agentapi_cmd)
+        if addr:
+            env['ANTIGRAVITY_LS_ADDRESS'] = addr
+        else:
+            emit({'type': 'error', 'message': 'Antigravity language_server port not found. Please ensure Antigravity is running.'})
+            return 1
 
     model = args.model or 'flash'
     prompt = args.prompt
@@ -56,6 +113,7 @@ async def run_agentapi(args: argparse.Namespace) -> int:
     proc = subprocess.Popen(
         cmd,
         cwd=cwd,
+        env=env,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
