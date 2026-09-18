@@ -21,6 +21,7 @@ import type {
   GrokPermissionMode,
   GrokReasoning,
   GlmMode,
+  AntigravityModel,
   CodexEvent,
   CodexItem,
   CodexCheckResult,
@@ -871,6 +872,7 @@ function modelLabel(s: {
   claudeModel: string
   geminiModel: string
   grokModel: string
+  antigravityModel?: AntigravityModel
   wproviderService: WProviderService
   omnirouteModel: string
 }): string {
@@ -895,6 +897,8 @@ function modelLabel(s: {
       return s.grokModel || 'Grok'
     case 'glm':
       return 'GLM'
+    case 'antigravity':
+      return `Antigravity ${s.antigravityModel || 'flash'}`
     case 'wprovider':
       return `${WPROVIDER_SERVICE_INFO[s.wproviderService].label} Web`
     case 'omniroute':
@@ -1201,6 +1205,7 @@ interface RunState {
   geminiSessionId: string | null
   grokSessionId: string | null
   glmSessionId: string | null
+  antigravitySessionId: string | null
 }
 
 /** The subset of run fields that mirror top-level store keys of the same name. */
@@ -1219,6 +1224,7 @@ type RunFields = Pick<
   | 'geminiSessionId'
   | 'grokSessionId'
   | 'glmSessionId'
+  | 'antigravitySessionId'
 >
 
 interface AppState {
@@ -1356,6 +1362,12 @@ interface AppState {
   glmSessionId: string | null
   glmCheck: CodexCheckResult | null
   glmChecking: boolean
+  // Antigravity CLI
+  antigravityPath: string
+  antigravityModel: AntigravityModel
+  antigravitySessionId: string | null
+  antigravityCheck: CodexCheckResult | null
+  antigravityChecking: boolean
   // Ascora WProvider (hidden-browser web chat backend)
   wproviderService: WProviderService
   wproviderCheck: WProviderCheckResult | null
@@ -1533,6 +1545,9 @@ interface AppState {
   setGlmPath: (path: string) => Promise<void>
   setGlmMode: (m: GlmMode) => void
   checkGlm: () => Promise<void>
+  setAntigravityPath: (path: string) => Promise<void>
+  setAntigravityModel: (m: AntigravityModel) => void
+  checkAntigravity: () => Promise<void>
   setWProviderService: (service: WProviderService) => Promise<void>
   checkWProvider: (service?: WProviderService, opts?: { force?: boolean }) => Promise<void>
   checkAllWProviders: (opts?: { force?: boolean }) => Promise<void>
@@ -1623,7 +1638,8 @@ export const useApp = create<AppState>((set, get) => {
     claudeSessionId: s.claudeSessionId,
     geminiSessionId: s.geminiSessionId,
     grokSessionId: s.grokSessionId,
-    glmSessionId: s.glmSessionId
+    glmSessionId: s.glmSessionId,
+    antigravitySessionId: s.antigravitySessionId
   })
 
   /** Read a run's live state, whether it's the foreground task or backgrounded. */
@@ -1698,7 +1714,8 @@ export const useApp = create<AppState>((set, get) => {
         copilotSessionId: r.copilotSessionId,
         claudeSessionId: r.claudeSessionId,
         geminiSessionId: r.geminiSessionId,
-        glmSessionId: r.glmSessionId
+        glmSessionId: r.glmSessionId,
+        antigravitySessionId: r.antigravitySessionId
       }
     })
     return true
@@ -1783,6 +1800,7 @@ export const useApp = create<AppState>((set, get) => {
     else if (provider === 'gemini') await get().checkGemini()
     else if (provider === 'grok') await get().checkGrok()
     else if (provider === 'glm') await get().checkGlm()
+    else if (provider === 'antigravity') await get().checkAntigravity()
     else if (provider === 'wprovider') await get().checkWProvider()
     else if (provider === 'omniroute') {
       await get().ensureOmniroute()
@@ -1890,6 +1908,11 @@ export const useApp = create<AppState>((set, get) => {
   glmSessionId: null,
   glmCheck: null,
   glmChecking: false,
+  antigravityPath: DEFAULT_LLM_CONFIG.antigravityPath,
+  antigravityModel: DEFAULT_LLM_CONFIG.antigravityModel,
+  antigravitySessionId: null,
+  antigravityCheck: null,
+  antigravityChecking: false,
   wproviderService: DEFAULT_LLM_CONFIG.wproviderService,
   wproviderCheck: null,
   wproviderChecks: {},
@@ -2029,6 +2052,8 @@ export const useApp = create<AppState>((set, get) => {
       grokReasoning: cfg.grokReasoning,
       glmPath: cfg.glmPath,
       glmMode: cfg.glmMode,
+      antigravityPath: cfg.antigravityPath,
+      antigravityModel: cfg.antigravityModel,
       wproviderService: cfg.wproviderService,
       omnirouteModel: cfg.omnirouteModel,
       omnirouteStatus,
@@ -2048,6 +2073,7 @@ export const useApp = create<AppState>((set, get) => {
       if (cfg.provider === 'gemini') await get().checkGemini()
       if (cfg.provider === 'grok') await get().checkGrok()
       if (cfg.provider === 'glm') await get().checkGlm()
+      if (cfg.provider === 'antigravity') await get().checkAntigravity()
       if (cfg.provider === 'wprovider') await get().checkWProvider()
     }
     // Keep the LM Studio / Ollama backend options in sync with the local servers.
@@ -2107,6 +2133,7 @@ export const useApp = create<AppState>((set, get) => {
       geminiSessionId: null,
       grokSessionId: null,
       glmSessionId: null,
+      antigravitySessionId: null,
       // Selecting a workspace makes it the active context, not an SSH host.
       activeSsh: null,
       tasksByWorkspace: { ...state.tasksByWorkspace, [ws.id]: tasks }
@@ -2140,6 +2167,7 @@ export const useApp = create<AppState>((set, get) => {
       geminiSessionId: null,
       grokSessionId: null,
       glmSessionId: null,
+      antigravitySessionId: null,
       view: 'workspace'
     })
     void switchToSshProviderIfNeeded()
@@ -2247,6 +2275,7 @@ export const useApp = create<AppState>((set, get) => {
         geminiSessionId: task.sessions?.geminiSessionId ?? null,
         grokSessionId: task.sessions?.grokSessionId ?? null,
         glmSessionId: task.sessions?.glmSessionId ?? null,
+        antigravitySessionId: task.sessions?.antigravitySessionId ?? null,
         // Opening a task returns the active context to its workspace, not an SSH host.
         activeSsh: null,
         view: 'workspace'
@@ -2300,6 +2329,7 @@ export const useApp = create<AppState>((set, get) => {
             geminiSessionId: null,
             grokSessionId: null,
             glmSessionId: null,
+            antigravitySessionId: null,
             // Deleting the open chat of an SSH host keeps its context on
             // screen (the terminal is still connected) with a blank composer.
             view: isSshWorkspaceId(ws.id) ? state.view : state.active ? 'home' : state.view
@@ -2376,6 +2406,7 @@ export const useApp = create<AppState>((set, get) => {
               geminiSessionId: null,
               grokSessionId: null,
               glmSessionId: null,
+              antigravitySessionId: null,
               treeRoots: [],
               childrenByPath: {},
               expanded: {},
@@ -2440,7 +2471,8 @@ export const useApp = create<AppState>((set, get) => {
           claudeSessionId: run.claudeSessionId,
           geminiSessionId: run.geminiSessionId,
           grokSessionId: run.grokSessionId,
-          glmSessionId: run.glmSessionId
+          glmSessionId: run.glmSessionId,
+          antigravitySessionId: run.antigravitySessionId
         }
       })
       set((current) => {
@@ -2962,7 +2994,8 @@ export const useApp = create<AppState>((set, get) => {
         claudeSessionId: null,
         geminiSessionId: null,
         grokSessionId: null,
-        glmSessionId: null
+        glmSessionId: null,
+        antigravitySessionId: null
       })
     }
     // Restore this chat's own model/provider when it has one pinned.
@@ -2994,6 +3027,7 @@ export const useApp = create<AppState>((set, get) => {
       geminiSessionId: null,
       grokSessionId: null,
       glmSessionId: null,
+      antigravitySessionId: null,
       view: 'workspace'
     })
   },
@@ -3093,6 +3127,7 @@ export const useApp = create<AppState>((set, get) => {
     else if (provider === 'gemini') await get().checkGemini()
     else if (provider === 'grok') await get().checkGrok()
     else if (provider === 'glm') await get().checkGlm()
+    else if (provider === 'antigravity') await get().checkAntigravity()
     else if (provider === 'wprovider') await get().checkWProvider()
     else if (provider === 'omniroute') {
       await get().ensureOmniroute()
@@ -3363,6 +3398,31 @@ export const useApp = create<AppState>((set, get) => {
       set({
         glmCheck: { ok: false, installed: false, error: err instanceof Error ? err.message : String(err) },
         glmChecking: false
+      })
+    }
+  },
+
+  async setAntigravityPath(path) {
+    set({ antigravityPath: path })
+    await api.llm.setConfig({ antigravityPath: path })
+    await get().checkAntigravity()
+  },
+
+  setAntigravityModel(antigravityModel) {
+    set({ antigravityModel })
+    void api.llm.setConfig({ antigravityModel })
+    get().persistWorkspaceLlm()
+  },
+
+  async checkAntigravity() {
+    set({ antigravityChecking: true })
+    try {
+      const res = await api.antigravity.check()
+      set({ antigravityCheck: res, antigravityChecking: false })
+    } catch (err) {
+      set({
+        antigravityCheck: { ok: false, installed: false, error: err instanceof Error ? err.message : String(err) },
+        antigravityChecking: false
       })
     }
   },
@@ -3767,6 +3827,7 @@ export const useApp = create<AppState>((set, get) => {
     const grokPermission = get().grokPermission
     const grokReasoning = get().grokReasoning
     const glmMode = get().glmMode
+    const antigravityModel = get().antigravityModel
     const wproviderService = get().wproviderService
     const omnirouteModel = get().omnirouteModel
     const sshConn = get().sshConnections.find((c) => c.id === sshId)
@@ -3835,14 +3896,15 @@ export const useApp = create<AppState>((set, get) => {
         })
         return
       }
-      // ===== Codex / Copilot / Claude / Gemini / Grok / GLM CLI backends =====
+      // ===== Codex / Copilot / Claude / Gemini / Grok / GLM / Antigravity CLI backends =====
       if (
         agentProvider === 'codex' ||
         agentProvider === 'copilot' ||
         agentProvider === 'claude' ||
         agentProvider === 'gemini' ||
         agentProvider === 'grok' ||
-        agentProvider === 'glm'
+        agentProvider === 'glm' ||
+        agentProvider === 'antigravity'
       ) {
         const isCodex = agentProvider === 'codex'
         const isCopilot = agentProvider === 'copilot'
@@ -3850,6 +3912,7 @@ export const useApp = create<AppState>((set, get) => {
         const isGemini = agentProvider === 'gemini'
         const isGrok = agentProvider === 'grok'
         const isGlm = agentProvider === 'glm'
+        const isAntigravity = agentProvider === 'antigravity'
         let glmCaptcha: { captchaVerifyParam?: string; captchaRegion?: string } = {}
         if (isGlm) {
           try {
@@ -3880,17 +3943,19 @@ export const useApp = create<AppState>((set, get) => {
         const setSession = (threadId: string): void =>
           writeRun(
             taskId,
-            isGlm
-              ? { glmSessionId: threadId }
-              : isGrok
-                ? { grokSessionId: threadId }
-                : isClaude
-                  ? { claudeSessionId: threadId }
-                  : isGemini
-                    ? { geminiSessionId: threadId }
-                    : isCopilot
-                      ? { copilotSessionId: threadId }
-                      : { codexThreadId: threadId }
+            isAntigravity
+              ? { antigravitySessionId: threadId }
+              : isGlm
+                ? { glmSessionId: threadId }
+                : isGrok
+                  ? { grokSessionId: threadId }
+                  : isClaude
+                    ? { claudeSessionId: threadId }
+                    : isGemini
+                      ? { geminiSessionId: threadId }
+                      : isCopilot
+                        ? { copilotSessionId: threadId }
+                        : { codexThreadId: threadId }
           )
         const runId = crypto.randomUUID()
         writeRun(taskId, { streamId: runId })
@@ -4041,6 +4106,17 @@ export const useApp = create<AppState>((set, get) => {
                   },
                   handleEvent
                 )
+            : isAntigravity
+              ? await api.antigravity.run(
+                  runId,
+                  {
+                    prompt: skillsPrompt(!!readRun(taskId)?.antigravitySessionId),
+                    cwd: root,
+                    sessionId: readRun(taskId)?.antigravitySessionId ?? undefined,
+                    model: antigravityModel || undefined
+                  },
+                  handleEvent
+                )
               : isClaude
                 ? await api.claude.run(
                     runId,
@@ -4095,19 +4171,21 @@ export const useApp = create<AppState>((set, get) => {
             workspaceName,
             taskId,
             provider: agentProvider,
-            model: isGlm
-              ? 'glm'
-              : isGrok
-                ? grokModel || 'grok'
-                : isClaude
-                  ? claudeModel && claudeModel !== 'default'
-                    ? claudeModel
-                    : 'claude'
-                  : isGemini
-                    ? geminiModel || 'gemini'
-                    : isCopilot
-                      ? copilotModel || 'copilot'
-                      : codexModel || 'codex',
+            model: isAntigravity
+              ? `antigravity-${antigravityModel || 'flash'}`
+              : isGlm
+                ? 'glm'
+                : isGrok
+                  ? grokModel || 'grok'
+                  : isClaude
+                    ? claudeModel && claudeModel !== 'default'
+                      ? claudeModel
+                      : 'claude'
+                    : isGemini
+                      ? geminiModel || 'gemini'
+                      : isCopilot
+                        ? copilotModel || 'copilot'
+                        : codexModel || 'codex',
             inputTokens: usage.inputTokens,
             outputTokens: usage.outputTokens,
             userMessages: 1,
@@ -4120,17 +4198,19 @@ export const useApp = create<AppState>((set, get) => {
           finalStatus = 'error'
           const error =
             res.error ??
-            (isGlm
-              ? 'ZCode run failed.'
-              : isGrok
-                ? 'Grok run failed.'
-                : isClaude
-                  ? 'Claude run failed.'
-                  : isGemini
-                    ? 'Gemini run failed.'
-                    : isCopilot
-                      ? 'Copilot run failed.'
-                      : 'Codex run failed.')
+            (isAntigravity
+              ? 'Antigravity run failed.'
+              : isGlm
+                ? 'ZCode run failed.'
+                : isGrok
+                  ? 'Grok run failed.'
+                  : isClaude
+                    ? 'Claude run failed.'
+                    : isGemini
+                      ? 'Gemini run failed.'
+                      : isCopilot
+                        ? 'Copilot run failed.'
+                        : 'Codex run failed.')
           if (isClaude && (claudeAuthMessageId || isClaudeAuthFailure(error))) {
             addClaudeAuthError(error)
           } else {
@@ -4814,6 +4894,7 @@ export const useApp = create<AppState>((set, get) => {
       geminiSessionId: null,
       grokSessionId: null,
       glmSessionId: null,
+      antigravitySessionId: null,
       view: 'home'
     })
   }

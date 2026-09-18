@@ -33,6 +33,7 @@ import {
   type GrokPermissionMode,
   type GrokReasoning,
   type GlmMode,
+  type AntigravityModel,
   type AttachmentFile,
   type WProviderService
 } from '@shared/ipc'
@@ -302,6 +303,8 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
   const setGeminiPermission = useApp((s) => s.setGeminiPermission)
   const glmMode = useApp((s) => s.glmMode)
   const setGlmMode = useApp((s) => s.setGlmMode)
+  const antigravityModel = useApp((s) => s.antigravityModel)
+  const setAntigravityModel = useApp((s) => s.setAntigravityModel)
   const wproviderService = useApp((s) => s.wproviderService)
   const setWProviderService = useApp((s) => s.setWProviderService)
   const wproviderChecks = useApp((s) => s.wproviderChecks)
@@ -404,6 +407,12 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
       label: 'GLM (ZCode)',
       disabled: blockedBySsh('glm'),
       tooltip: sshBlockedTitle('glm')
+    },
+    {
+      value: 'antigravity',
+      label: 'Antigravity (Google)',
+      disabled: blockedBySsh('antigravity'),
+      tooltip: sshBlockedTitle('antigravity')
     },
     { value: 'wprovider', label: 'Ascora WProvider' }
   ]
@@ -945,6 +954,17 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
             title={t('composer.glmModelHint')}
           >
             <option value="glm">GLM · ZCode</option>
+          </select>
+        ) : provider === 'antigravity' ? (
+          <select
+            className="composer-select"
+            value={antigravityModel || 'flash'}
+            onChange={(e) => setAntigravityModel(e.target.value as AntigravityModel)}
+            title="Antigravity model tier (Gemini)"
+          >
+            <option value="flash_lite">Gemini 3.8 Flash (Lite)</option>
+            <option value="flash">Gemini 3.7 Flash (Medium)</option>
+            <option value="pro">Gemini 3.1 Pro (Low/Deep)</option>
           </select>
         ) : provider === 'wprovider' ? (
           <select

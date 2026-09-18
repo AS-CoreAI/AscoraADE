@@ -34,6 +34,7 @@ import {
   type GrokRunParams,
   type GlmRunParams,
   type GlmCaptchaConfigResult,
+  type AntigravityRunParams,
   type WProviderChatParams,
   type WProviderAuthorization,
   type WProviderCheckResult,
@@ -376,6 +377,24 @@ const api = {
         .finally(() => ipcRenderer.removeListener(IPC.glm.event, listener))
     },
     abort: (id: string): Promise<void> => ipcRenderer.invoke(IPC.glm.abort, id)
+  },
+  antigravity: {
+    check: (): Promise<CodexCheckResult> => ipcRenderer.invoke(IPC.antigravity.check),
+    /** Runs an Antigravity turn; `onEvent` fires per normalized stream event. */
+    run: (
+      id: string,
+      params: AntigravityRunParams,
+      onEvent: (event: CodexEvent) => void
+    ): Promise<CodexRunResult> => {
+      const listener = (_e: IpcRendererEvent, payload: CodexEventPayload): void => {
+        if (payload.id === id) onEvent(payload.event)
+      }
+      ipcRenderer.on(IPC.antigravity.event, listener)
+      return ipcRenderer
+        .invoke(IPC.antigravity.run, id, params)
+        .finally(() => ipcRenderer.removeListener(IPC.antigravity.event, listener))
+    },
+    abort: (id: string): Promise<void> => ipcRenderer.invoke(IPC.antigravity.abort, id)
   },
   wprovider: {
     /** Cheap persisted list of web services whose authorization was confirmed. */

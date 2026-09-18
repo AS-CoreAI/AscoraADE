@@ -16,6 +16,7 @@ import {
   type CodexReasoning,
   type CodexSandbox,
   type GlmMode,
+  type AntigravityModel,
   type LlmConfig,
   type LlmProvider,
   type ListModelsResult,
@@ -85,6 +86,10 @@ function readConfig(): LlmConfig {
       store.getSetting<GrokReasoning | ''>('grok.reasoning') ?? DEFAULT_LLM_CONFIG.grokReasoning,
     glmPath: store.getSetting<string>('glm.path') ?? DEFAULT_LLM_CONFIG.glmPath,
     glmMode: store.getSetting<GlmMode>('glm.mode') ?? DEFAULT_LLM_CONFIG.glmMode,
+    antigravityPath:
+      store.getSetting<string>('antigravity.path') ?? DEFAULT_LLM_CONFIG.antigravityPath,
+    antigravityModel:
+      store.getSetting<AntigravityModel>('antigravity.model') ?? DEFAULT_LLM_CONFIG.antigravityModel,
     wproviderService:
       savedWProviderService && WPROVIDER_SERVICES.includes(savedWProviderService)
         ? savedWProviderService
@@ -158,6 +163,8 @@ export function registerLlmHandlers(): void {
     if (typeof patch.grokReasoning === 'string') store.setSetting('grok.reasoning', patch.grokReasoning)
     if (typeof patch.glmPath === 'string') store.setSetting('glm.path', patch.glmPath.trim())
     if (typeof patch.glmMode === 'string') store.setSetting('glm.mode', patch.glmMode)
+    if (typeof patch.antigravityPath === 'string') store.setSetting('antigravity.path', patch.antigravityPath.trim())
+    if (typeof patch.antigravityModel === 'string') store.setSetting('antigravity.model', patch.antigravityModel)
     if (typeof patch.wproviderService === 'string' && WPROVIDER_SERVICES.includes(patch.wproviderService)) {
       store.setSetting('wprovider.service', patch.wproviderService)
     }

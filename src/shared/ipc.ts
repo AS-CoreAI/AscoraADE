@@ -124,6 +124,12 @@ export const IPC = {
     abort: 'glm:abort',
     event: 'glm:event'
   },
+  antigravity: {
+    check: 'antigravity:check',
+    run: 'antigravity:run',
+    abort: 'antigravity:abort',
+    event: 'antigravity:event'
+  },
   wprovider: {
     authorizations: 'wprovider:authorizations',
     authorizationsChanged: 'wprovider:authorizations-changed',
@@ -334,6 +340,7 @@ export interface TaskSessions {
   geminiSessionId?: string | null
   grokSessionId?: string | null
   glmSessionId?: string | null
+  antigravitySessionId?: string | null
 }
 
 /** Complete persisted task, including display history and LLM context. */
@@ -358,10 +365,11 @@ export type LlmProvider =
   | 'gemini'
   | 'grok'
   | 'glm'
+  | 'antigravity'
   | 'wprovider'
   | 'omniroute'
 
-export const SSH_CAPABLE_LLM_PROVIDERS: readonly LlmProvider[] = ['lmstudio', 'wprovider', 'omniroute']
+export const SSH_CAPABLE_LLM_PROVIDERS: readonly LlmProvider[] = ['lmstudio', 'wprovider', 'omniroute', 'antigravity']
 
 export function isSshCapableProvider(provider: LlmProvider): boolean {
   return SSH_CAPABLE_LLM_PROVIDERS.includes(provider)
@@ -714,6 +722,11 @@ export type GlmMode = 'plan' | 'build' | 'edit' | 'yolo'
 
 /** Selectable GLM permission modes, from most to least restrictive. */
 export const GLM_MODES: GlmMode[] = ['plan', 'build', 'edit', 'yolo']
+
+/** Model tiers supported by Antigravity CLI / agentapi (`--model`). */
+export type AntigravityModel = 'flash_lite' | 'flash' | 'pro'
+
+export const ANTIGRAVITY_MODELS: AntigravityModel[] = ['flash_lite', 'flash', 'pro']
 
 // ---------- Ascora WProvider (drives a provider's web chat in a hidden browser) ----------
 // WProvider emulates an API on top of a chat website: the user signs in to the
@@ -1093,6 +1106,10 @@ export interface LlmConfig {
   glmPath: string
   /** Permission mode the GLM/ZCode agent runs under (`--mode`). */
   glmMode: GlmMode
+  /** Path to the Antigravity agentapi.bat or language_server.exe binary; empty -> auto-detect. */
+  antigravityPath: string
+  /** Active model tier for Antigravity runs (`--model`). */
+  antigravityModel: AntigravityModel
   /** Which web chat Ascora WProvider drives (hidden-browser backend). */
   wproviderService: WProviderService
   /** Default model id routed through the bundled OmniRoute gateway. */
@@ -1136,6 +1153,8 @@ export const DEFAULT_LLM_CONFIG: LlmConfig = {
   grokReasoning: '',
   glmPath: '',
   glmMode: 'yolo',
+  antigravityPath: '',
+  antigravityModel: 'flash',
   wproviderService: 'qwen',
   omnirouteModel: '',
   omnirouteBaseUrl: ''
@@ -1416,6 +1435,18 @@ export interface GlmCaptchaConfigResult {
   required: boolean
   config?: GlmCaptchaConfig
   error?: string
+}
+
+// ---------- Antigravity CLI / agentapi ----------
+
+export interface AntigravityRunParams {
+  prompt: string
+  /** Working root the spawned agent runs in (`--cwd`). */
+  cwd: string
+  /** Resume a persisted conversation session. */
+  sessionId?: string
+  /** Model tier override (`--model flash_lite|flash|pro`). */
+  model?: AntigravityModel
 }
 
 // ---------- Usage analytics ----------

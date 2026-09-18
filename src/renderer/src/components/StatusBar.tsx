@@ -98,6 +98,9 @@ export function StatusBar(): JSX.Element {
   const glmCheck = useApp((s) => s.glmCheck)
   const glmChecking = useApp((s) => s.glmChecking)
   const glmMode = useApp((s) => s.glmMode)
+  const antigravityCheck = useApp((s) => s.antigravityCheck)
+  const antigravityChecking = useApp((s) => s.antigravityChecking)
+  const antigravityModel = useApp((s) => s.antigravityModel)
   const wproviderService = useApp((s) => s.wproviderService)
   const wproviderCheck = useApp((s) => s.wproviderCheck)
   const wproviderChecking = useApp((s) => s.wproviderChecking)
@@ -139,6 +142,7 @@ export function StatusBar(): JSX.Element {
   const isGemini = provider === 'gemini'
   const isGrok = provider === 'grok'
   const isGlm = provider === 'glm'
+  const isAntigravity = provider === 'antigravity'
   const isWProvider = provider === 'wprovider'
   const isOpenRouter = provider === 'openrouter'
   const isOllama = provider === 'ollama'
@@ -234,40 +238,46 @@ export function StatusBar(): JSX.Element {
       dotColor = CONN_COLOR.connected
       label = `${wproviderLabel} Web: ${t('status.ready')}`
     }
-  } else if (isCodex || isCopilot || isClaude || isGemini || isGrok || isGlm) {
-    const name = isCopilot
-      ? 'Copilot'
-      : isClaude
-        ? 'Claude'
-        : isGemini
-          ? 'Gemini'
-          : isGrok
-            ? 'Grok'
-            : isGlm
-              ? 'GLM'
-              : 'Codex'
-    const check = isCopilot
-      ? copilotCheck
-      : isClaude
-        ? claudeCheck
-        : isGemini
-          ? geminiCheck
-          : isGrok
-            ? grokCheck
-            : isGlm
-              ? glmCheck
-              : codexCheck
-    const checking = isCopilot
-      ? copilotChecking
-      : isClaude
-        ? claudeChecking
-        : isGemini
-          ? geminiChecking
-          : isGrok
-            ? grokChecking
-            : isGlm
-              ? glmChecking
-              : codexChecking
+  } else if (isCodex || isCopilot || isClaude || isGemini || isGrok || isGlm || isAntigravity) {
+    const name = isAntigravity
+      ? 'Antigravity'
+      : isCopilot
+        ? 'Copilot'
+        : isClaude
+          ? 'Claude'
+          : isGemini
+            ? 'Gemini'
+            : isGrok
+              ? 'Grok'
+              : isGlm
+                ? 'GLM'
+                : 'Codex'
+    const check = isAntigravity
+      ? antigravityCheck
+      : isCopilot
+        ? copilotCheck
+        : isClaude
+          ? claudeCheck
+          : isGemini
+            ? geminiCheck
+            : isGrok
+              ? grokCheck
+              : isGlm
+                ? glmCheck
+                : codexCheck
+    const checking = isAntigravity
+      ? antigravityChecking
+      : isCopilot
+        ? copilotChecking
+        : isClaude
+          ? claudeChecking
+          : isGemini
+            ? geminiChecking
+            : isGrok
+              ? grokChecking
+              : isGlm
+                ? glmChecking
+                : codexChecking
     if (checking) {
       dotColor = CONN_COLOR.connecting
       label = `${name}: ${t('status.checking')}`
@@ -277,7 +287,7 @@ export function StatusBar(): JSX.Element {
     } else if (!check.installed) {
       dotColor = CONN_COLOR.error
       label = `${name}: ${t('status.notFound')}`
-    } else if ((isCodex || isGemini || isGrok) && !check.loggedIn) {
+    } else if ((isCodex || isGemini || isGrok || isAntigravity) && !check.loggedIn) {
       dotColor = CONN_COLOR.error
       label = `${name}: ${t('status.signInNeeded')}`
     } else {
@@ -337,6 +347,8 @@ export function StatusBar(): JSX.Element {
         ? `${t('status.access')}: ${t(GROK_PERMISSION_SHORT_KEY[grokPermission])}${grokReasoning ? ` · ${t(GROK_REASONING_LABEL_KEY[grokReasoning])}` : ''}`
       : isGlm
         ? `${t('status.mode')}: ${t(GLM_MODE_SHORT_KEY[glmMode])}`
+      : isAntigravity
+        ? `Model: ${antigravityModel || 'flash'}`
         : mode === 'ask'
           ? t(MODE_LABEL_KEY[mode])
           : t('status.autoApply')

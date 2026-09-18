@@ -48,6 +48,7 @@ import {
   type GrokPermissionMode,
   type GrokReasoning,
   type GlmMode,
+  type AntigravityModel,
   type LlmProvider,
   type WProviderAuthorization,
   type WProviderService
@@ -1213,6 +1214,94 @@ function GlmPanel(): JSX.Element {
   )
 }
 
+function AntigravityPanel(): JSX.Element {
+  const t = useT()
+  const antigravityPath = useApp((s) => s.antigravityPath)
+  const setAntigravityPath = useApp((s) => s.setAntigravityPath)
+  const antigravityModel = useApp((s) => s.antigravityModel)
+  const setAntigravityModel = useApp((s) => s.setAntigravityModel)
+  const check = useApp((s) => s.antigravityCheck)
+  const checking = useApp((s) => s.antigravityChecking)
+  const checkAntigravity = useApp((s) => s.checkAntigravity)
+
+  const [path, setPath] = useState(antigravityPath)
+  const apply = async (): Promise<void> => {
+    await setAntigravityPath(path.trim())
+  }
+
+  return (
+    <>
+      <label className="field">
+        <span className="field-label">Antigravity Path</span>
+        <div className="field-row">
+          <input
+            className="text-input"
+            value={path}
+            spellCheck={false}
+            placeholder="Auto-detect (agentapi.bat / language_server.exe)"
+            onChange={(e) => setPath(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && void apply()}
+          />
+          <button className="btn" onClick={() => void apply()} disabled={checking}>
+            {checking ? t('common.checking') : t('common.check')}
+          </button>
+        </div>
+        <span className="field-hint">
+          Path to agentapi.bat (~/.gemini/antigravity/bin/) or language_server.exe. Driven via Python SDK bridge.
+        </span>
+      </label>
+
+      <label className="field">
+        <span className="field-label">Antigravity Model Tier</span>
+        <select
+          className="text-input"
+          value={antigravityModel || 'flash'}
+          onChange={(e) => setAntigravityModel(e.target.value as AntigravityModel)}
+        >
+          <option value="flash_lite">Gemini 3.8 Flash (Lite)</option>
+          <option value="flash">Gemini 3.7 Flash (Medium)</option>
+          <option value="pro">Gemini 3.1 Pro (Low/Deep)</option>
+        </select>
+        <span className="field-hint">
+          Select the Gemini model tier executed through Antigravity agentapi runtime.
+        </span>
+      </label>
+
+      <div
+        className={`conn-line ${
+          checking
+            ? 'connecting'
+            : !check
+              ? 'unknown'
+              : check.installed && check.loggedIn
+                ? 'connected'
+                : 'error'
+        }`}
+      >
+        {checking && t('settings.checkingName', { name: 'Antigravity' })}
+        {!checking && !check && t('settings.notCheckedYet')}
+        {!checking && check && !check.installed && `✗ ${check.error ?? 'Antigravity not found.'}`}
+        {!checking && check && check.installed && (
+          <>
+            {check.loggedIn ? '✓' : '⚠'} {check.version ?? 'Antigravity'} ·{' '}
+            {check.authNote ?? t('settings.ready')}
+            {check.path ? <div className="field-hint">{check.path}</div> : null}
+          </>
+        )}
+      </div>
+
+      <button
+        className="btn"
+        style={{ alignSelf: 'flex-start' }}
+        onClick={() => void checkAntigravity()}
+        disabled={checking}
+      >
+        {t('settings.recheck')}
+      </button>
+    </>
+  )
+}
+
 function WProviderPanel(): JSX.Element {
   const t = useT()
   const check = useApp((s) => s.wproviderCheck)
@@ -1637,6 +1726,12 @@ export function ConnectionSettings(): JSX.Element | null {
       disabled: blockedBySsh('glm'),
       tooltip: sshBlockedTitle('glm')
     },
+    {
+      value: 'antigravity',
+      label: 'Antigravity (Google)',
+      disabled: blockedBySsh('antigravity'),
+      tooltip: sshBlockedTitle('antigravity')
+    },
     { value: 'wprovider', label: t('settings.providerWProvider') }
   ]
 
@@ -1685,6 +1780,8 @@ export function ConnectionSettings(): JSX.Element | null {
             <GrokPanel />
           ) : provider === 'glm' ? (
             <GlmPanel />
+          ) : provider === 'antigravity' ? (
+            <AntigravityPanel />
           ) : provider === 'wprovider' ? (
             <WProviderPanel />
           ) : provider === 'omniroute' ? (
