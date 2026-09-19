@@ -1,6 +1,6 @@
 appId: com.ascora.ade
 productName: Ascora ADE
-copyright: Copyright © 2026 ASCore AI (ascoreai.com)
+copyright: Copyright © 2026 ASCoreAI (ascoreai.com)
 
 npmRebuild: false
 afterPack: scripts/omniroute/after-pack.cjs
@@ -18,6 +18,9 @@ files:
   - out/**/*
   - src/main/antigravity/bridge.py
   - package.json
+  - LICENSE.md
+  - LICENSING.md
+  - THIRD_PARTY_NOTICES.md
   - "!node_modules/monaco-editor/**"
   - "!node_modules/@monaco-editor/**"
   - "!node_modules/react/**"
@@ -38,6 +41,8 @@ extraResources:
   - from: .build/omniroute
     to: omniroute
   - THIRD_PARTY_NOTICES.md
+  - LICENSE.md
+  - LICENSING.md
 
 win:
   icon: build/icon.png
@@ -52,8 +57,9 @@ win:
   # WIN_CSC_KEY_PASSWORD (or make it available in the certificate store).
   forceCodeSigning: false
   publisherName:
+    # Existing signing-certificate subject; independent of the ASCoreAI licensor name.
     - ASCore AI
-  legalTrademarks: ASCore AI — https://ascoreai.com
+  legalTrademarks: ASCoreAI — https://ascoreai.com
   signtoolOptions:
     publisherName: ASCore AI
     signingHashAlgorithms:
@@ -66,6 +72,7 @@ win:
       arch: [x64]
 
 nsis:
+  license: LICENSE.md
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true

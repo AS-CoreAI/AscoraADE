@@ -1,0 +1,16 @@
+title = "Ascora ADE secret detection"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "ascora-vpn-client-shared-secret"
+description = "Legacy VPN client shared secret must not be committed"
+regex = '''wnd-client-proof-v[0-9]+-[A-Za-z0-9]{16,}'''
+keywords = ["wnd-client-proof"]
+
+[[rules]]
+id = "unsloth-api-key"
+description = "Unsloth API credentials must not be committed"
+regex = '''sk-unsloth-[a-fA-F0-9]{24,}'''
+keywords = ["sk-unsloth"]

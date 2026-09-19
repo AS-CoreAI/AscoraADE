@@ -1,5 +1,5 @@
 import { app, BrowserWindow, safeStorage } from 'electron'
-import { createHash, createHmac, generateKeyPairSync, randomUUID } from 'node:crypto'
+import { createHash, generateKeyPairSync, randomUUID } from 'node:crypto'
 import { execFile, spawn, type ChildProcess } from 'node:child_process'
 import { promisify } from 'node:util'
 import { access, chmod, mkdir, readFile, readlink, rename, rm, writeFile } from 'node:fs/promises'
@@ -9,6 +9,7 @@ import { createConnection } from 'node:net'
 import path from 'node:path'
 import { IPC, type VpnAccountTier, type VpnAuthRequest, type VpnAuthResult, type VpnConfigureRequest, type VpnConnectRequest, type VpnDependencyStatus, type VpnPaymentCheckout, type VpnPaymentCreateResult, type VpnPaymentPlanCode, type VpnPaymentSyncResult, type VpnProtocol, type VpnServer, type VpnServersResult, type VpnSettings, type VpnStatus, type VpnTrafficResult, type VpnTrafficStats } from '../../shared/ipc'
 import { getPublicIpStatus } from '../network/public-ip'
+import { createClientProofHeaders } from './client-proof'
 
 const DEFAULT_API_URL = 'https://wandrounikvpn.asted.cloud'
 const REQUEST_TIMEOUT_MS = 15_000
@@ -235,12 +236,6 @@ async function deviceFingerprint(): Promise<string> {
 
 const execFileAsync = promisify(execFile)
 
-// Shared secret proving the request comes from an official client app.
-// Must match CLIENT_API_SHARED_SECRET on the Wandrounik Control Panel (and
-// the copy in the Wandrounik VPN client).
-const VPN_CLIENT_API_SECRET =
-  process.env.WANDROUNIK_CLIENT_SECRET ?? 'REMOVED_DEPLOYMENT_SECRET'
-
 async function hardwareMachineIdentifier(): Promise<string | null> {
   try {
     if (process.platform === 'win32') {
@@ -280,11 +275,7 @@ async function getMachineId(): Promise<string> {
 
 async function clientProofHeaders(body: string): Promise<Record<string, string>> {
   const machineId = await getMachineId()
-  const ts = Math.floor(Date.now() / 1000).toString()
-  const proof = createHmac('sha256', VPN_CLIENT_API_SECRET)
-    .update(`${ts}.${machineId}.${body}`)
-    .digest('hex')
-  return { 'X-Machine-Id': machineId, 'X-Client-Ts': ts, 'X-Client-Proof': proof }
+  return createClientProofHeaders(machineId, body)
 }
 
 function normalizeApiBaseUrl(value: string): string {
@@ -612,8 +603,8 @@ async function apiRequest(pathname: string, init?: RequestInit, authenticate = t
     ...(init?.headers as Record<string, string> | undefined)
   }
   if (authenticate && tokens?.accessToken) headers.Authorization = `Bearer ${tokens.accessToken}`
-  // Machine identity + HMAC proof: the panel rejects unsigned /connect calls
-  // and enforces the daily limit per physical machine across our products.
+  // Legacy HMAC compatibility; server-side authorization and quotas remain
+  // necessary because a client-provided key and machine ID are not attestation.
   Object.assign(headers, await clientProofHeaders(typeof init?.body === 'string' ? init.body : ''))
   let response: Response
   try {

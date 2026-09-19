@@ -1,3 +1,11 @@
+## Unreleased
+
+### Changed
+- **Public source licensing** — published the original Ascora ADE source under the ASCoreAI Noncommercial Source License 1.0, with an automatic MIT grant for each version after 13 years. During that period, commercial use, including paid employment, client work, and internal business use, is reserved to ASCoreAI unless separately authorized in writing. Added contribution terms and a publication record, corrected the package license metadata, and included the license in future application builds. Existing license grants, previously released installers, and third-party licenses remain unaffected.
+
+### Security
+- **VPN publication hardening** — removed the embedded legacy VPN client HMAC secret from the current source. Deployments that still require that protocol must provide the credential at runtime; an unconfigured source build reports an authorization configuration error. Added missing-secret/protocol tests and secret-scanning rules for VPN and Unsloth credentials. Retirement of keys already distributed in older installers requires a coordinated server/client update.
+
 ## Ascora ADE 1.3.1
 What's new?
 
