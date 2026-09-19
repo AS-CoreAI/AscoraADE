@@ -296,10 +296,31 @@ async def run_agentapi(args: argparse.Namespace) -> int:
         emit({'type': 'error', 'message': 'Antigravity returned no valid conversation ID.'})
         return 1
     transcript_file = brain_dir / actual_conv_id / '.system_generated' / 'logs' / 'transcript.jsonl'
+    transcript_full = brain_dir / actual_conv_id / '.system_generated' / 'logs' / 'transcript_full.jsonl'
     deadline = time.monotonic() + 180
     response_content = ''
     thinking_content = ''
     tools_seen = set()
+
+    def read_full_record(step_index: int) -> dict | None:
+        """Read the record at `step_index` from transcript_full.jsonl."""
+        if not transcript_full.exists():
+            return None
+        try:
+            with transcript_full.open('rb') as f:
+                for raw_line in f:
+                    if not raw_line.strip():
+                        continue
+                    try:
+                        rec = json.loads(raw_line)
+                        if rec.get('step_index') == step_index:
+                            return rec
+                    except (ValueError, UnicodeDecodeError):
+                        continue
+        except OSError:
+            pass
+        return None
+
     while time.monotonic() < deadline:
         if transcript_file.exists():
             try:
@@ -318,6 +339,14 @@ async def run_agentapi(args: argparse.Namespace) -> int:
                             continue
                         if record.get('source') != 'MODEL' or record.get('type') != 'PLANNER_RESPONSE':
                             continue
+                        # If fields are truncated, recover from transcript_full.jsonl
+                        truncated = record.get('truncated_fields') or []
+                        if truncated and record.get('step_index') is not None:
+                            full_rec = read_full_record(record['step_index'])
+                            if full_rec:
+                                for field in truncated:
+                                    if field in full_rec:
+                                        record[field] = full_rec[field]
                         thinking = record.get('thinking')
                         content = record.get('content')
                         tool_calls = record.get('tool_calls') or []
@@ -354,14 +383,15 @@ async def run_sdk(args: argparse.Namespace) -> int:
 
     api_key = args.api_key or os.environ.get('GEMINI_API_KEY') or os.environ.get('GOOGLE_API_KEY')
     model_name = args.model
-    if model_name == 'flash_lite':
-        model_target = 'gemini-2.0-flash-lite'
-    elif model_name == 'flash':
-        model_target = 'gemini-2.0-flash'
-    elif model_name == 'pro':
-        model_target = 'gemini-2.5-pro'
-    else:
-        model_target = model_name
+    MODEL_MAP = {
+        'flash_lite': 'gemini-2.0-flash-lite',
+        'flash': 'gemini-2.0-flash',
+        'pro': 'gemini-2.5-pro',
+        'claude_sonnet': 'claude-sonnet-4-6',
+        'claude_opus': 'claude-opus-4-6',
+        'gpt_oss': 'gpt-oss-120b',
+    }
+    model_target = MODEL_MAP.get(model_name, model_name)
 
     config_kwargs = {
         'system_instructions': 'You are an expert coding assistant in Ascora ADE. Help the user analyze, write, and debug code.',
@@ -412,7 +442,7 @@ def main() -> None:
     parser.add_argument('--check', action='store_true', help='Check the local language server')
     parser.add_argument('--prompt', help='The user prompt')
     parser.add_argument('--cwd', default='.', help='Working directory')
-    parser.add_argument('--model', choices=['flash_lite', 'flash', 'pro'], default=None,
+    parser.add_argument('--model', default=None,
                         help='Model tier to use')
     parser.add_argument('--resume', default=None, help='Conversation ID to resume')
     parser.add_argument('--api-key', default=None, help='Gemini API key override')

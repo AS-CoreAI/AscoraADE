@@ -1277,18 +1277,27 @@ function AntigravityPanel(): JSX.Element {
       </label>
 
       <label className="field">
-        <span className="field-label">Antigravity Model Tier</span>
+        <span className="field-label">Antigravity Model</span>
         <select
           className="text-input"
           value={antigravityModel || 'flash'}
           onChange={(e) => setAntigravityModel(e.target.value as AntigravityModel)}
         >
-          <option value="flash_lite">Gemini 3.8 Flash (Lite)</option>
-          <option value="flash">Gemini 3.7 Flash (Medium)</option>
-          <option value="pro">Gemini 3.1 Pro (Low/Deep)</option>
+          <optgroup label="Gemini">
+            <option value="flash_lite">Gemini 3.8 Flash (Lite)</option>
+            <option value="flash">Gemini 3.7 Flash (Medium)</option>
+            <option value="pro">Gemini 3.1 Pro (Deep)</option>
+          </optgroup>
+          <optgroup label="Claude">
+            <option value="claude_sonnet">Claude Sonnet 4.6</option>
+            <option value="claude_opus">Claude Opus 4.6</option>
+          </optgroup>
+          <optgroup label="GPT">
+            <option value="gpt_oss">GPT-OSS-120B</option>
+          </optgroup>
         </select>
         <span className="field-hint">
-          Select the Gemini model tier executed through Antigravity agentapi runtime.
+          Select the model executed through the Antigravity agentapi runtime.
         </span>
       </label>
 

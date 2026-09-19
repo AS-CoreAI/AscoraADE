@@ -725,9 +725,9 @@ export type GlmMode = 'plan' | 'build' | 'edit' | 'yolo'
 export const GLM_MODES: GlmMode[] = ['plan', 'build', 'edit', 'yolo']
 
 /** Model tiers supported by Antigravity CLI / agentapi (`--model`). */
-export type AntigravityModel = 'flash_lite' | 'flash' | 'pro'
+export type AntigravityModel = 'flash_lite' | 'flash' | 'pro' | 'claude_sonnet' | 'claude_opus' | 'gpt_oss'
 
-export const ANTIGRAVITY_MODELS: AntigravityModel[] = ['flash_lite', 'flash', 'pro']
+export const ANTIGRAVITY_MODELS: AntigravityModel[] = ['flash_lite', 'flash', 'pro', 'claude_sonnet', 'claude_opus', 'gpt_oss']
 
 // ---------- Ascora WProvider (drives a provider's web chat in a hidden browser) ----------
 // WProvider emulates an API on top of a chat website: the user signs in to the

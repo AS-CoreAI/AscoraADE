@@ -292,6 +292,8 @@ export async function runAntigravity(
     let reasoningText = ''
     let emittedTool = false
     const toolSeen = new Set<string>()
+    const textMsgId = `msg_${Math.random().toString(36).slice(2)}`
+    let emittedText = false
 
     const merge = (acc: string, next: string): string => {
       if (!next) return acc
@@ -305,6 +307,14 @@ export async function runAntigravity(
       const type = str(part.type)
       if (type === 'text') {
         agentText = merge(agentText, str(part.text))
+        if (agentText.trim()) {
+          emittedText = true
+          emit({
+            kind: 'item',
+            phase: 'started',
+            item: { id: textMsgId, type: 'agent_message', text: agentText.trim() }
+          })
+        }
       } else if (type === 'reasoning') {
         reasoningText = merge(reasoningText, str(part.text))
       } else if (type === 'tool') {
@@ -397,7 +407,7 @@ export async function runAntigravity(
         emit({
           kind: 'item',
           phase: 'completed',
-          item: { id: `msg_${Math.random().toString(36).slice(2)}`, type: 'agent_message', text: finalText }
+          item: { id: emittedText ? textMsgId : `msg_${Math.random().toString(36).slice(2)}`, type: 'agent_message', text: finalText }
         })
       }
       emit({ kind: 'turn-completed' })
