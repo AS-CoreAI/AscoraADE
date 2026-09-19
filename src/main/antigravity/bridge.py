@@ -122,10 +122,14 @@ def resolve_ls_credentials(agentapi_cmd: str) -> tuple[str | None, str | None]:
                     creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0)
                 )
                 output = (res.stderr + res.stdout).lower()
-                # A successful call or a semantic "conversation not found"
+                # A successful call or a semantic "trajectory not found" / "not found"
                 # response proves the endpoint speaks agentapi. A refused TCP
                 # connection or unknown subcommand is never a successful probe.
-                if res.returncode == 0 or re.search(r'(conversation.*not found|not found.*conversation)', output):
+                if res.returncode == 0 or (
+                    any(t in output for t in ('not found', 'trajectory', 'permission_denied', 'project_id', 'unauthenticated', 'csrf'))
+                    and 'unavailable' not in output
+                    and 'connection error' not in output
+                ):
                     return candidate_addr, candidate_token
             except (OSError, subprocess.TimeoutExpired):
                 continue
