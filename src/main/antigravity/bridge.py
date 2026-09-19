@@ -4,10 +4,15 @@ import json
 import os
 import re
 import shutil
+import ssl
 import subprocess
 import sys
 import time
 import traceback
+import urllib.error
+import urllib.parse
+import urllib.request
+import uuid
 from pathlib import Path
 
 
@@ -193,6 +198,201 @@ def resolve_project_id(target_cwd: str | None = None) -> str | None:
     return None
 
 
+class LocalAntigravity:
+    """Use the same local Connect JSON API as Antigravity's model selector."""
+    service = '/exa.language_server_pb.LanguageServerService/'
+
+    def __init__(self, address: str, token: str):
+        parsed = urllib.parse.urlsplit(f'http://{address}')
+        if parsed.hostname not in ('127.0.0.1', 'localhost', '::1') or not parsed.port:
+            raise ValueError('Antigravity must expose a local language server.')
+        self.address = address
+        self.token = token
+        self.base_url = f'http://{address}'
+        try:
+            self.user_status = self.call('GetUserStatus', {}).get('userStatus', {})
+        except (urllib.error.URLError, ConnectionError):
+            self.base_url = f'https://{address}'
+            self.user_status = self.call('GetUserStatus', {}).get('userStatus', {})
+
+    def call(self, method: str, payload: dict) -> dict:
+        request = urllib.request.Request(self.base_url + self.service + method,
+            data=json.dumps(payload).encode('utf-8'), headers={
+                'Content-Type': 'application/json', 'Connect-Protocol-Version': '1',
+                'x-codeium-csrf-token': self.token
+            })
+        # Local Antigravity uses its own certificate. Never use this context
+        # with remote addresses (the constructor restricts the endpoint).
+        context = ssl._create_unverified_context() if self.base_url.startswith('https:') else None
+        try:
+            with urllib.request.urlopen(request, timeout=15, context=context) as response:
+                data = json.load(response)
+        except urllib.error.HTTPError as error:
+            try:
+                message = json.loads(error.read(8192)).get('message')
+            except (ValueError, AttributeError):
+                message = None
+            raise RuntimeError(message or f'Antigravity {method} failed (HTTP {error.code}).') from error
+        if not isinstance(data, dict):
+            raise RuntimeError(f'Antigravity {method} returned an invalid response.')
+        return data
+
+
+MODEL_LABELS = {
+    'flash_lite': 'Gemini 3.8 Flash', 'flash': 'Gemini 3.7 Flash',
+    'flash_36': 'Gemini 3.6 Flash', 'pro': 'Gemini 3.1 Pro',
+    'claude_sonnet': 'Claude Sonnet 4.6', 'claude_opus': 'Claude Opus 4.6',
+    'gpt_oss': 'GPT-OSS 120B'
+}
+
+
+def resolve_model_config(status: dict, model: str, reasoning: str | None) -> dict:
+    label = MODEL_LABELS.get(model, model)
+    if model in ('flash_lite', 'flash', 'flash_36', 'pro'):
+        label += f' ({(reasoning or ("high" if model == "pro" else "medium")).title()})'
+    else:
+        label += ' (Medium)' if model == 'gpt_oss' else ' (Thinking)' if model.startswith('claude_') else ''
+    for config in status.get('cascadeModelConfigData', {}).get('clientModelConfigs', []):
+        if config.get('label', '').casefold() == label.casefold() and not config.get('disabled'):
+            if config.get('modelOrAlias'):
+                return config['modelOrAlias']
+    raise ValueError(f'Antigravity does not offer {label} for this account. Choose an available model or reasoning level.')
+
+
+def quota_windows(summary: dict) -> list[dict]:
+    windows = []
+    for group in summary.get('response', {}).get('groups', []):
+        for bucket in group.get('buckets', []):
+            fraction = bucket.get('remainingFraction', 0)
+            if not isinstance(fraction, (int, float)) or not 0 <= fraction <= 1:
+                continue
+            percent = round((1 - fraction) * 100)
+            windows.append({'label': f'{group.get("displayName", "Antigravity")} · {bucket.get("displayName", "Usage")}',
+                            'percent': percent, 'severity': 'critical' if percent >= 90 else 'warning' if percent >= 75 else 'normal',
+                            **({'resetsAt': bucket['resetTime']} if bucket.get('resetTime') else {})})
+    return sorted(windows, key=lambda window: window['percent'], reverse=True)
+
+
+def read_usage() -> dict:
+    executable = find_agentapi()
+    address, token = resolve_ls_credentials(executable) if executable else (None, None)
+    if not address or not token:
+        return {'ok': False, 'loggedIn': False, 'windows': [], 'error': 'Start Antigravity and sign in to read its limits.'}
+    client = LocalAntigravity(address, token)
+    windows = quota_windows(client.call('RetrieveUserQuotaSummary', {'forceRefresh': True}))
+    return {'ok': True, 'loggedIn': True, 'windows': windows, **({'headline': windows[0]} if windows else {})}
+
+
+class TranscriptSnapshot:
+    """Antigravity rewrites existing steps while streaming; byte offsets lose updates."""
+    def __init__(self, directory: Path):
+        self.directory = directory
+        self.cache = {}
+
+    def _read(self, name: str) -> list[dict]:
+        path = self.directory / name
+        try:
+            stat = path.stat()
+            stamp = (stat.st_mtime_ns, stat.st_size)
+            cached = self.cache.get(name)
+            if cached and cached[0] == stamp:
+                return cached[1]
+            records = []
+            for line in path.read_bytes().splitlines():
+                try:
+                    record = json.loads(line)
+                    if isinstance(record, dict):
+                        records.append(record)
+                except (ValueError, UnicodeDecodeError):
+                    # A write may be in progress. Retry the complete snapshot
+                    # on the next modification, including the unfinished row.
+                    continue
+            self.cache[name] = (stamp, records)
+            return records
+        except OSError:
+            return self.cache.get(name, (None, []))[1]
+
+    @staticmethod
+    def key(record: dict, index: int) -> str:
+        step = record.get('step_index')
+        return f'step:{step}' if step is not None else f'row:{index}'
+
+    def records(self) -> dict[str, dict]:
+        full = {self.key(r, i): r for i, r in enumerate(self._read('transcript_full.jsonl'))}
+        records = dict(full)
+        for index, short in enumerate(self._read('transcript.jsonl')):
+            key = self.key(short, index)
+            record = dict(short)
+            expanded = full.get(key, {})
+            truncated = short.get('truncated_fields') or []
+            for field in ('content', 'thinking', 'tool_calls'):
+                if field in truncated:
+                    # Never return a shortened answer as the completed result.
+                    record.pop(field, None)
+                    if field in expanded:
+                        record[field] = expanded[field]
+                elif field not in short and field in expanded:
+                    record[field] = expanded[field]
+                    if field == 'content' and expanded.get('status') == 'DONE':
+                        record['status'] = 'DONE'
+            records[key] = record
+        def step_order(item):
+            try:
+                return int(item[0].partition(':')[2])
+            except (TypeError, ValueError):
+                return 0
+        return dict(sorted(records.items(), key=step_order))
+
+
+async def read_agent_response(snapshot: TranscriptSnapshot, previous_steps: set[str], prompt: str,
+                              timeout: float = 180) -> int:
+    deadline = time.monotonic() + timeout
+    text_by_step = {}
+    thinking_by_step = {}
+    last_text = ''
+    last_thinking = ''
+    tools_seen = set()
+    while time.monotonic() < deadline:
+        completed = False
+        for key, record in snapshot.records().items():
+            if key in previous_steps or record.get('source') != 'MODEL' or record.get('type') != 'PLANNER_RESPONSE':
+                continue
+            thinking = record.get('thinking')
+            content = record.get('content')
+            tool_calls = record.get('tool_calls') or []
+            if isinstance(thinking, str) and thinking:
+                thinking_by_step[key] = thinking
+            if isinstance(content, str) and content:
+                text_by_step[key] = content
+                # Some older versions omit status on their final snapshot.
+                completed = not tool_calls and record.get('status', 'DONE') in ('DONE', 'COMPLETED')
+            else:
+                completed = False
+            for tool in tool_calls:
+                if not isinstance(tool, dict):
+                    continue
+                tool_id = tool.get('id') or f'{key}:{json.dumps(tool, sort_keys=True)}'
+                if tool_id in tools_seen:
+                    continue
+                tools_seen.add(tool_id)
+                emit({'type': 'tool', 'tool': tool.get('name', 'tool'), 'callID': tool_id,
+                      'state': {'status': 'running', 'input': tool.get('args', {})}})
+        thinking = '\n\n'.join(thinking_by_step.values())
+        text = '\n\n'.join(text_by_step.values())
+        if thinking and thinking != last_thinking:
+            last_thinking = thinking
+            emit({'type': 'reasoning', 'text': thinking, 'snapshot': True})
+        if text and text != last_text:
+            last_text = text
+            emit({'type': 'text', 'text': text, 'snapshot': True})
+        if completed and text:
+            emit({'type': 'step-finish', 'tokens': {'input': len(prompt) // 4, 'output': len(text) // 4}})
+            return 0
+        await asyncio.sleep(0.2)
+    emit({'type': 'error', 'message': f'Antigravity has not completed its answer within {timeout:g} seconds. Check the active conversation in Antigravity and retry.'})
+    return 1
+
+
 async def run_agentapi(args: argparse.Namespace) -> int:
     agentapi_cmd = find_agentapi()
     if not agentapi_cmd:
@@ -210,6 +410,12 @@ async def run_agentapi(args: argparse.Namespace) -> int:
     if token:
         env['ANTIGRAVITY_CSRF_TOKEN'] = token
 
+    # The agentapi convenience command accepts only model tiers and cannot
+    # change effort on a resumed conversation. Send the exact catalog variant
+    # through the local UI API when the caller provides an explicit selection.
+    if getattr(args, 'reasoning', None) or args.model not in (None, 'flash_lite', 'flash', 'pro'):
+        return await run_local_agent(args, addr, token or '')
+
     cwd = os.path.abspath(args.cwd) if args.cwd and os.path.isdir(args.cwd) else os.getcwd()
     project_id = resolve_project_id(cwd)
     if project_id:
@@ -223,8 +429,8 @@ async def run_agentapi(args: argparse.Namespace) -> int:
         emit({'type': 'error', 'message': 'Invalid Antigravity conversation ID.'})
         return 1
     brain_dir = Path.home() / '.gemini' / 'antigravity' / 'brain'
-    previous_transcript = brain_dir / conv_id / '.system_generated' / 'logs' / 'transcript.jsonl' if conv_id else None
-    offset = previous_transcript.stat().st_size if previous_transcript and previous_transcript.exists() else 0
+    snapshot = TranscriptSnapshot(brain_dir / conv_id / '.system_generated' / 'logs') if conv_id else None
+    previous_steps = set(snapshot.records()) if snapshot else set()
     cmd = (agentapi_command(agentapi_cmd, 'send-message', conv_id, prompt) if conv_id else
            agentapi_command(agentapi_cmd, 'new-conversation', f'--model={model}', prompt))
 
@@ -295,83 +501,34 @@ async def run_agentapi(args: argparse.Namespace) -> int:
     if not actual_conv_id or not re.fullmatch(r'[A-Za-z0-9_-]+', actual_conv_id):
         emit({'type': 'error', 'message': 'Antigravity returned no valid conversation ID.'})
         return 1
-    transcript_file = brain_dir / actual_conv_id / '.system_generated' / 'logs' / 'transcript.jsonl'
-    transcript_full = brain_dir / actual_conv_id / '.system_generated' / 'logs' / 'transcript_full.jsonl'
-    deadline = time.monotonic() + 180
-    response_content = ''
-    thinking_content = ''
-    tools_seen = set()
+    snapshot = snapshot if actual_conv_id == conv_id else TranscriptSnapshot(brain_dir / actual_conv_id / '.system_generated' / 'logs')
+    return await read_agent_response(snapshot, previous_steps, prompt)
 
-    def read_full_record(step_index: int) -> dict | None:
-        """Read the record at `step_index` from transcript_full.jsonl."""
-        if not transcript_full.exists():
-            return None
-        try:
-            with transcript_full.open('rb') as f:
-                for raw_line in f:
-                    if not raw_line.strip():
-                        continue
-                    try:
-                        rec = json.loads(raw_line)
-                        if rec.get('step_index') == step_index:
-                            return rec
-                    except (ValueError, UnicodeDecodeError):
-                        continue
-        except OSError:
-            pass
-        return None
 
-    while time.monotonic() < deadline:
-        if transcript_file.exists():
-            try:
-                with transcript_file.open('rb') as transcript:
-                    if transcript_file.stat().st_size < offset:
-                        offset = 0
-                    transcript.seek(offset)
-                    while True:
-                        line = transcript.readline()
-                        if not line or not line.endswith(b'\n'):
-                            break
-                        offset = transcript.tell()
-                        try:
-                            record = json.loads(line)
-                        except (ValueError, UnicodeDecodeError):
-                            continue
-                        if record.get('source') != 'MODEL' or record.get('type') != 'PLANNER_RESPONSE':
-                            continue
-                        # If fields are truncated, recover from transcript_full.jsonl
-                        truncated = record.get('truncated_fields') or []
-                        if truncated and record.get('step_index') is not None:
-                            full_rec = read_full_record(record['step_index'])
-                            if full_rec:
-                                for field in truncated:
-                                    if field in full_rec:
-                                        record[field] = full_rec[field]
-                        thinking = record.get('thinking')
-                        content = record.get('content')
-                        tool_calls = record.get('tool_calls') or []
-                        if isinstance(thinking, str) and thinking and thinking != thinking_content:
-                            thinking_content = thinking
-                            emit({'type': 'reasoning', 'text': thinking})
-                        for tool in tool_calls:
-                            tool_id = tool.get('id') or json.dumps(tool, sort_keys=True)
-                            if tool_id in tools_seen:
-                                continue
-                            tools_seen.add(tool_id)
-                            emit({'type': 'tool', 'tool': tool.get('name', 'tool'), 'callID': tool_id,
-                                  'state': {'status': 'running', 'input': tool.get('args', {})}})
-                        if isinstance(content, str) and content:
-                            response_content += content
-                            emit({'type': 'text', 'text': response_content})
-                            if not tool_calls:
-                                emit({'type': 'step-finish', 'tokens': {
-                                    'input': len(prompt) // 4, 'output': len(response_content) // 4}})
-                                return 0
-            except OSError:
-                pass
-        await asyncio.sleep(0.2)
-    emit({'type': 'error', 'message': 'Antigravity accepted the request but no completed response arrived within 180 seconds. Check the active conversation in Antigravity.'})
-    return 1
+async def run_local_agent(args: argparse.Namespace, address: str, token: str) -> int:
+    client = LocalAntigravity(address, token)
+    requested_model = resolve_model_config(client.user_status, args.model or 'flash', getattr(args, 'reasoning', None))
+    conversation = args.resume
+    if conversation and not re.fullmatch(r'[A-Za-z0-9_-]+', conversation):
+        raise ValueError('Invalid Antigravity conversation ID.')
+    if not conversation:
+        cwd = Path(args.cwd or '.').resolve()
+        if not cwd.is_dir():
+            raise ValueError('The Antigravity workspace directory does not exist.')
+        payload = {'cascadeId': str(uuid.uuid4()), 'workspaceUris': [cwd.as_uri()],
+                   'overrideWorkspaceUris': [cwd.as_uri()],
+                   'source': 'CORTEX_TRAJECTORY_SOURCE_CASCADE_CLIENT'}
+        if 'model' in requested_model:
+            payload['requestedModel'] = requested_model['model']
+        conversation = client.call('StartCascade', payload).get('cascadeId')
+        if not conversation or not re.fullmatch(r'[A-Za-z0-9_-]+', conversation):
+            raise ValueError('Antigravity returned no valid conversation ID.')
+    emit({'type': 'session', 'sessionID': conversation})
+    snapshot = TranscriptSnapshot(Path.home() / '.gemini/antigravity/brain' / conversation / '.system_generated/logs')
+    previous_steps = set(snapshot.records())
+    client.call('SendUserCascadeMessage', {'cascadeId': conversation, 'items': [{'text': args.prompt}],
+                'cascadeConfig': {'plannerConfig': {'requestedModel': requested_model}}})
+    return await read_agent_response(snapshot, previous_steps, args.prompt)
 
 
 async def run_sdk(args: argparse.Namespace) -> int:
@@ -384,9 +541,10 @@ async def run_sdk(args: argparse.Namespace) -> int:
     api_key = args.api_key or os.environ.get('GEMINI_API_KEY') or os.environ.get('GOOGLE_API_KEY')
     model_name = args.model
     MODEL_MAP = {
-        'flash_lite': 'gemini-2.0-flash-lite',
-        'flash': 'gemini-2.0-flash',
-        'pro': 'gemini-2.5-pro',
+        'flash_lite': 'gemini-3.8-flash',
+        'flash': 'gemini-3.7-flash',
+        'flash_36': 'gemini-3.6-flash',
+        'pro': 'gemini-3.1-pro',
         'claude_sonnet': 'claude-sonnet-4-6',
         'claude_opus': 'claude-opus-4-6',
         'gpt_oss': 'gpt-oss-120b',
@@ -400,6 +558,10 @@ async def run_sdk(args: argparse.Namespace) -> int:
     }
     if model_target:
         config_kwargs['model'] = model_target
+    if getattr(args, 'reasoning', None) and model_target.startswith('gemini-'):
+        from google.antigravity.models import ModelTarget, GeminiAPIEndpoint, GeminiModelOptions, ThinkingLevel
+        config_kwargs['model'] = ModelTarget(name=model_target, endpoint=GeminiAPIEndpoint(
+            api_key=api_key, options=GeminiModelOptions(thinking_level=ThinkingLevel(args.reasoning))))
 
     config = LocalAgentConfig(**config_kwargs)
 
@@ -440,20 +602,37 @@ async def run(args: argparse.Namespace) -> int:
 def main() -> None:
     parser = argparse.ArgumentParser(description='Antigravity bridge')
     parser.add_argument('--check', action='store_true', help='Check the local language server')
+    parser.add_argument('--usage', action='store_true', help='Read account quotas from the local language server')
     parser.add_argument('--prompt', help='The user prompt')
     parser.add_argument('--cwd', default='.', help='Working directory')
     parser.add_argument('--model', default=None,
                         help='Model tier to use')
     parser.add_argument('--resume', default=None, help='Conversation ID to resume')
+    parser.add_argument('--reasoning', choices=['low', 'medium', 'high'], help='Gemini reasoning level')
     parser.add_argument('--api-key', default=None, help='Gemini API key override')
     args = parser.parse_args()
+    if args.usage:
+        try:
+            emit(read_usage())
+        except Exception as error:
+            emit({'ok': False, 'loggedIn': True, 'windows': [], 'error': str(error)})
+        return
     if args.check:
         executable = find_agentapi()
         address, token = resolve_ls_credentials(executable) if executable else (None, None)
-        emit({'ok': True, 'installed': bool(executable), 'loggedIn': bool(address and token),
-              'connected': bool(address and token),
-              'authNote': 'Local Antigravity connection verified. Account sign-in is managed in Antigravity.' if address and token else
-                          'Start Antigravity, open a project and sign in. The local language server is not reachable.'})
+        signed_in = False
+        error = None
+        if address and token:
+            try:
+                status = LocalAntigravity(address, token).user_status
+                signed_in = bool(status.get('email') or status.get('name'))
+            except Exception as exc:
+                error = str(exc)
+        emit({'ok': error is None, 'installed': bool(executable), 'loggedIn': signed_in,
+              'connected': bool(address and token and not error),
+              **({'error': error} if error else {}),
+              'authNote': 'Local Antigravity account verified.' if signed_in else
+                          'Start Antigravity, open a project and sign in.'})
         return
     if not args.prompt:
         parser.error('--prompt is required unless --check is used')

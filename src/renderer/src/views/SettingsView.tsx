@@ -1,12 +1,13 @@
 import { useEffect, useState, type JSX } from 'react'
 import { ConnectionSettings } from '@/components/ConnectionSettings'
 import { DeveloperToolsPage } from '@/components/DeveloperToolsModal'
+import { CliLimitsPage } from './CliLimitsPage'
 import { Icon } from '@/components/Icon'
 import { api } from '@/lib/api'
 import { PROVIDERS, type SettingsSection } from '@/lib/providers'
 import { LANGUAGE_OPTIONS, tr } from '@/language'
 import { useApp, type ThemePreference } from '@/state/store'
-import { isSshCapableProvider, type LlmProvider } from '@shared/ipc'
+import { isSshCapableProvider, type LlmProvider, type UsageLimitResult } from '@shared/ipc'
 import type { ProviderCreditInfo, ProviderSoftwareInfo } from '@shared/provider-setup'
 
 const CLI_CHECKS = {
@@ -31,9 +32,10 @@ function ProviderPage({ provider }: { provider: LlmProvider }): JSX.Element {
   const [message, setMessage] = useState('')
   const [refreshingUsage, setRefreshingUsage] = useState(false)
   const [credits, setCredits] = useState<ProviderCreditInfo | null>(null)
+  const [antigravityUsage, setAntigravityUsage] = useState<UsageLimitResult | null>(null)
   const check = isCli(provider) ? s[`${provider}Check`] : null
   const checking = isCli(provider) ? s[`${provider}Checking`] : false
-  const usage = check?.loggedIn === false ? null : provider === 'codex' ? s.codexUsage : provider === 'claude' ? s.claudeUsage : null
+  const usage = check?.loggedIn === false ? null : provider === 'codex' ? s.codexUsage : provider === 'claude' ? s.claudeUsage : provider === 'antigravity' ? antigravityUsage : null
   const usageUrl = USAGE_URLS[provider]
   const name = PROVIDERS.find((item) => item.id === provider)!.name
   const visible = s.providerVisibility[provider] !== false
@@ -46,6 +48,7 @@ function ProviderPage({ provider }: { provider: LlmProvider }): JSX.Element {
     try {
       if (provider === 'codex') await s.refreshCodexUsage()
       if (provider === 'claude') await s.refreshClaudeUsage()
+      if (provider === 'antigravity') setAntigravityUsage(await api.antigravity.usage())
       if (provider === 'openrouter') {
         const key = s.openRouterApiKey
         const result = await api.providerSetup.credits(provider)
@@ -55,6 +58,10 @@ function ProviderPage({ provider }: { provider: LlmProvider }): JSX.Element {
       setMessage(String(error))
     } finally { setRefreshingUsage(false) }
   }
+
+  useEffect(() => {
+    if (provider === 'antigravity' && check?.loggedIn) void refreshUsage()
+  }, [provider, check?.loggedIn])
 
   useEffect(() => {
     if (provider !== 'openrouter') return
@@ -129,7 +136,7 @@ function ProviderPage({ provider }: { provider: LlmProvider }): JSX.Element {
     {message && <p role="status" className="settings-card settings-message">{message}</p>}
     <section className="settings-card">
       <div className="settings-section-heading"><h2>{ru ? 'Остатки лимитов' : 'Remaining limits'}</h2>
-        {(provider === 'codex' || provider === 'claude' || provider === 'openrouter') && <button className="btn" disabled={refreshingUsage} onClick={() => void refreshUsage()}>{refreshingUsage ? '…' : (ru ? 'Обновить' : 'Refresh')}</button>}</div>
+        {['codex', 'claude', 'openrouter', 'antigravity'].includes(provider) && <button className="btn" disabled={refreshingUsage} onClick={() => void refreshUsage()}>{refreshingUsage ? '…' : (ru ? 'Обновить' : 'Refresh')}</button>}</div>
       {provider === 'openrouter' && credits && <p className="field-hint">{credits.ok
         ? `${ru ? 'Остаток лимита API-ключа: ' : 'API key allowance remaining: '}${typeof credits.remaining === 'number' ? `$${credits.remaining.toFixed(2)}` : credits.limit === null ? (ru ? 'лимит ключа не задан' : 'no key spending cap') : (ru ? 'не сообщён' : 'not reported')}${typeof credits.used === 'number' ? ` · ${ru ? 'использовано' : 'used'} $${credits.used.toFixed(2)}` : ''}`
         : credits.error}</p>}
@@ -171,6 +178,7 @@ export function SettingsView(): JSX.Element {
           onClick={() => useApp.setState({ settingsProvider: provider.id })}>
           <span>{provider.name}</span><span className={`settings-visibility-dot${s.providerVisibility[provider.id] === false ? ' hidden' : ''}`} aria-label={s.providerVisibility[provider.id] === false ? (ru ? 'Скрыт из списка' : 'Hidden from menu') : (ru ? 'Виден в списке' : 'Visible in menu')} />
         </button>)}</div>}
+        <button className={section === 'limits' ? 'active' : ''} aria-current={section === 'limits' ? 'page' : undefined} onClick={() => select('limits')}><Icon name="barChart" size={16} />{ru ? 'Лимиты' : 'Usage limits'}</button>
         <button className={section === 'tools' ? 'active' : ''} aria-current={section === 'tools' ? 'page' : undefined} onClick={() => select('tools')}><Icon name="terminal" size={16} />{t('tools.title')}</button>
       </nav>
     </aside>
@@ -185,6 +193,7 @@ export function SettingsView(): JSX.Element {
         <section className="settings-card"><h2>{t('app.language.label')}</h2><div className="settings-language-options">{LANGUAGE_OPTIONS.map((language) => <button key={language.value} className={s.appLanguage === language.value ? 'selected' : ''} aria-pressed={s.appLanguage === language.value} onClick={() => s.setAppLanguage(language.value)}>{t(language.labelKey)}{s.appLanguage === language.value && <Icon name="check" size={14} />}</button>)}</div></section>
       </>}
       {section === 'providers' && <ProviderPage provider={s.settingsProvider} />}
+      {section === 'limits' && <CliLimitsPage />}
       <div hidden={section !== 'tools'}>{section === 'tools' && <DeveloperToolsPage />}</div>
     </main>
   </div>

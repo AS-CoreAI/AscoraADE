@@ -14,6 +14,8 @@ const values = JSON.parse(localStorage.getItem('settings-smoke') || '{"appearanc
 const save = () => localStorage.setItem('settings-smoke', JSON.stringify(values))
 const usage = { ok: true, loggedIn: true, windows: [{ label: '5 часов', percent: 32, severity: 'normal', resetsAt: '2026-09-19T18:00:00Z' }] }
 const missing = new Set(['gemini'])
+const fixture = window.settingsFixture = { signedOut: ['copilot'], checkFailures: [], usageFailures: [], percent: 32, emit: null, finish: null }
+const workspace = { id: 'settings-test', name: 'Settings test', path: 'E:\\fixture', createdAt: Date.now(), updatedAt: Date.now() }
 const group = (name) => new Proxy({}, { get: (_, method) => {
   if (String(method).startsWith('on')) return () => () => {}
   return async (...args) => {
@@ -27,7 +29,13 @@ const group = (name) => new Proxy({}, { get: (_, method) => {
       if (method === 'listModels') return { ok: true, models: [{ id: 'test-model' }] }
       if (method === 'checkLmStudio' || method === 'checkOllama') return true
     }
-    if (name === 'workspace' || name === 'blueprint' || name === 'wprovider') return []
+    if (name === 'workspace') {
+      if (method === 'list') return [workspace]
+      if (method === 'saveTask') return args[0]
+      return []
+    }
+    if (name === 'fs' && method === 'readTree') return []
+    if (name === 'blueprint' || name === 'wprovider') return []
     if (name === 'omniroute') return status
     if (name === 'providerSetup') {
       if (method === 'inspect') return { available: true, command: 'npm install -g example', url: 'https://example.com' }
@@ -36,8 +44,19 @@ const group = (name) => new Proxy({}, { get: (_, method) => {
     }
     if (name === 'developerTools') return { platform: 'win32', available: true, manager: 'winget', tools: [] }
     if (name === 'network') return { ok: true, ip: '127.0.0.1', country: 'Test', checkedAt: Date.now() }
-    if (method === 'check') return { ok: true, installed: !missing.has(name), loggedIn: !missing.has(name), version: '1.2.3', authNote: 'Test account' }
-    if (method === 'usage') return usage
+    if (method === 'check') {
+      if (fixture.checkFailures.includes(name)) throw new Error('CLI probe unavailable')
+      return { ok: true, installed: !missing.has(name), loggedIn: !missing.has(name) && !fixture.signedOut.includes(name), version: '1.2.3', authNote: 'Test account' }
+    }
+    if (method === 'usage') {
+      if (fixture.usageFailures.includes(name)) throw new Error('Usage temporarily unavailable')
+      return { ...usage, windows: usage.windows.map(window => ({ ...window, percent: fixture.percent })) }
+    }
+    if (name === 'antigravity' && method === 'run') {
+      fixture.runParams = args[1]
+      fixture.emit = args[2]
+      return new Promise(resolve => { fixture.finish = () => resolve({ ok: true, code: 0 }) })
+    }
     return { ok: true }
   }
 } })

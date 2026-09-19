@@ -380,6 +380,7 @@ const api = {
   },
   antigravity: {
     check: (): Promise<CodexCheckResult> => ipcRenderer.invoke(IPC.antigravity.check),
+    usage: (): Promise<CodexUsageResult> => ipcRenderer.invoke(IPC.antigravity.usage),
     /** Runs an Antigravity turn; `onEvent` fires per normalized stream event. */
     run: (
       id: string,

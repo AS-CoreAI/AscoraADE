@@ -23,6 +23,7 @@ import type {
   GrokReasoning,
   GlmMode,
   AntigravityModel,
+  AntigravityReasoning,
   CodexEvent,
   CodexItem,
   CodexCheckResult,
@@ -874,6 +875,7 @@ function modelLabel(s: {
   geminiModel: string
   grokModel: string
   antigravityModel?: AntigravityModel
+  antigravityReasoning?: AntigravityReasoning
   wproviderService: WProviderService
   omnirouteModel: string
 }): string {
@@ -899,7 +901,7 @@ function modelLabel(s: {
     case 'glm':
       return 'GLM'
     case 'antigravity':
-      return `Antigravity ${s.antigravityModel || 'flash'}`
+      return `Antigravity ${s.antigravityModel || 'flash'}${['flash_lite', 'flash', 'flash_36', 'pro'].includes(s.antigravityModel || 'flash') ? ` · ${s.antigravityReasoning || 'medium'}` : ''}`
     case 'wprovider':
       return `${WPROVIDER_SERVICE_INFO[s.wproviderService].label} Web`
     case 'omniroute':
@@ -1047,6 +1049,8 @@ export function parseFileRef(ref: string): { path: string; line?: number } | nul
  * paths) stay global — they describe one local install, not a per-project choice.
  */
 interface WorkspaceLlm {
+  antigravityModel?: AntigravityModel
+  antigravityReasoning?: AntigravityReasoning
   provider: LlmProvider
   model: string
   ollamaModel: string
@@ -1077,6 +1081,8 @@ interface WorkspaceLlm {
 
 /** Snapshot the active backend selection for persisting against a workspace. */
 function snapshotLlm(s: {
+  antigravityModel: AntigravityModel
+  antigravityReasoning: AntigravityReasoning
   provider: LlmProvider
   model: string
   ollamaModel: string
@@ -1101,6 +1107,8 @@ function snapshotLlm(s: {
   omnirouteModel: string
 }): WorkspaceLlm {
   return {
+    antigravityModel: s.antigravityModel,
+    antigravityReasoning: s.antigravityReasoning,
     provider: s.provider,
     model: s.model,
     ollamaModel: s.ollamaModel,
@@ -1366,6 +1374,7 @@ interface AppState {
   // Antigravity CLI
   antigravityPath: string
   antigravityModel: AntigravityModel
+  antigravityReasoning: AntigravityReasoning
   antigravitySessionId: string | null
   antigravityCheck: CodexCheckResult | null
   antigravityChecking: boolean
@@ -1554,6 +1563,7 @@ interface AppState {
   checkGlm: () => Promise<void>
   setAntigravityPath: (path: string) => Promise<void>
   setAntigravityModel: (m: AntigravityModel) => void
+  setAntigravityReasoning: (level: AntigravityReasoning) => void
   checkAntigravity: () => Promise<void>
   setWProviderService: (service: WProviderService) => Promise<void>
   checkWProvider: (service?: WProviderService, opts?: { force?: boolean }) => Promise<void>
@@ -1745,6 +1755,8 @@ export const useApp = create<AppState>((set, get) => {
   const applyLlm = async (saved?: WorkspaceLlm): Promise<void> => {
     if (saved) {
       set({
+        antigravityModel: saved.antigravityModel ?? DEFAULT_LLM_CONFIG.antigravityModel,
+        antigravityReasoning: saved.antigravityReasoning ?? (saved.antigravityModel === 'pro' ? 'high' : DEFAULT_LLM_CONFIG.antigravityReasoning),
         provider: saved.provider,
         model: saved.model,
         ollamaModel: saved.ollamaModel ?? DEFAULT_LLM_CONFIG.ollamaModel,
@@ -1779,6 +1791,8 @@ export const useApp = create<AppState>((set, get) => {
     }
     await api.llm.setConfig({
       provider,
+      antigravityModel: get().antigravityModel,
+      antigravityReasoning: get().antigravityReasoning,
       model: get().model,
       ollamaModel: get().ollamaModel,
       openRouterModel: get().openRouterModel,
@@ -1916,6 +1930,7 @@ export const useApp = create<AppState>((set, get) => {
   glmChecking: false,
   antigravityPath: DEFAULT_LLM_CONFIG.antigravityPath,
   antigravityModel: DEFAULT_LLM_CONFIG.antigravityModel,
+  antigravityReasoning: DEFAULT_LLM_CONFIG.antigravityReasoning,
   antigravitySessionId: null,
   antigravityCheck: null,
   antigravityChecking: false,
@@ -2067,6 +2082,7 @@ export const useApp = create<AppState>((set, get) => {
       glmMode: cfg.glmMode,
       antigravityPath: cfg.antigravityPath,
       antigravityModel: cfg.antigravityModel,
+      antigravityReasoning: cfg.antigravityModel === 'pro' && cfg.antigravityReasoning === 'medium' ? 'high' : cfg.antigravityReasoning ?? DEFAULT_LLM_CONFIG.antigravityReasoning,
       wproviderService: cfg.wproviderService,
       omnirouteModel: cfg.omnirouteModel,
       omnirouteStatus,
@@ -3421,8 +3437,15 @@ export const useApp = create<AppState>((set, get) => {
   },
 
   setAntigravityModel(antigravityModel) {
-    set({ antigravityModel })
-    void api.llm.setConfig({ antigravityModel })
+    const antigravityReasoning = antigravityModel === 'pro' && get().antigravityReasoning === 'medium' ? 'high' : get().antigravityReasoning
+    set({ antigravityModel, antigravityReasoning })
+    void api.llm.setConfig({ antigravityModel, antigravityReasoning })
+    get().persistWorkspaceLlm()
+  },
+
+  setAntigravityReasoning(antigravityReasoning) {
+    set({ antigravityReasoning })
+    void api.llm.setConfig({ antigravityReasoning })
     get().persistWorkspaceLlm()
   },
 
@@ -3857,6 +3880,7 @@ export const useApp = create<AppState>((set, get) => {
     const grokReasoning = get().grokReasoning
     const glmMode = get().glmMode
     const antigravityModel = get().antigravityModel
+    const antigravityReasoning = get().antigravityReasoning
     const wproviderService = get().wproviderService
     const omnirouteModel = get().omnirouteModel
     const sshConn = get().sshConnections.find((c) => c.id === sshId)
@@ -3991,6 +4015,7 @@ export const useApp = create<AppState>((set, get) => {
         const itemCards = new Map<string, string>() // agent item id → chat card id
         const itemChars = new Map<string, number>() // agent item id → chars already counted
         let sawError = false
+        const reportedErrors = new Set<string>()
         let claudeAuthMessageId: string | null = null
 
         const addClaudeAuthError = (detail: string): void => {
@@ -4062,13 +4087,19 @@ export const useApp = create<AppState>((set, get) => {
               return
             }
             if (it.type === 'agent_message') {
-              if (event.phase === 'completed' && it.text?.trim()) {
+              if (it.text?.trim()) {
                 const text = it.text.trim()
                 if (isClaude && isClaudeAuthFailure(text)) {
                   addClaudeAuthError(text)
                 } else {
                   countText(it.id, text)
-                  addMsg({ id: crypto.randomUUID(), role: 'assistant', kind: 'text', model: assistantModel, text })
+                  const existingId = itemCards.get(it.id)
+                  if (existingId) patch(existingId, { text })
+                  else {
+                    const cardId = crypto.randomUUID()
+                    itemCards.set(it.id, cardId)
+                    addMsg({ id: cardId, role: 'assistant', kind: 'text', model: assistantModel, text })
+                  }
                 }
               }
               return
@@ -4082,6 +4113,7 @@ export const useApp = create<AppState>((set, get) => {
               addMsg({ id: cardId, role: 'assistant', kind: 'tool', text: '', ...card })
             }
           } else if (event.kind === 'error') {
+            reportedErrors.add(event.message)
             if (isClaude && isClaudeAuthFailure(event.message)) {
               addClaudeAuthError(event.message)
             } else {
@@ -4142,7 +4174,8 @@ export const useApp = create<AppState>((set, get) => {
                     prompt: skillsPrompt(!!readRun(taskId)?.antigravitySessionId),
                     cwd: root,
                     sessionId: readRun(taskId)?.antigravitySessionId ?? undefined,
-                    model: antigravityModel || undefined
+                    model: antigravityModel || undefined,
+                    reasoning: antigravityReasoning
                   },
                   handleEvent
                 )
@@ -4242,7 +4275,7 @@ export const useApp = create<AppState>((set, get) => {
                         : 'Codex run failed.')
           if (isClaude && (claudeAuthMessageId || isClaudeAuthFailure(error))) {
             addClaudeAuthError(error)
-          } else {
+          } else if (!reportedErrors.has(error)) {
             addMsg({
               id: crypto.randomUUID(),
               role: 'assistant',

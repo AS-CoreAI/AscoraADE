@@ -47,6 +47,8 @@ import {
   type GrokReasoning,
   type GlmMode,
   type AntigravityModel,
+  type AntigravityReasoning,
+  antigravityReasoningLevels,
   type LlmProvider,
   type WProviderAuthorization,
   type WProviderService
@@ -1245,6 +1247,9 @@ function AntigravityPanel(): JSX.Element {
   const setAntigravityPath = useApp((s) => s.setAntigravityPath)
   const antigravityModel = useApp((s) => s.antigravityModel)
   const setAntigravityModel = useApp((s) => s.setAntigravityModel)
+  const antigravityReasoning = useApp((s) => s.antigravityReasoning)
+  const setAntigravityReasoning = useApp((s) => s.setAntigravityReasoning)
+  const language = useApp((s) => s.appLanguage)
   const check = useApp((s) => s.antigravityCheck)
   const checking = useApp((s) => s.antigravityChecking)
   const checkAntigravity = useApp((s) => s.checkAntigravity)
@@ -1284,9 +1289,10 @@ function AntigravityPanel(): JSX.Element {
           onChange={(e) => setAntigravityModel(e.target.value as AntigravityModel)}
         >
           <optgroup label="Gemini">
-            <option value="flash_lite">Gemini 3.8 Flash (Lite)</option>
-            <option value="flash">Gemini 3.7 Flash (Medium)</option>
-            <option value="pro">Gemini 3.1 Pro (Deep)</option>
+            <option value="flash_lite">Gemini 3.8 Flash</option>
+            <option value="flash">Gemini 3.7 Flash</option>
+            <option value="flash_36">Gemini 3.6 Flash</option>
+            <option value="pro">Gemini 3.1 Pro</option>
           </optgroup>
           <optgroup label="Claude">
             <option value="claude_sonnet">Claude Sonnet 4.6</option>
@@ -1297,9 +1303,17 @@ function AntigravityPanel(): JSX.Element {
           </optgroup>
         </select>
         <span className="field-hint">
-          Select the model executed through the Antigravity agentapi runtime.
+          Select the model executed through the local Antigravity runtime.
         </span>
       </label>
+
+      {antigravityReasoningLevels(antigravityModel).length > 0 && <label className="field">
+        <span className="field-label">{language === 'ru' ? 'Уровень рассуждения' : 'Reasoning level'}</span>
+        <select className="text-input antigravity-reasoning-select" value={antigravityReasoning}
+          onChange={(e) => setAntigravityReasoning(e.target.value as AntigravityReasoning)}>
+          {antigravityReasoningLevels(antigravityModel).map((level) => <option key={level} value={level}>{level[0].toUpperCase() + level.slice(1)}</option>)}
+        </select>
+      </label>}
 
       <div
         className={`conn-line ${

@@ -7,13 +7,15 @@ import { delimiter, join } from 'node:path'
 import {
   IPC,
   type AntigravityModel,
+  type AntigravityReasoning,
   type AntigravityRunParams,
   type CodexCheckResult,
   type CodexEvent,
   type CodexEventPayload,
   type CodexItem,
   type CodexRunResult,
-  type TokenUsage
+  type TokenUsage,
+  type UsageLimitResult
 } from '@shared/ipc'
 
 /**
@@ -21,8 +23,8 @@ import {
  *
  * Antigravity's language_server.exe exposes an `agentapi` subcommand. Since
  * agentapi is fire-and-forget (no stdout streaming), we bridge through a
- * small Python script that uses the official `google-antigravity` SDK to
- * stream responses as NDJSON, matching the ZCode event shape so the
+ * small Python script that talks to its local API (or the SDK with an API
+ * key) and streams responses as NDJSON, matching the ZCode event shape so the
  * renderer can reuse its CLI-backend code path.
  *
  *   python bridge.py --prompt <text> --cwd <ws> [--model <flash_lite|flash|pro>]
@@ -102,6 +104,39 @@ function bridgePath(): string {
 
 // ---------- install / auth probe ----------
 
+function queryBridge<T>(python: string, path: string, flag: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const child = crossSpawn(python, [bridgePath(), flag], {
+      windowsHide: true,
+      env: { ...process.env, ANTIGRAVITY_AGENTAPI: path, PYTHONIOENCODING: 'utf-8' }
+    })
+    let output = ''
+    let detail = ''
+    const timer = setTimeout(() => {
+      killTree(child as ChildProcessWithoutNullStreams)
+      reject(new Error('Antigravity check timed out.'))
+    }, 25_000)
+    child.stdout?.on('data', (data) => { output += String(data) })
+    child.stderr?.on('data', (data) => { detail = (detail + String(data)).slice(-2000) })
+    child.on('error', (error) => { clearTimeout(timer); reject(error) })
+    child.on('close', (code) => {
+      clearTimeout(timer)
+      try {
+        if (code !== 0) throw new Error(detail || `Antigravity check exited with code ${code}`)
+        resolve(JSON.parse(output.trim()) as T)
+      } catch (error) { reject(error) }
+    })
+  })
+}
+
+export async function readAntigravityUsage(configured?: string): Promise<UsageLimitResult> {
+  const { path, found } = resolveAntigravityPath(configured)
+  const python = findPython()
+  if (!found || !python) return { ok: false, loggedIn: false, windows: [], error: !found ? 'Antigravity not installed.' : 'Python not installed.' }
+  try { return await queryBridge<UsageLimitResult>(python, path, '--usage') }
+  catch (error) { return { ok: false, loggedIn: true, windows: [], error: error instanceof Error ? error.message : String(error) } }
+}
+
 export async function checkAntigravity(configured?: string): Promise<CodexCheckResult> {
   const { path, found } = resolveAntigravityPath(configured)
   if (!found) {
@@ -124,30 +159,11 @@ export async function checkAntigravity(configured?: string): Promise<CodexCheckR
     }
   }
 
-  return new Promise((resolve) => {
-    const child = crossSpawn(python, [bridgePath(), '--check'], {
-      windowsHide: true,
-      env: { ...process.env, ANTIGRAVITY_AGENTAPI: path, PYTHONIOENCODING: 'utf-8' }
-    })
-    let output = ''
-    let detail = ''
-    const timer = setTimeout(() => killTree(child as ChildProcessWithoutNullStreams), 25_000)
-    child.stdout?.on('data', (data) => { output += String(data) })
-    child.stderr?.on('data', (data) => { detail = (detail + String(data)).slice(-2000) })
-    child.on('error', (error) => {
-      clearTimeout(timer)
-      resolve({ ok: false, installed: false, path, error: error.message })
-    })
-    child.on('close', () => {
-      clearTimeout(timer)
-      try {
-        const result = JSON.parse(output.trim()) as CodexCheckResult
-        resolve({ ...result, path, version: 'Antigravity' })
-      } catch {
-        resolve({ ok: false, installed: true, path, error: detail || 'Antigravity connection check timed out.' })
-      }
-    })
-  })
+  try {
+    return { ...await queryBridge<CodexCheckResult>(python, path, '--check'), path, version: 'Antigravity' }
+  } catch (error) {
+    return { ok: false, installed: true, path, error: error instanceof Error ? error.message : String(error) }
+  }
 }
 
 // ---------- run streaming ----------
@@ -236,7 +252,7 @@ export async function runAntigravity(
   id: string,
   sender: WebContents,
   params: AntigravityRunParams,
-  config: { antigravityPath?: string; antigravityModel?: AntigravityModel }
+  config: { antigravityPath?: string; antigravityModel?: AntigravityModel; antigravityReasoning?: AntigravityReasoning }
 ): Promise<CodexRunResult> {
   killRun(id)
 
@@ -260,6 +276,7 @@ export async function runAntigravity(
   const model = params.model ?? config.antigravityModel ?? 'flash'
   const args = [bridge, '--prompt', params.prompt, '--cwd', params.cwd]
   if (model) args.push('--model', model)
+  args.push('--reasoning', params.reasoning ?? config.antigravityReasoning ?? (model === 'pro' ? 'high' : 'medium'))
   if (params.sessionId) args.push('--resume', params.sessionId)
 
   const emit = (event: CodexEvent): void => {
@@ -292,6 +309,8 @@ export async function runAntigravity(
     let reasoningText = ''
     let emittedTool = false
     const toolSeen = new Set<string>()
+    const reasoningMsgId = `think_${Math.random().toString(36).slice(2)}`
+    let streamError: string | undefined
     const textMsgId = `msg_${Math.random().toString(36).slice(2)}`
     let emittedText = false
 
@@ -306,7 +325,7 @@ export async function runAntigravity(
     const handlePart = (part: Record<string, unknown>): void => {
       const type = str(part.type)
       if (type === 'text') {
-        agentText = merge(agentText, str(part.text))
+        agentText = part.snapshot === true ? str(part.text) : merge(agentText, str(part.text))
         if (agentText.trim()) {
           emittedText = true
           emit({
@@ -316,7 +335,8 @@ export async function runAntigravity(
           })
         }
       } else if (type === 'reasoning') {
-        reasoningText = merge(reasoningText, str(part.text))
+        reasoningText = part.snapshot === true ? str(part.text) : merge(reasoningText, str(part.text))
+        if (reasoningText.trim()) emit({ kind: 'item', phase: 'started', item: { id: reasoningMsgId, type: 'reasoning', text: reasoningText.trim() } })
       } else if (type === 'tool') {
         const callId = str(part.callID) || str(part.id) || `tool_${toolSeen.size}`
         const state = obj(part.state)
@@ -365,7 +385,7 @@ export async function runAntigravity(
       const type = str(parsed.type)
       if (/error|failed/.test(type) && !part) {
         const msg = str(parsed.message) || str(obj(parsed.payload).message) || str(parsed.error)
-        if (msg) emit({ kind: 'error', message: msg })
+        if (msg) { streamError = msg; emit({ kind: 'error', message: msg }) }
       }
     }
 
@@ -387,7 +407,7 @@ export async function runAntigravity(
       rawStderr += chunk
     })
 
-    child.on('error', (err) => emit({ kind: 'error', message: err.message }))
+    child.on('error', (err) => { streamError = err.message; emit({ kind: 'error', message: err.message }) })
 
     child.on('close', (code) => {
       if (runs.get(id) === run) runs.delete(id)
@@ -398,7 +418,7 @@ export async function runAntigravity(
         emit({
           kind: 'item',
           phase: 'completed',
-          item: { id: `think_${Math.random().toString(36).slice(2)}`, type: 'reasoning', text: reasoningText.trim() }
+          item: { id: reasoningMsgId, type: 'reasoning', text: reasoningText.trim() }
         })
       }
       let finalText = agentText.trim()
@@ -410,16 +430,17 @@ export async function runAntigravity(
           item: { id: emittedText ? textMsgId : `msg_${Math.random().toString(36).slice(2)}`, type: 'agent_message', text: finalText }
         })
       }
-      emit({ kind: 'turn-completed' })
 
       if (run.killed) {
         resolve({ ok: true, code, threadId: sessionId, usage, aborted: true })
         return
       }
-      if (code === 0) {
+      if (code === 0 && !streamError && finalText) {
+        emit({ kind: 'turn-completed' })
         resolve({ ok: true, code, threadId: sessionId, usage })
       } else {
-        const reason = (rawStderr.trim() || rawStdout.trim()).split('\n').slice(-6).join('\n')
+        const reason = streamError || (code === 0 ? 'Antigravity finished without an answer. Check its active conversation and retry.' : rawStderr.trim() || rawStdout.trim()).split('\n').slice(-6).join('\n')
+        if (!streamError) emit({ kind: 'error', message: reason })
         resolve({ ok: false, code, threadId: sessionId, usage, error: reason || `Antigravity bridge exited with code ${code}` })
       }
     })

@@ -7418,6 +7418,7 @@ button.codex-activity-row:hover {
 .settings-content { flex: 1; min-width: 0; overflow-y: auto; padding: 40px clamp(20px, 4vw, 64px) 60px; }
 .settings-content > * { max-width: 1040px; margin-left: auto; margin-right: auto; }
 .settings-content-header { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-bottom: 32px; }
+.settings-content-header > .btn { flex-shrink: 0; white-space: nowrap; }
 .settings-eyebrow { font-size: 10px; letter-spacing: 2px; color: var(--accent); margin-bottom: 10px; font-weight: 600; }
 .settings-content h1 { font-size: 27px; font-weight: 600; letter-spacing: -.5px; }
 .settings-content-header p { color: var(--text-muted); margin-top: 10px; line-height: 1.6; }
@@ -7457,6 +7458,15 @@ button.codex-activity-row:hover {
 .settings-usage-list { display: grid; gap: 20px; margin-bottom: 20px; }
 .settings-usage-list progress { width: 100%; height: 7px; accent-color: var(--accent); margin: 10px 0; }
 .settings-usage-list small { color: var(--text-muted); }
+.settings-limits-summary { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-bottom: 24px; color: var(--text-muted); }
+.settings-limits-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: 20px; margin-bottom: 20px; }
+.settings-limit-card { display: flex; flex-direction: column; min-width: 0; margin-bottom: 0; }
+.settings-limit-card .field-hint, .settings-limit-card .settings-error { overflow-wrap: anywhere; }
+.settings-limit-card .usage-item-head { flex-wrap: wrap; }
+.settings-limit-card .usage-item-head strong { white-space: nowrap; }
+.settings-limit-updated { margin-top: auto; padding-top: 20px; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 11px; line-height: 1.6; }
+.settings-limit-card .severity-warning progress { accent-color: var(--warning, #d69d3b); }
+.settings-limit-card .severity-critical progress { accent-color: var(--danger, #de6570); }
 .tools-settings-page .tools-modal-header { padding: 0 0 24px; }
 .tools-settings-page .tools-list { max-height: none; overflow: visible; padding: 20px 0; }
 .tools-settings-page .tools-modal-footer { padding: 20px 0; }

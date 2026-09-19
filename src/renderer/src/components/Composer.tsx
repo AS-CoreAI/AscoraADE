@@ -34,6 +34,8 @@ import {
   type GrokReasoning,
   type GlmMode,
   type AntigravityModel,
+  type AntigravityReasoning,
+  antigravityReasoningLevels,
   type AttachmentFile,
   type WProviderService
 } from '@shared/ipc'
@@ -305,6 +307,8 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
   const setGlmMode = useApp((s) => s.setGlmMode)
   const antigravityModel = useApp((s) => s.antigravityModel)
   const setAntigravityModel = useApp((s) => s.setAntigravityModel)
+  const antigravityReasoning = useApp((s) => s.antigravityReasoning)
+  const setAntigravityReasoning = useApp((s) => s.setAntigravityReasoning)
   const wproviderService = useApp((s) => s.wproviderService)
   const setWProviderService = useApp((s) => s.setWProviderService)
   const wproviderChecks = useApp((s) => s.wproviderChecks)
@@ -950,6 +954,7 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
             <option value="glm">GLM · ZCode</option>
           </select>
         ) : provider === 'antigravity' ? (
+          <>
           <select
             className="composer-select"
             value={antigravityModel || 'flash'}
@@ -957,9 +962,10 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
             title="Antigravity model"
           >
             <optgroup label="Gemini">
-              <option value="flash_lite">Gemini 3.8 Flash (Lite)</option>
-              <option value="flash">Gemini 3.7 Flash (Medium)</option>
-              <option value="pro">Gemini 3.1 Pro (Deep)</option>
+              <option value="flash_lite">Gemini 3.8 Flash</option>
+              <option value="flash">Gemini 3.7 Flash</option>
+              <option value="flash_36">Gemini 3.6 Flash</option>
+              <option value="pro">Gemini 3.1 Pro</option>
             </optgroup>
             <optgroup label="Claude">
               <option value="claude_sonnet">Claude Sonnet 4.6</option>
@@ -969,6 +975,13 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
               <option value="gpt_oss">GPT-OSS-120B</option>
             </optgroup>
           </select>
+          {antigravityReasoningLevels(antigravityModel).length > 0 && <select
+            className="composer-select antigravity-reasoning-select"
+            value={antigravityReasoning}
+            onChange={(e) => setAntigravityReasoning(e.target.value as AntigravityReasoning)}
+            title="Antigravity reasoning level" aria-label="Antigravity reasoning level"
+          >{antigravityReasoningLevels(antigravityModel).map((level) => <option key={level} value={level}>{level[0].toUpperCase() + level.slice(1)}</option>)}</select>}
+          </>
         ) : provider === 'wprovider' ? (
           <select
             className="composer-select"

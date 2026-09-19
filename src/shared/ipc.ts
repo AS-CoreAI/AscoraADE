@@ -127,6 +127,7 @@ export const IPC = {
   },
   antigravity: {
     check: 'antigravity:check',
+    usage: 'antigravity:usage',
     run: 'antigravity:run',
     abort: 'antigravity:abort',
     event: 'antigravity:event'
@@ -724,10 +725,14 @@ export type GlmMode = 'plan' | 'build' | 'edit' | 'yolo'
 /** Selectable GLM permission modes, from most to least restrictive. */
 export const GLM_MODES: GlmMode[] = ['plan', 'build', 'edit', 'yolo']
 
-/** Model tiers supported by Antigravity CLI / agentapi (`--model`). */
-export type AntigravityModel = 'flash_lite' | 'flash' | 'pro' | 'claude_sonnet' | 'claude_opus' | 'gpt_oss'
+/** Stable selections resolved against the local Antigravity model catalog. */
+export type AntigravityModel = 'flash_lite' | 'flash' | 'flash_36' | 'pro' | 'claude_sonnet' | 'claude_opus' | 'gpt_oss'
+export type AntigravityReasoning = 'low' | 'medium' | 'high'
+export function antigravityReasoningLevels(model: AntigravityModel): AntigravityReasoning[] {
+  return model === 'pro' ? ['low', 'high'] : ['flash_lite', 'flash', 'flash_36'].includes(model) ? ['low', 'medium', 'high'] : []
+}
 
-export const ANTIGRAVITY_MODELS: AntigravityModel[] = ['flash_lite', 'flash', 'pro', 'claude_sonnet', 'claude_opus', 'gpt_oss']
+export const ANTIGRAVITY_MODELS: AntigravityModel[] = ['flash_lite', 'flash', 'flash_36', 'pro', 'claude_sonnet', 'claude_opus', 'gpt_oss']
 
 // ---------- Ascora WProvider (drives a provider's web chat in a hidden browser) ----------
 // WProvider emulates an API on top of a chat website: the user signs in to the
@@ -1109,8 +1114,9 @@ export interface LlmConfig {
   glmMode: GlmMode
   /** Path to the Antigravity agentapi.bat or language_server.exe binary; empty -> auto-detect. */
   antigravityPath: string
-  /** Active model tier for Antigravity runs (`--model`). */
+  /** Active model family for Antigravity runs. */
   antigravityModel: AntigravityModel
+  antigravityReasoning: AntigravityReasoning
   /** Which web chat Ascora WProvider drives (hidden-browser backend). */
   wproviderService: WProviderService
   /** Default model id routed through the bundled OmniRoute gateway. */
@@ -1156,6 +1162,7 @@ export const DEFAULT_LLM_CONFIG: LlmConfig = {
   glmMode: 'yolo',
   antigravityPath: '',
   antigravityModel: 'flash',
+  antigravityReasoning: 'medium',
   wproviderService: 'qwen',
   omnirouteModel: '',
   omnirouteBaseUrl: ''
@@ -1446,8 +1453,9 @@ export interface AntigravityRunParams {
   cwd: string
   /** Resume a persisted conversation session. */
   sessionId?: string
-  /** Model tier override (`--model flash_lite|flash|pro`). */
+  /** Model family override; the bridge resolves the requested reasoning variant. */
   model?: AntigravityModel
+  reasoning?: AntigravityReasoning
 }
 
 // ---------- Usage analytics ----------
