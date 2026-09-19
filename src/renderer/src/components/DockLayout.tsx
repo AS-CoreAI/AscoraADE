@@ -316,6 +316,13 @@ export function DockLayout(): JSX.Element {
           <Icon name="gitBranch" size={19} />
         </button>
         <button
+          className={`activity-btn${activeId === 'terminal' ? ' active' : ''}`}
+          title={tr(appLanguage, 'dock.terminal')}
+          onClick={() => { if (apiRef.current) ensureTerminal(apiRef.current) }}
+        >
+          <Icon name="terminal" size={19} />
+        </button>
+        <button
           className={`activity-btn${activeId === 'blueprintHub' ? ' active' : ''}`}
           title={tr(appLanguage, 'dock.blueprint')}
           onClick={() => {

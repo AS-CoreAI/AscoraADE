@@ -38,7 +38,27 @@ function terminalTheme(theme: 'dark' | 'light'): ITheme {
 function cwdReportCommand(kind: TerminalShellKind): string {
   return kind === 'powershell'
     ? `[Console]::Out.Write(([char]27).ToString()+']7;'+$PWD.Path+([char]7).ToString())`
-    : `printf '\\033]7;%s\\007' "$PWD"`
+    : `printf '\\\\033]7;%s\\\\007' "$PWD"`
+}
+
+const HISTORY_KEY = 'terminal-history'
+const HISTORY_LIMIT = 200
+
+function loadHistory(): string[] {
+  try {
+    const raw = localStorage.getItem(HISTORY_KEY)
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      if (Array.isArray(parsed)) return parsed.slice(-HISTORY_LIMIT)
+    }
+  } catch { /* corrupted — start fresh */ }
+  return []
+}
+
+function saveHistory(h: string[]): void {
+  try {
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(h.slice(-HISTORY_LIMIT)))
+  } catch { /* quota exceeded — ignore */ }
 }
 
 /**
@@ -112,8 +132,8 @@ export function TerminalPanel(): JSX.Element {
     let exited = false
     const pending: string[] = [] // commands queued (e.g. from "Run") until the prompt returns
 
-    const history: string[] = [] // submitted commands, oldest first
-    let historyIndex = 0 // cursor into history; === history.length means "new line"
+    const history: string[] = loadHistory()
+    let historyIndex = history.length // cursor into history; === history.length means "new line"
     let draft = '' // unsubmitted input stashed while browsing history
 
     const showPrompt = (): void => {
@@ -151,7 +171,10 @@ export function TerminalPanel(): JSX.Element {
     const submit = (): void => {
       const command = line
       // Record non-empty commands, skipping consecutive duplicates (shell-like).
-      if (command.trim() && command !== history[history.length - 1]) history.push(command)
+      if (command.trim() && command !== history[history.length - 1]) {
+        history.push(command)
+        saveHistory(history)
+      }
       historyIndex = history.length
       draft = ''
       line = ''
