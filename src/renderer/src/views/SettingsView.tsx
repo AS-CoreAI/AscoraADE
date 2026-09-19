@@ -5,7 +5,8 @@ import { CliLimitsPage } from './CliLimitsPage'
 import { Icon } from '@/components/Icon'
 import { api } from '@/lib/api'
 import { PROVIDERS, type SettingsSection } from '@/lib/providers'
-import { LANGUAGE_OPTIONS, tr } from '@/language'
+import { LANGUAGE_OPTIONS, localeForLanguage, tr, type TranslationKey } from '@/language'
+import { usageWindowLabel } from '@/language/usage'
 import { useApp, type ThemePreference } from '@/state/store'
 import { isSshCapableProvider, type LlmProvider, type UsageLimitResult } from '@shared/ipc'
 import type { ProviderCreditInfo, ProviderSoftwareInfo } from '@shared/provider-setup'
@@ -26,10 +27,11 @@ const USAGE_URLS: Partial<Record<LlmProvider, string>> = {
 
 function ProviderPage({ provider }: { provider: LlmProvider }): JSX.Element {
   const s = useApp()
-  const ru = s.appLanguage === 'ru'
+  const t = (key: TranslationKey, values?: Record<string, string | number>): string => tr(s.appLanguage, key, values)
   const [software, setSoftware] = useState<ProviderSoftwareInfo | null>(null)
   const [installing, setInstalling] = useState(false)
   const [message, setMessage] = useState('')
+  const [messageKey, setMessageKey] = useState<TranslationKey | null>(null)
   const [refreshingUsage, setRefreshingUsage] = useState(false)
   const [credits, setCredits] = useState<ProviderCreditInfo | null>(null)
   const [antigravityUsage, setAntigravityUsage] = useState<UsageLimitResult | null>(null)
@@ -81,11 +83,11 @@ function ProviderPage({ provider }: { provider: LlmProvider }): JSX.Element {
   const install = async (): Promise<void> => {
     setInstalling(true)
     setMessage('')
+    setMessageKey(null)
     try {
       const result = await api.providerSetup.install(provider)
-      setMessage(result.ok
-        ? (ru ? 'Установка завершена. Проверяем доступность. Если CLI не найден, перезапустите приложение, чтобы обновить PATH.' : 'Installation finished. Checking availability. If the CLI is not found, restart the app to reload PATH.')
-        : result.error ?? (ru ? 'Не удалось установить.' : 'Installation failed.'))
+      setMessageKey(result.ok ? 'settings.installFinished' : result.error ? null : 'tools.installFailed')
+      if (!result.ok && result.error) setMessage(result.error)
       await recheck()
     } catch (error) { setMessage(String(error)) }
     finally { setInstalling(false) }
@@ -93,27 +95,27 @@ function ProviderPage({ provider }: { provider: LlmProvider }): JSX.Element {
 
   return <>
     <header className="settings-content-header">
-      <div><div className="settings-eyebrow">{ru ? 'ПРОВАЙДЕРЫ' : 'PROVIDERS'}</div><h1>{name}</h1>
-        <p>{ru ? 'Подключение, учётная запись и параметры агента.' : 'Connection, account and agent preferences.'}</p></div>
+      <div><div className="settings-eyebrow">{t('settings.providersEyebrow')}</div><h1>{name}</h1>
+        <p>{t('settings.providerSubtitle')}</p></div>
       <button className="btn" disabled={s.provider === provider || (!!s.activeSsh && !isSshCapableProvider(provider)) || (provider === 'unsloth' && !s.unslothApiKey.trim()) || (provider === 'openrouter' && (!s.openRouterEnabled || !s.openRouterApiKey.trim()))}
         onClick={() => void s.setProvider(provider).catch((error) => setMessage(String(error)))}>
-        {s.provider === provider ? (ru ? 'Активный провайдер' : 'Active provider') : (ru ? 'Использовать в чате' : 'Use in chat')}
+        {s.provider === provider ? t('settings.activeProvider') : t('settings.useInChat')}
       </button>
     </header>
     <label className="settings-card settings-toggle-row">
-      <span><strong>{ru ? 'Показывать в списке провайдеров' : 'Show in the provider menu'}</strong>
-        <small>{ru ? 'В выпадающем списке выбора агента в чате.' : 'In the agent dropdown in the chat composer.'}</small></span>
+      <span><strong>{t('settings.showProvider')}</strong>
+        <small>{t('settings.showProviderHint')}</small></span>
       <input type="checkbox" role="switch" checked={visible} onChange={(e) => void s.setProviderVisible(provider, e.target.checked)} />
     </label>
     {isCli(provider) && <section className="settings-card">
-      <div className="settings-section-heading"><h2>{ru ? 'Подключение и авторизация' : 'Connection and authorization'}</h2>
-        <button className="btn" disabled={checking || installing} onClick={() => void recheck()}>{checking ? (ru ? 'Проверка…' : 'Checking…') : (ru ? 'Проверить' : 'Check')}</button></div>
+      <div className="settings-section-heading"><h2>{t('settings.connectionAuthorization')}</h2>
+        <button className="btn" disabled={checking || installing} onClick={() => void recheck()}>{checking ? t('common.checking') : t('common.check')}</button></div>
       <div className="settings-status-grid" aria-live="polite">
-        <div><small>{ru ? 'Программное обеспечение' : 'Software'}</small><strong className={check?.installed ? 'settings-ok' : ''}>
-          {checking ? '…' : !check ? (ru ? 'Не проверено' : 'Not checked') : check.installed ? (ru ? 'Установлено' : 'Installed') : (ru ? 'Не найдено / недоступно' : 'Missing / unavailable')}</strong></div>
-        <div><small>{ru ? 'Авторизация' : 'Authorization'}</small><strong className={check?.loggedIn ? 'settings-ok' : ''}>
-          {checking ? '…' : check?.loggedIn ? (ru ? 'Вход выполнен' : 'Signed in') : check?.installed ? (ru ? 'Требуется вход' : 'Sign in required') : '—'}</strong></div>
-        <div><small>{ru ? 'Версия' : 'Version'}</small><strong>{check?.version || '—'}</strong></div>
+        <div><small>{t('settings.software')}</small><strong className={check?.installed ? 'settings-ok' : ''}>
+          {checking ? '…' : !check ? t('settings.notChecked') : check.installed ? t('tools.installed') : t('settings.softwareMissing')}</strong></div>
+        <div><small>{t('settings.authorization')}</small><strong className={check?.loggedIn ? 'settings-ok' : ''}>
+          {checking ? '…' : check?.loggedIn ? t('settings.accountSignedIn') : check?.installed ? t('settings.signInRequired') : '—'}</strong></div>
+        <div><small>{t('settings.version')}</small><strong>{check?.version || '—'}</strong></div>
       </div>
       {check?.account && <p className="field-hint">{check.account}</p>}
       {check?.authNote && <p className="field-hint">{check.authNote}</p>}
@@ -122,38 +124,40 @@ function ProviderPage({ provider }: { provider: LlmProvider }): JSX.Element {
         {software.command && <code>{software.command}</code>}
         {software.error && <p className="field-hint">{software.error}</p>}
         <div className="field-row">
-          {software.available && <button className="btn" disabled={installing} onClick={() => void install()}>{installing ? (ru ? 'Устанавливаем…' : 'Installing…') : (ru ? 'Установить автоматически' : 'Install automatically')}</button>}
-          {software.url && <button className="btn" onClick={() => void api.live.openExternal(software.url!)}>{ru ? 'Сайт установки' : 'Installation website'}</button>}
+          {software.available && <button className="btn" disabled={installing} onClick={() => void install()}>{installing ? t('tools.installing') : t('settings.installAutomatically')}</button>}
+          {software.url && <button className="btn" onClick={() => void api.live.openExternal(software.url!)}>{t('settings.installWebsite')}</button>}
         </div>
       </div>}
     </section>}
     {!isCli(provider) && software?.url && <section className="settings-card settings-install">
-      <h2>{ru ? 'Установка приложения' : 'Application installation'}</h2>
-      <p className="field-hint">{ru ? 'Если приложение ещё не установлено, установите его и запустите локальный сервер.' : 'If the application is missing, install it and start its local server.'}</p>
-      <div className="field-row">{software.available && <button className="btn" disabled={installing} onClick={() => void install()}>{installing ? (ru ? 'Устанавливаем…' : 'Installing…') : (ru ? 'Установить автоматически' : 'Install automatically')}</button>}
-        <button className="btn" onClick={() => void api.live.openExternal(software.url!)}>{ru ? 'Скачать приложение' : 'Download application'}</button></div>
+      <h2>{t('settings.applicationInstallation')}</h2>
+      <p className="field-hint">{t('settings.applicationInstallHint')}</p>
+      <div className="field-row">{software.available && <button className="btn" disabled={installing} onClick={() => void install()}>{installing ? t('tools.installing') : t('settings.installAutomatically')}</button>}
+        <button className="btn" onClick={() => void api.live.openExternal(software.url!)}>{t('settings.downloadApplication')}</button></div>
     </section>}
-    {message && <p role="status" className="settings-card settings-message">{message}</p>}
+    {(message || messageKey) && <p role="status" className="settings-card settings-message">{message || (messageKey && t(messageKey))}</p>}
     <section className="settings-card">
-      <div className="settings-section-heading"><h2>{ru ? 'Остатки лимитов' : 'Remaining limits'}</h2>
-        {['codex', 'claude', 'openrouter', 'antigravity'].includes(provider) && <button className="btn" disabled={refreshingUsage} onClick={() => void refreshUsage()}>{refreshingUsage ? '…' : (ru ? 'Обновить' : 'Refresh')}</button>}</div>
+      <div className="settings-section-heading"><h2>{t('settings.remainingLimits')}</h2>
+        {['codex', 'claude', 'openrouter', 'antigravity'].includes(provider) && <button className="btn" disabled={refreshingUsage} onClick={() => void refreshUsage()}>{refreshingUsage ? '…' : t('common.refresh')}</button>}</div>
       {provider === 'openrouter' && credits && <p className="field-hint">{credits.ok
-        ? `${ru ? 'Остаток лимита API-ключа: ' : 'API key allowance remaining: '}${typeof credits.remaining === 'number' ? `$${credits.remaining.toFixed(2)}` : credits.limit === null ? (ru ? 'лимит ключа не задан' : 'no key spending cap') : (ru ? 'не сообщён' : 'not reported')}${typeof credits.used === 'number' ? ` · ${ru ? 'использовано' : 'used'} $${credits.used.toFixed(2)}` : ''}`
+        ? [t('settings.keyAllowance', { amount: typeof credits.remaining === 'number' ? new Intl.NumberFormat(localeForLanguage(s.appLanguage), { style: 'currency', currency: 'USD' }).format(credits.remaining) : credits.limit === null ? t('settings.keyNoCap') : t('settings.notReported') }),
+          typeof credits.used === 'number' ? t('settings.keyUsed', { amount: new Intl.NumberFormat(localeForLanguage(s.appLanguage), { style: 'currency', currency: 'USD' }).format(credits.used) }) : ''].filter(Boolean).join(' · ')
         : credits.error}</p>}
       {usage?.windows.length ? <div className="settings-usage-list">{usage.windows.map((win) => {
         const remaining = Math.max(0, Math.min(100, 100 - win.percent))
+        const label = usageWindowLabel(s.appLanguage, win.label)
         return <div className="usage-item" key={win.label}>
-          <div className="usage-item-head"><span>{win.label}</span><strong>{remaining}% {ru ? 'осталось' : 'remaining'}</strong></div>
-          <progress max="100" value={remaining} aria-label={win.label} />
-          {win.resetsAt && <small>{ru ? 'Обновление: ' : 'Resets: '}{new Date(win.resetsAt).toLocaleString(s.appLanguage)}</small>}
+          <div className="usage-item-head"><span>{label}</span><strong>{t('settings.remaining', { percent: remaining })}</strong></div>
+          <progress max="100" value={remaining} aria-label={label} />
+          {win.resetsAt && <small>{t('settings.resetsAt')}{new Date(win.resetsAt).toLocaleString(localeForLanguage(s.appLanguage))}</small>}
         </div>
       })}</div> : !(provider === 'openrouter' && credits) && <p className="field-hint">{usage?.error || (provider === 'lmstudio' || provider === 'ollama' || provider === 'unsloth'
-        ? (ru ? 'Локальный сервер не сообщает лимиты подписки.' : 'The local server does not report subscription limits.')
-        : (ru ? 'Лимиты пока не получены. Если провайдер не передаёт их через интеграцию, проверьте остаток в личном кабинете.' : 'Limits are not available yet. If the provider does not expose them through this integration, check your account dashboard.'))}</p>}
-      {usageUrl && <button className="btn" onClick={() => void api.live.openExternal(usageUrl)}>{ru ? 'Открыть лимиты в личном кабинете' : 'Open account usage'}</button>}
+        ? t('settings.localLimitsUnavailable')
+        : t('settings.limitsUnavailable'))}</p>}
+      {usageUrl && <button className="btn" onClick={() => void api.live.openExternal(usageUrl)}>{t('settings.openAccountUsage')}</button>}
     </section>
     <section className="settings-card">
-      <h2>{ru ? 'Параметры подключения' : 'Connection settings'}</h2>
+      <h2>{t('settings.connectionSettings')}</h2>
       <ConnectionSettings provider={provider} />
     </section>
 
@@ -162,35 +166,34 @@ function ProviderPage({ provider }: { provider: LlmProvider }): JSX.Element {
 
 export function SettingsView(): JSX.Element {
   const s = useApp()
-  const ru = s.appLanguage === 'ru'
-  const t = (key: Parameters<typeof tr>[1]): string => tr(s.appLanguage, key)
+  const t = (key: TranslationKey): string => tr(s.appLanguage, key)
   const section = s.settingsSection
   const select = (next: SettingsSection): void => { useApp.setState({ settingsSection: next }) }
   return <div className="settings-view">
     <aside className="settings-nav">
-      <div className="settings-nav-title"><Icon name="settings" size={19} /><strong>{ru ? 'Настройки' : 'Settings'}</strong></div>
-      <button className="settings-back" onClick={() => s.setSettingsOpen(false)}><Icon name="arrowLeft" size={14} />{ru ? 'Вернуться к работе' : 'Back to work'}</button>
-      <nav aria-label={ru ? 'Разделы настроек' : 'Settings sections'}>
-        <button className={section === 'appearance' ? 'active' : ''} aria-current={section === 'appearance' ? 'page' : undefined} onClick={() => select('appearance')}><Icon name="settings" size={16} />{ru ? 'Язык и внешний вид' : 'Language & appearance'}</button>
-        <button className={section === 'providers' ? 'active' : ''} aria-current={section === 'providers' ? 'page' : undefined} onClick={() => select('providers')}><Icon name="message" size={16} />{ru ? 'Провайдеры агентов' : 'Agent providers'}</button>
-        {section === 'providers' && <div className="settings-provider-nav">{PROVIDERS.map((provider) => <button key={provider.id}
+      <div className="settings-nav-title"><Icon name="settings" size={19} /><strong>{t('settings.title')}</strong></div>
+      <button className="settings-back" onClick={() => s.setSettingsOpen(false)}><Icon name="arrowLeft" size={14} />{t('settings.backToWork')}</button>
+      <nav aria-label={t('settings.sections')}>
+        <button data-section="appearance" className={section === 'appearance' ? 'active' : ''} aria-current={section === 'appearance' ? 'page' : undefined} onClick={() => select('appearance')}><Icon name="settings" size={16} />{t('settings.appearance')}</button>
+        <button data-section="providers" className={section === 'providers' ? 'active' : ''} aria-current={section === 'providers' ? 'page' : undefined} onClick={() => select('providers')}><Icon name="message" size={16} />{t('settings.agentProviders')}</button>
+        {section === 'providers' && <div className="settings-provider-nav">{PROVIDERS.map((provider) => <button key={provider.id} data-provider={provider.id}
           className={s.settingsProvider === provider.id ? 'selected' : ''} aria-current={s.settingsProvider === provider.id ? 'page' : undefined}
           onClick={() => useApp.setState({ settingsProvider: provider.id })}>
-          <span>{provider.name}</span><span className={`settings-visibility-dot${s.providerVisibility[provider.id] === false ? ' hidden' : ''}`} aria-label={s.providerVisibility[provider.id] === false ? (ru ? 'Скрыт из списка' : 'Hidden from menu') : (ru ? 'Виден в списке' : 'Visible in menu')} />
+          <span>{provider.name}</span><span className={`settings-visibility-dot${s.providerVisibility[provider.id] === false ? ' hidden' : ''}`} aria-label={s.providerVisibility[provider.id] === false ? t('settings.providerHidden') : t('settings.providerVisible')} />
         </button>)}</div>}
-        <button className={section === 'limits' ? 'active' : ''} aria-current={section === 'limits' ? 'page' : undefined} onClick={() => select('limits')}><Icon name="barChart" size={16} />{ru ? 'Лимиты' : 'Usage limits'}</button>
-        <button className={section === 'tools' ? 'active' : ''} aria-current={section === 'tools' ? 'page' : undefined} onClick={() => select('tools')}><Icon name="terminal" size={16} />{t('tools.title')}</button>
+        <button data-section="limits" className={section === 'limits' ? 'active' : ''} aria-current={section === 'limits' ? 'page' : undefined} onClick={() => select('limits')}><Icon name="barChart" size={16} />{t('settings.usageLimits')}</button>
+        <button data-section="tools" className={section === 'tools' ? 'active' : ''} aria-current={section === 'tools' ? 'page' : undefined} onClick={() => select('tools')}><Icon name="terminal" size={16} />{t('tools.title')}</button>
       </nav>
     </aside>
     <main className="settings-content" key={section === 'providers' ? s.settingsProvider : section}>
       {section === 'appearance' && <>
-        <header className="settings-content-header"><div><div className="settings-eyebrow">ASCORA ADE</div><h1>{ru ? 'Язык и внешний вид' : 'Language & appearance'}</h1><p>{ru ? 'Настройте рабочую среду под себя.' : 'Make your workspace feel like home.'}</p></div></header>
+        <header className="settings-content-header"><div><div className="settings-eyebrow">ASCORA ADE</div><h1>{t('settings.appearance')}</h1><p>{t('settings.appearanceSubtitle')}</p></div></header>
         <section className="settings-card"><h2>{t('app.theme.label')}</h2><div className="settings-theme-options">
-          {(['dark', 'light', 'system'] as ThemePreference[]).map((theme) => <button key={theme} className={`settings-theme${s.themePreference === theme ? ' selected' : ''}`} aria-pressed={s.themePreference === theme} onClick={() => s.setThemePreference(theme)}>
+          {(['dark', 'light', 'system'] as ThemePreference[]).map((theme) => <button key={theme} data-theme={theme} className={`settings-theme${s.themePreference === theme ? ' selected' : ''}`} aria-pressed={s.themePreference === theme} onClick={() => s.setThemePreference(theme)}>
             <span className={`settings-theme-preview ${theme}`}><i /><i /><i /></span><span>{t(`app.theme.${theme}`)}{s.themePreference === theme && <Icon name="check" size={14} />}</span>
           </button>)}
         </div></section>
-        <section className="settings-card"><h2>{t('app.language.label')}</h2><div className="settings-language-options">{LANGUAGE_OPTIONS.map((language) => <button key={language.value} className={s.appLanguage === language.value ? 'selected' : ''} aria-pressed={s.appLanguage === language.value} onClick={() => s.setAppLanguage(language.value)}>{t(language.labelKey)}{s.appLanguage === language.value && <Icon name="check" size={14} />}</button>)}</div></section>
+        <section className="settings-card"><h2>{t('app.language.label')}</h2><div className="settings-language-options">{LANGUAGE_OPTIONS.map((language) => <button key={language.value} data-language={language.value} className={s.appLanguage === language.value ? 'selected' : ''} aria-pressed={s.appLanguage === language.value} onClick={() => s.setAppLanguage(language.value)}>{t(language.labelKey)}{s.appLanguage === language.value && <Icon name="check" size={14} />}</button>)}</div></section>
       </>}
       {section === 'providers' && <ProviderPage provider={s.settingsProvider} />}
       {section === 'limits' && <CliLimitsPage />}

@@ -310,7 +310,6 @@ function OllamaPanel(): JSX.Element {
 
 function UnslothPanel(): JSX.Element {
   const t = useT()
-  const ru = useApp((s) => s.appLanguage === 'ru')
   const baseUrl = useApp((s) => s.unslothBaseUrl)
   const apiKey = useApp((s) => s.unslothApiKey)
   const model = useApp((s) => s.unslothModel)
@@ -341,35 +340,33 @@ function UnslothPanel(): JSX.Element {
   }
 
   return <div className="unsloth-settings provider-settings-form">
-    <p className="field-hint">{ru
-      ? 'Запустите Unsloth и загрузите модель. Укажите адрес сервера с портом из Unsloth (обычно 8888 или 8000) и создайте API-ключ в Settings → API.'
-      : 'Start Unsloth and load a model. Enter its server address and port (usually 8888 or 8000), then create an API key in Settings → API.'}</p>
+    <p className="field-hint">{t('settings.unslothHint')}</p>
     <label className="field">
       <span className="field-label">{t('settings.baseUrl')}</span>
       <input className="text-input" type="url" value={url} spellCheck={false}
         placeholder={DEFAULT_LLM_CONFIG.unslothBaseUrl} onChange={(event) => setUrl(event.target.value)}
         onKeyDown={(event) => { if (event.key === 'Enter' && !saving) void save() }} />
-      <span className="field-hint">{ru ? 'Можно указать адрес сервера без /v1 — он добавится автоматически.' : 'You can enter the server address without /v1; it will be added automatically.'}</span>
+      <span className="field-hint">{t('settings.unslothUrlHint')}</span>
     </label>
     <label className="field">
-      <span className="field-label">Unsloth API key</span>
+      <span className="field-label">{t('settings.unslothApiKey')}</span>
       <input className="text-input" type="password" value={key} autoComplete="off" spellCheck={false}
         placeholder="sk-unsloth-…" onChange={(event) => setKey(event.target.value)}
         onKeyDown={(event) => { if (event.key === 'Enter' && !saving) void save() }} />
-      <span className="field-hint">{ru ? 'Ключ обязателен, в том числе для локального сервера. Сохраняется в настройках приложения.' : 'A key is required even for a local server. It is saved in the application settings.'}</span>
+      <span className="field-hint">{t('settings.unslothKeyHint')}</span>
     </label>
     <div className="field-row">
       <button className="btn" disabled={saving || connection === 'connecting'} onClick={() => void save()}>
-        {saving || connection === 'connecting' ? t('common.testing') : ru ? 'Сохранить и проверить' : 'Save and test'}
+        {saving || connection === 'connecting' ? t('common.testing') : t('settings.saveAndTest')}
       </button>
-      <button className="btn" onClick={() => void api.live.openExternal('https://unsloth.ai/docs/basics/api')}>{ru ? 'Как подключить Unsloth' : 'Unsloth setup guide'}</button>
+      <button className="btn" onClick={() => void api.live.openExternal('https://unsloth.ai/docs/basics/api')}>{t('settings.unslothGuide')}</button>
     </div>
     {error && <p className="settings-error" role="alert">{error}</p>}
     <div className={`conn-line ${connection}`} role="status">
       {connection === 'connected' && `✓ Unsloth: ${t('settings.connectedModels', { count: models.length })}`}
       {connection === 'connecting' && t('settings.connecting')}
       {connection === 'error' && `Unsloth: ${connectionError ?? t('settings.connectionFailed')}`}
-      {connection === 'unknown' && (ru ? 'Добавьте API-ключ для проверки подключения.' : 'Add an API key to test the connection.')}
+      {connection === 'unknown' && t('settings.unslothKeyRequired')}
     </div>
     <label className="field">
       <span className="field-label">{t('common.model')}</span>
@@ -377,7 +374,7 @@ function UnslothPanel(): JSX.Element {
         disabled={!models.length || connection !== 'connected'} onChange={(event) => setModel(event.target.value)}>
         {models.length ? models.map((id) => <option key={id} value={id}>{id}</option>) : <option value="">{t('settings.noModels')}</option>}
       </select>
-      <span className="field-hint">{ru ? 'Модели из API Unsloth. Перед отправкой сообщения загрузите выбранную модель в Unsloth или включите там Model auto-switch в Settings → API.' : 'Models reported by the Unsloth API. Load the selected model in Unsloth before chatting, or enable Model auto-switch in its Settings → API.'}</span>
+      <span className="field-hint">{t('settings.unslothModelsHint')}</span>
     </label>
     <button className="btn" style={{ alignSelf: 'flex-start' }} disabled={!apiKey || saving || connection === 'connecting'} onClick={() => void refreshModels()}>{t('settings.refreshModels')}</button>
   </div>
@@ -631,7 +628,7 @@ function CodexPanel(): JSX.Element {
       </label>
 
       <label className="field">
-        <span className="field-label">Reasoning effort</span>
+        <span className="field-label">{t('composer.reasoningEffort')}</span>
         <select
           className="text-input"
           value={codexReasoning}
@@ -656,7 +653,7 @@ function CodexPanel(): JSX.Element {
       >
         {checking && t('settings.checkingName', { name: 'Codex' })}
         {!checking && !check && t('settings.notCheckedYet')}
-        {!checking && check && !check.installed && `✗ ${check.error ?? 'Codex CLI not found.'}`}
+        {!checking && check && !check.installed && `✗ ${check.error ?? t('settings.cliNotFound', { name: 'Codex CLI' })}`}
         {!checking && check && check.installed && (
           <>
             ✓ {check.version ?? 'codex'} ·{' '}
@@ -799,7 +796,7 @@ function CopilotPanel(): JSX.Element {
       >
         {checking && t('settings.checkingName', { name: 'Copilot' })}
         {!checking && !check && t('settings.notCheckedYet')}
-        {!checking && check && !check.installed && `x ${check.error ?? 'GitHub Copilot CLI not found.'}`}
+        {!checking && check && !check.installed && `x ${check.error ?? t('settings.cliNotFound', { name: 'GitHub Copilot CLI' })}`}
         {!checking && check && check.installed && (
           <>
             ✓ {check.version ?? 'copilot'} · {check.authNote ?? t('settings.ready')}
@@ -948,7 +945,7 @@ function ClaudePanel(): JSX.Element {
       >
         {checking && t('settings.checkingName', { name: 'Claude' })}
         {!checking && !check && t('settings.notCheckedYet')}
-        {!checking && check && !check.installed && `✗ ${check.error ?? 'Claude Code CLI not found.'}`}
+        {!checking && check && !check.installed && `✗ ${check.error ?? t('settings.cliNotFound', { name: 'Claude Code CLI' })}`}
         {!checking && check && check.installed && (
           <>
             ✓ {check.version ?? 'claude'} ·{' '}
@@ -1060,7 +1057,7 @@ function GeminiPanel(): JSX.Element {
       >
         {checking && t('settings.checkingName', { name: 'Gemini' })}
         {!checking && !check && t('settings.notCheckedYet')}
-        {!checking && check && !check.installed && `✗ ${check.error ?? 'Gemini CLI not found.'}`}
+        {!checking && check && !check.installed && `✗ ${check.error ?? t('settings.cliNotFound', { name: 'Gemini CLI' })}`}
         {!checking && check && check.installed && (
           <>
             ✓ {check.version ?? 'gemini'} · {check.authNote ?? t('settings.ready')}
@@ -1189,7 +1186,7 @@ function GrokPanel(): JSX.Element {
       >
         {checking && t('settings.checkingName', { name: 'Grok' })}
         {!checking && !check && t('settings.notCheckedYet')}
-        {!checking && check && !check.installed && `✗ ${check.error ?? 'Grok CLI not found.'}`}
+        {!checking && check && !check.installed && `✗ ${check.error ?? t('settings.cliNotFound', { name: 'Grok CLI' })}`}
         {!checking && check && check.installed && (
           <>
             ✓ {check.version ?? 'grok'} ·{' '}
@@ -1296,7 +1293,7 @@ function GlmPanel(): JSX.Element {
       >
         {checking && t('settings.checkingName', { name: 'ZCode' })}
         {!checking && !check && t('settings.notCheckedYet')}
-        {!checking && check && !check.installed && `✗ ${check.error ?? 'ZCode not found.'}`}
+        {!checking && check && !check.installed && `✗ ${check.error ?? t('settings.cliNotFound', { name: 'ZCode' })}`}
         {!checking && check && check.installed && (
           <>
             {check.loggedIn ? '✓' : '⚠'} {check.version ? `zcode ${check.version}` : 'zcode'} ·{' '}
@@ -1332,7 +1329,6 @@ function AntigravityPanel(): JSX.Element {
   const setAntigravityModel = useApp((s) => s.setAntigravityModel)
   const antigravityReasoning = useApp((s) => s.antigravityReasoning)
   const setAntigravityReasoning = useApp((s) => s.setAntigravityReasoning)
-  const language = useApp((s) => s.appLanguage)
   const check = useApp((s) => s.antigravityCheck)
   const checking = useApp((s) => s.antigravityChecking)
   const checkAntigravity = useApp((s) => s.checkAntigravity)
@@ -1345,13 +1341,13 @@ function AntigravityPanel(): JSX.Element {
   return (
     <>
       <label className="field">
-        <span className="field-label">Antigravity Path</span>
+        <span className="field-label">{t('settings.antigravityPath')}</span>
         <div className="field-row">
           <input
             className="text-input"
             value={path}
             spellCheck={false}
-            placeholder="Auto-detect (agentapi.bat / language_server.exe)"
+            placeholder={t('settings.antigravityAutoDetect')}
             onChange={(e) => setPath(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && void apply()}
           />
@@ -1360,12 +1356,12 @@ function AntigravityPanel(): JSX.Element {
           </button>
         </div>
         <span className="field-hint">
-          Path to agentapi.bat (~/.gemini/antigravity/bin/) or language_server.exe. Driven via Python SDK bridge.
+          {t('settings.antigravityPathHint')}
         </span>
       </label>
 
       <label className="field">
-        <span className="field-label">Antigravity Model</span>
+        <span className="field-label">{t('settings.antigravityModel')}</span>
         <select
           className="text-input"
           value={antigravityModel || 'flash'}
@@ -1386,15 +1382,15 @@ function AntigravityPanel(): JSX.Element {
           </optgroup>
         </select>
         <span className="field-hint">
-          Select the model executed through the local Antigravity runtime.
+          {t('settings.antigravityModelHint')}
         </span>
       </label>
 
       {antigravityReasoningLevels(antigravityModel).length > 0 && <label className="field">
-        <span className="field-label">{language === 'ru' ? 'Уровень рассуждения' : 'Reasoning level'}</span>
+        <span className="field-label">{t('settings.reasoningLevel')}</span>
         <select className="text-input antigravity-reasoning-select" value={antigravityReasoning}
           onChange={(e) => setAntigravityReasoning(e.target.value as AntigravityReasoning)}>
-          {antigravityReasoningLevels(antigravityModel).map((level) => <option key={level} value={level}>{level[0].toUpperCase() + level.slice(1)}</option>)}
+          {antigravityReasoningLevels(antigravityModel).map((level) => <option key={level} value={level}>{t(REASONING_LABEL_KEY[level])}</option>)}
         </select>
       </label>}
 
@@ -1411,7 +1407,7 @@ function AntigravityPanel(): JSX.Element {
       >
         {checking && t('settings.checkingName', { name: 'Antigravity' })}
         {!checking && !check && t('settings.notCheckedYet')}
-        {!checking && check && !check.installed && `✗ ${check.error ?? 'Antigravity not found.'}`}
+        {!checking && check && !check.installed && `✗ ${check.error ?? t('settings.cliNotFound', { name: 'Antigravity' })}`}
         {!checking && check && check.installed && (
           <>
             {check.loggedIn ? '✓' : '⚠'} {check.version ?? 'Antigravity'} ·{' '}

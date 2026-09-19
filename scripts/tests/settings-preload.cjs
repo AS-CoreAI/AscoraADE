@@ -12,7 +12,7 @@ const config = { ...contract.exports.DEFAULT_LLM_CONFIG, ...JSON.parse(localStor
 const status = { state: 'ready', port: 20128, version: '3.8.48', baseUrl: 'http://127.0.0.1:20128/v1', logsPath: '' }
 const values = JSON.parse(localStorage.getItem('settings-smoke') || '{"appearance.language":"ru"}')
 const save = () => localStorage.setItem('settings-smoke', JSON.stringify(values))
-const usage = { ok: true, loggedIn: true, windows: [{ label: '5 часов', percent: 32, severity: 'normal', resetsAt: '2026-09-19T18:00:00Z' }] }
+const usage = { ok: true, loggedIn: true, windows: [{ label: 'session limit', percent: 32, severity: 'normal', resetsAt: '2026-09-19T18:00:00Z' }] }
 const missing = new Set(['gemini'])
 const fixture = window.settingsFixture = { signedOut: ['copilot'], checkFailures: [], usageFailures: [], percent: 32, emit: null, finish: null,
   unslothModels: ['unsloth-fixture/model-a', 'unsloth-fixture/model-b'], modelRequests: [], analytics: [] }
