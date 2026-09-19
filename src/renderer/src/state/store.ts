@@ -1,3 +1,4 @@
+import type { SettingsSection } from '@/lib/providers'
 import { create } from 'zustand'
 import type {
   Workspace,
@@ -61,7 +62,7 @@ import { diffStat } from '@/lib/diff'
 import { solveZCodeCaptcha } from '@/lib/zcode-captcha'
 import { isLanguageCode, localeForLanguage, tr, type LanguageCode } from '@/language'
 
-export type View = 'home' | 'workspace' | 'blueprint' | 'analytics' | 'omniroute' | 'vpn'
+export type View = 'home' | 'workspace' | 'blueprint' | 'analytics' | 'omniroute' | 'vpn' | 'settings'
 /** Agent permission mode — mirrors ZCode's "Ask before changes" control. */
 export type AgentMode = 'ask' | 'auto'
 export type Connection = 'unknown' | 'connecting' | 'connected' | 'error'
@@ -1393,6 +1394,12 @@ interface AppState {
   omnirouteModel: string
   omnirouteStatus: OmnirouteStatus
   settingsOpen: boolean
+  settingsSection: SettingsSection
+  settingsProvider: LlmProvider
+  settingsReturnView: View
+  providerVisibility: Partial<Record<LlmProvider, boolean>>
+  openSettings: (section?: SettingsSection, provider?: LlmProvider) => void
+  setProviderVisible: (provider: LlmProvider, visible: boolean) => Promise<void>
   /** Whether the Claude usage breakdown modal is open. */
   usageOpen: boolean
   themePreference: ThemePreference
@@ -1803,8 +1810,7 @@ export const useApp = create<AppState>((set, get) => {
     else if (provider === 'antigravity') await get().checkAntigravity()
     else if (provider === 'wprovider') await get().checkWProvider()
     else if (provider === 'omniroute') {
-      await get().ensureOmniroute()
-      if (get().omnirouteStatus.state === 'ready') await get().refreshModels()
+      void get().startOmniroute()
     }
     else await get().refreshModels()
   }
@@ -1930,6 +1936,10 @@ export const useApp = create<AppState>((set, get) => {
     logsPath: ''
   },
   settingsOpen: false,
+  settingsSection: 'appearance',
+  settingsProvider: 'codex',
+  settingsReturnView: 'home',
+  providerVisibility: {},
   usageOpen: false,
   themePreference: 'dark',
   resolvedTheme: 'dark',
@@ -1976,7 +1986,8 @@ export const useApp = create<AppState>((set, get) => {
       savedTaskLlm,
       savedSidebar,
       savedSkills,
-      savedSsh
+      savedSsh,
+      savedProviderVisibility
     ] = await Promise.all([
         api.workspace.list(),
         api.llm.config(),
@@ -1988,7 +1999,8 @@ export const useApp = create<AppState>((set, get) => {
         api.settings.get<Record<string, WorkspaceLlm>>('task.llm'),
         api.settings.get<boolean>('sidebar.collapsed'),
         api.settings.get<Skill[]>('skills'),
-        api.settings.get<SshConnection[]>('ssh.connections')
+        api.settings.get<SshConnection[]>('ssh.connections'),
+        api.settings.get<Partial<Record<LlmProvider, boolean>>>('providers.visibility')
       ])
     const omnirouteStatus = await omnirouteStatusPromise
     const workspaceOrder = Array.isArray(savedOrder) ? savedOrder : []
@@ -2011,6 +2023,7 @@ export const useApp = create<AppState>((set, get) => {
       ].map(async (id) => [id, await api.workspace.tasks(id)] as const)
     )
     set({
+      providerVisibility: savedProviderVisibility && typeof savedProviderVisibility === 'object' ? savedProviderVisibility : {},
       workspaces: ordered,
       workspaceOrder,
       collapsedWorkspaces,
@@ -3130,8 +3143,7 @@ export const useApp = create<AppState>((set, get) => {
     else if (provider === 'antigravity') await get().checkAntigravity()
     else if (provider === 'wprovider') await get().checkWProvider()
     else if (provider === 'omniroute') {
-      await get().ensureOmniroute()
-      if (get().omnirouteStatus.state === 'ready') await get().refreshModels()
+      void get().startOmniroute()
     }
     else await get().refreshModels()
   },
@@ -3649,11 +3661,11 @@ export const useApp = create<AppState>((set, get) => {
   async ensureOmniroute() {
     const known = get().omnirouteStatus
     if (known.state === 'ready') return known
-    set({ connection: 'connecting', connectionError: undefined })
+    if (get().provider === 'omniroute') set({ connection: 'connecting', connectionError: undefined })
     const status = await api.omniroute.start()
     set({
       omnirouteStatus: status,
-      ...(status.state === 'error'
+      ...(get().provider === 'omniroute' && status.state === 'error'
         ? { connection: 'error' as const, connectionError: status.error }
         : {})
     })
@@ -3701,8 +3713,25 @@ export const useApp = create<AppState>((set, get) => {
     await applyLlm(get().workspaceLlm[workspaceId])
   },
 
+  openSettings(section = 'appearance', provider) {
+    set((state) => ({
+      settingsReturnView: state.view === 'settings' ? state.settingsReturnView : state.view,
+      settingsSection: section,
+      settingsProvider: provider ?? state.provider,
+      settingsOpen: true,
+      view: 'settings'
+    }))
+  },
+
   setSettingsOpen(open) {
-    set({ settingsOpen: open })
+    if (open) get().openSettings('providers')
+    else set({ settingsOpen: false, view: get().settingsReturnView })
+  },
+
+  async setProviderVisible(provider, visible) {
+    const providerVisibility = { ...get().providerVisibility, [provider]: visible }
+    set({ providerVisibility })
+    await api.settings.set('providers.visibility', providerVisibility)
   },
 
   setUsageOpen(open) {

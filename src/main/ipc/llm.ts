@@ -174,9 +174,11 @@ export function registerLlmHandlers(): void {
     getClient() // refresh the cached client with the new config
   })
 
-  ipcMain.handle(IPC.llm.listModels, async (): Promise<ListModelsResult> => {
+  ipcMain.handle(IPC.llm.listModels, async (_event, provider?: LlmProvider): Promise<ListModelsResult> => {
     try {
-      const models = await getClient().listModels()
+      if (provider && !['lmstudio', 'ollama', 'openrouter', 'omniroute'].includes(provider)) throw new Error('Unsupported model provider')
+      const probe = provider ? new LmStudioClient({ ...readConfig(), provider }) : getClient()
+      const models = await probe.listModels(AbortSignal.timeout(15_000))
       return { ok: true, models }
     } catch (err) {
       return { ok: false, error: errorMessage(err) }

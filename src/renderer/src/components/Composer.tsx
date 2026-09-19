@@ -267,8 +267,8 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
   const setOllamaModel = useApp((s) => s.setOllamaModel)
   const lmStudioReachable = useApp((s) => s.lmStudioReachable)
   const ollamaReachable = useApp((s) => s.ollamaReachable)
-  const openRouterEnabled = useApp((s) => s.openRouterEnabled)
-  const openRouterApiKey = useApp((s) => s.openRouterApiKey)
+  const providerVisibility = useApp((s) => s.providerVisibility)
+  const openSettings = useApp((s) => s.openSettings)
   const openRouterModel = useApp((s) => s.openRouterModel)
   const setOpenRouterModel = useApp((s) => s.setOpenRouterModel)
   const codexModel = useApp((s) => s.codexModel)
@@ -340,7 +340,6 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
   const attachmentPathsRef = useRef(new Set<string>())
   const attachmentSourcesRef = useRef(new Set<string>())
 
-  const openRouterReady = openRouterEnabled && openRouterApiKey.trim().length > 0
   const lmStudioUnavailable = !lmStudioReachable
   const ollamaUnavailable = !ollamaReachable
   const cantWorkFromSsh = t('composer.cantWorkFromSsh')
@@ -361,16 +360,7 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
       disabled: ollamaUnavailable || blockedBySsh('ollama'),
       tooltip: sshBlockedTitle('ollama') ?? (ollamaUnavailable ? t('composer.ollamaNotRunning') : undefined)
     },
-    ...(openRouterReady
-      ? [
-          {
-            value: 'openrouter' as const,
-            label: 'OpenRouter',
-            disabled: blockedBySsh('openrouter'),
-            tooltip: sshBlockedTitle('openrouter')
-          }
-        ]
-      : []),
+    { value: 'openrouter', label: 'OpenRouter', disabled: blockedBySsh('openrouter'), tooltip: sshBlockedTitle('openrouter') },
     { value: 'omniroute', label: 'OmniRoute' },
     {
       value: 'codex',
@@ -790,11 +780,15 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
 
         <ProviderSelect
           value={provider}
-          options={providerOptions}
+          options={providerOptions.filter((option) => providerVisibility[option.value] !== false)}
           onChange={(next) => {
             if (blockedBySsh(next)) return
             if (next === 'lmstudio' && lmStudioUnavailable) return
             if (next === 'ollama' && ollamaUnavailable) return
+            if (next === 'openrouter' && (!useApp.getState().openRouterEnabled || !useApp.getState().openRouterApiKey.trim())) {
+              openSettings('providers', next)
+              return
+            }
             void setProvider(next)
           }}
           className="composer-select"

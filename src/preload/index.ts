@@ -234,7 +234,7 @@ const api = {
     config: (): Promise<LlmConfig> => ipcRenderer.invoke(IPC.llm.config),
     setConfig: (patch: Partial<LlmConfig>): Promise<void> =>
       ipcRenderer.invoke(IPC.llm.setConfig, patch),
-    listModels: (): Promise<ListModelsResult> => ipcRenderer.invoke(IPC.llm.listModels),
+    listModels: (provider?: import('@shared/ipc').LlmProvider): Promise<ListModelsResult> => ipcRenderer.invoke(IPC.llm.listModels, provider),
     /** Probe whether the local LM Studio server is reachable, regardless of the
      *  active provider — drives showing/hiding LM Studio in the backend list. */
     checkLmStudio: (): Promise<boolean> => ipcRenderer.invoke(IPC.llm.checkLmStudio),
@@ -519,6 +519,11 @@ const api = {
       ipcRenderer.on(IPC.terminal.exit, listener)
       return () => ipcRenderer.removeListener(IPC.terminal.exit, listener)
     }
+  },
+  providerSetup: {
+    credits: (provider: import('@shared/ipc').LlmProvider): Promise<import('@shared/provider-setup').ProviderCreditInfo> => ipcRenderer.invoke(IPC.providerSetup.credits, provider),
+    inspect: (provider: import('@shared/ipc').LlmProvider): Promise<import('@shared/provider-setup').ProviderSoftwareInfo> => ipcRenderer.invoke(IPC.providerSetup.inspect, provider),
+    install: (provider: import('@shared/ipc').LlmProvider): Promise<import('@shared/provider-setup').ProviderInstallResult> => ipcRenderer.invoke(IPC.providerSetup.install, provider)
   },
   developerTools: {
     inspect: (): Promise<DeveloperToolsInfo> => ipcRenderer.invoke(IPC.developerTools.inspect),

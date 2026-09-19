@@ -111,7 +111,10 @@ async function fetchJson(url, init = {}, timeoutMs = 5000) {
 
 if (!existsSync(MANIFEST)) fail(`no vendored tree at ${OUT} — run: npm run omniroute:vendor`)
 const manifest = JSON.parse(readFileSync(MANIFEST, 'utf8'))
-const entry = join(OUT, manifest.entry)
+const cliEntry = join(OUT, manifest.entry)
+const packageRoot = join(dirname(cliEntry), '..')
+const serverEntry = ['dist', 'app'].flatMap((folder) => ['server-ws.mjs', 'server.js'].map((file) => join(packageRoot, folder, file))).find(existsSync)
+const entry = process.argv.includes('--cli') ? cliEntry : serverEntry || cliEntry
 if (!existsSync(entry)) fail(`manifest entry ${manifest.entry} is missing`)
 
 const require = createRequire(import.meta.url)
@@ -131,7 +134,7 @@ log(`spawning ${manifest.name}@${manifest.version} on ${base} (data: ${dataDir})
 
 function spawnSidecar() {
   exited = false
-  const spawned = spawn(electronBin, [entry, 'serve', '--no-open'], {
+  const spawned = spawn(electronBin, entry === cliEntry ? [entry, 'serve', '--no-open'] : [entry], {
     cwd: OUT,
     windowsHide: true,
     detached: process.platform !== 'win32',
@@ -171,7 +174,7 @@ async function waitForHealth(label) {
     } catch {
       /* not up yet */
     }
-    await new Promise((r) => setTimeout(r, 750))
+    await new Promise((r) => setTimeout(r, 250))
   }
   const diagnostic = lastResponse
     ? `; last response ${lastResponse.status}: ${JSON.stringify(lastResponse.body).slice(0, 800)}`
@@ -272,7 +275,7 @@ if (!sentinel && !(await settingsRoundTrip())) {
 // DATA_DIR and encryption key.
 stopChild()
 child = null
-await new Promise((r) => setTimeout(r, 750))
+await new Promise((r) => setTimeout(r, 250))
 log('restarting against the same data directory…')
 spawnSidecar()
 await waitForHealth('second boot')

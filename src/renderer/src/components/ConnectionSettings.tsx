@@ -1,7 +1,6 @@
-import { useEffect, useState, type JSX } from 'react'
+import { useEffect, useRef, useState, type JSX } from 'react'
 import { Icon } from './Icon'
 import { api } from '@/lib/api'
-import { ProviderSelect, type ProviderSelectOption } from './ProviderSelect'
 import {
   CODEX_MODEL_PRESETS,
   COPILOT_MODEL_PRESETS,
@@ -25,7 +24,6 @@ import {
   DEFAULT_LLM_CONFIG,
   WPROVIDER_SERVICES,
   WPROVIDER_SERVICE_INFO,
-  isSshCapableProvider,
   CODEX_REASONING_LEVELS,
   COPILOT_PERMISSION_MODES,
   COPILOT_REASONING_LEVELS,
@@ -130,15 +128,43 @@ function useCliAuth(
   return { busy, status, signIn, signOut }
 }
 
+function useProviderModels(provider: LlmProvider) {
+  const configKey = useApp((s) => provider === 'openrouter' ? `${s.openRouterEnabled}:${s.openRouterApiKey}`
+    : provider === 'lmstudio' ? s.baseUrl : provider === 'ollama' ? s.ollamaBaseUrl : s.omnirouteStatus.state)
+  const request = useRef(0)
+  const [models, setModels] = useState<string[]>([])
+  const [connection, setConnection] = useState('unknown')
+  const [connectionError, setConnectionError] = useState<string>()
+  const refreshModels = async (): Promise<void> => {
+    const id = ++request.current
+    setConnection('connecting')
+    try {
+      const result = await api.llm.listModels(provider)
+      if (id !== request.current) return
+      setModels(result.ok ? (result.models ?? []).map((model) => model.id) : [])
+      setConnection(result.ok ? 'connected' : 'error')
+      setConnectionError(result.error)
+    } catch (error) {
+      if (id !== request.current) return
+      setConnection('error')
+      setConnectionError(String(error))
+    }
+    if (useApp.getState().provider === provider) void useApp.getState().refreshModels()
+  }
+  useEffect(() => {
+    if (provider !== 'omniroute') void refreshModels()
+    return () => { request.current += 1 }
+  }, [provider, configKey])
+  return { models, connection, connectionError, refreshModels }
+}
+
 function LmStudioPanel(): JSX.Element {
+  const { models, connection, connectionError, refreshModels } = useProviderModels('lmstudio')
   const t = useT()
   const baseUrl = useApp((s) => s.baseUrl)
   const setBaseUrl = useApp((s) => s.setBaseUrl)
   const model = useApp((s) => s.model)
-  const models = useApp((s) => s.models)
   const setModel = useApp((s) => s.setModel)
-  const connection = useApp((s) => s.connection)
-  const connectionError = useApp((s) => s.connectionError)
 
   const [url, setUrl] = useState(baseUrl)
   const [testing, setTesting] = useState(false)
@@ -146,6 +172,7 @@ function LmStudioPanel(): JSX.Element {
   const test = async (): Promise<void> => {
     setTesting(true)
     await setBaseUrl(url.trim() || DEFAULT_LLM_CONFIG.baseUrl)
+    await refreshModels()
     setTesting(false)
   }
 
@@ -202,14 +229,12 @@ function LmStudioPanel(): JSX.Element {
 }
 
 function OllamaPanel(): JSX.Element {
+  const { models, connection, connectionError, refreshModels } = useProviderModels('ollama')
   const t = useT()
   const ollamaBaseUrl = useApp((s) => s.ollamaBaseUrl)
   const setOllamaBaseUrl = useApp((s) => s.setOllamaBaseUrl)
   const ollamaModel = useApp((s) => s.ollamaModel)
-  const models = useApp((s) => s.models)
   const setOllamaModel = useApp((s) => s.setOllamaModel)
-  const connection = useApp((s) => s.connection)
-  const connectionError = useApp((s) => s.connectionError)
 
   const [url, setUrl] = useState(ollamaBaseUrl)
   const [testing, setTesting] = useState(false)
@@ -217,6 +242,7 @@ function OllamaPanel(): JSX.Element {
   const test = async (): Promise<void> => {
     setTesting(true)
     await setOllamaBaseUrl(url.trim() || DEFAULT_LLM_CONFIG.ollamaBaseUrl)
+    await refreshModels()
     setTesting(false)
   }
 
@@ -301,14 +327,13 @@ function omniConnections(body: unknown): OmniRouteProviderConnection[] {
 }
 
 function OmniRoutePanel(): JSX.Element {
+  const { models, refreshModels } = useProviderModels('omniroute')
   const t = useT()
   const status = useApp((s) => s.omnirouteStatus)
   const model = useApp((s) => s.omnirouteModel)
-  const models = useApp((s) => s.models)
   const setModel = useApp((s) => s.setOmnirouteModel)
   const start = useApp((s) => s.startOmniroute)
   const stop = useApp((s) => s.stopOmniroute)
-  const refreshModels = useApp((s) => s.refreshModels)
   const openOmniroutePage = useApp((s) => s.openOmniroutePage)
   const [connections, setConnections] = useState<OmniRouteProviderConnection[]>([])
   const [busy, setBusy] = useState<string | null>(null)
@@ -324,7 +349,7 @@ function OmniRoutePanel(): JSX.Element {
   }
 
   useEffect(() => {
-    if (status.state === 'ready') void loadConnections()
+    if (status.state === 'ready') { void loadConnections(); void refreshModels() }
     else setConnections([])
     // The loader only depends on the sidecar transition; form state should not
     // cause admin requests while the user is typing.
@@ -1562,9 +1587,10 @@ function OpenRouterSetup(): JSX.Element {
   const save = async (): Promise<void> => {
     const normalized = normalizeOpenRouterApiKey(apiKey)
     setSaving(true)
-    await setOpenRouterApiKey(normalized)
-    setApiKey(normalized)
-    setSaving(false)
+    try {
+      await setOpenRouterApiKey(normalized)
+      setApiKey(normalized)
+    } finally { setSaving(false) }
   }
 
   return (
@@ -1607,13 +1633,10 @@ function OpenRouterSetup(): JSX.Element {
 }
 
 function OpenRouterPanel(): JSX.Element {
+  const { models, connection, connectionError, refreshModels } = useProviderModels('openrouter')
   const t = useT()
   const openRouterModel = useApp((s) => s.openRouterModel)
   const setOpenRouterModel = useApp((s) => s.setOpenRouterModel)
-  const models = useApp((s) => s.models)
-  const connection = useApp((s) => s.connection)
-  const connectionError = useApp((s) => s.connectionError)
-  const refreshModels = useApp((s) => s.refreshModels)
 
   const modelOptions = openRouterModelOptions(models, openRouterModel)
 
@@ -1651,148 +1674,22 @@ function OpenRouterPanel(): JSX.Element {
   )
 }
 
-export function ConnectionSettings(): JSX.Element | null {
-  const t = useT()
-  const open = useApp((s) => s.settingsOpen)
-  const setOpen = useApp((s) => s.setSettingsOpen)
-  const provider = useApp((s) => s.provider)
-  const setProvider = useApp((s) => s.setProvider)
-  const activeSsh = useApp((s) => s.activeSsh)
-  const lmStudioReachable = useApp((s) => s.lmStudioReachable)
-  const ollamaReachable = useApp((s) => s.ollamaReachable)
-  const lmStudioUnavailable = !lmStudioReachable
-  const ollamaUnavailable = !ollamaReachable
-  const cantWorkFromSsh = t('composer.cantWorkFromSsh')
-  const blockedBySsh = (next: LlmProvider): boolean =>
-    !!activeSsh && !isSshCapableProvider(next)
-  const sshBlockedTitle = (next: LlmProvider): string | undefined =>
-    blockedBySsh(next) ? cantWorkFromSsh : undefined
-  const providerOptions: ProviderSelectOption[] = [
-    {
-      value: 'lmstudio',
-      label: t('settings.providerLmStudio'),
-      disabled: lmStudioUnavailable,
-      tooltip: lmStudioUnavailable ? t('composer.lmStudioNotRunning') : undefined
-    },
-    {
-      value: 'ollama',
-      label: t('settings.providerOllama'),
-      disabled: ollamaUnavailable || blockedBySsh('ollama'),
-      tooltip: sshBlockedTitle('ollama') ?? (ollamaUnavailable ? t('composer.ollamaNotRunning') : undefined)
-    },
-    {
-      value: 'openrouter',
-      label: t('settings.providerOpenRouter'),
-      disabled: blockedBySsh('openrouter'),
-      tooltip: sshBlockedTitle('openrouter')
-    },
-    {
-      value: 'omniroute',
-      label: t('settings.providerOmniroute')
-    },
-    {
-      value: 'codex',
-      label: t('settings.providerCodex'),
-      disabled: blockedBySsh('codex'),
-      tooltip: sshBlockedTitle('codex')
-    },
-    {
-      value: 'copilot',
-      label: t('settings.providerCopilot'),
-      disabled: blockedBySsh('copilot'),
-      tooltip: sshBlockedTitle('copilot')
-    },
-    {
-      value: 'claude',
-      label: t('settings.providerClaude'),
-      disabled: blockedBySsh('claude'),
-      tooltip: sshBlockedTitle('claude')
-    },
-    {
-      value: 'gemini',
-      label: t('settings.providerGemini'),
-      disabled: blockedBySsh('gemini'),
-      tooltip: sshBlockedTitle('gemini')
-    },
-    {
-      value: 'grok',
-      label: t('settings.providerGrok'),
-      disabled: blockedBySsh('grok'),
-      tooltip: sshBlockedTitle('grok')
-    },
-    {
-      value: 'glm',
-      label: t('settings.providerGlm'),
-      disabled: blockedBySsh('glm'),
-      tooltip: sshBlockedTitle('glm')
-    },
-    {
-      value: 'antigravity',
-      label: 'Antigravity (Google)',
-      disabled: blockedBySsh('antigravity'),
-      tooltip: sshBlockedTitle('antigravity')
-    },
-    { value: 'wprovider', label: t('settings.providerWProvider') }
-  ]
-
-  if (!open) return null
-
+/** Provider forms are independent of the backend selected in the chat. */
+export function ConnectionSettings({ provider }: { provider: LlmProvider }): JSX.Element {
   return (
-    <div className="modal-backdrop" onClick={() => setOpen(false)}>
-      <div className="modal connection-settings-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          {t('settings.agentBackend')}
-          <button className="modal-close" onClick={() => setOpen(false)} title={t('common.close')}>
-            <Icon name="x" size={15} />
-          </button>
-        </div>
-
-        <div className="modal-body">
-          <label className="field">
-            <span className="field-label">{t('common.provider')}</span>
-            <ProviderSelect
-              value={provider}
-              options={providerOptions}
-              onChange={(next) => {
-                if (blockedBySsh(next)) return
-                if (next === 'lmstudio' && lmStudioUnavailable) return
-                if (next === 'ollama' && ollamaUnavailable) return
-                void setProvider(next)
-              }}
-              className="text-input"
-              ariaLabel={t('composer.agentBackend')}
-            />
-          </label>
-
-          {provider === 'openrouter' && <OpenRouterSetup />}
-
-          {provider === 'codex' ? (
-            <CodexPanel />
-          ) : provider === 'ollama' ? (
-            <OllamaPanel />
-          ) : provider === 'copilot' ? (
-            <CopilotPanel />
-          ) : provider === 'claude' ? (
-            <ClaudePanel />
-          ) : provider === 'gemini' ? (
-            <GeminiPanel />
-          ) : provider === 'grok' ? (
-            <GrokPanel />
-          ) : provider === 'glm' ? (
-            <GlmPanel />
-          ) : provider === 'antigravity' ? (
-            <AntigravityPanel />
-          ) : provider === 'wprovider' ? (
-            <WProviderPanel />
-          ) : provider === 'omniroute' ? (
-            <OmniRoutePanel />
-          ) : provider === 'openrouter' ? (
-            <OpenRouterPanel />
-          ) : (
-            <LmStudioPanel />
-          )}
-        </div>
-      </div>
+    <div className="provider-settings-form">
+      {provider === 'openrouter' && <OpenRouterSetup />}
+      {provider === 'codex' ? <CodexPanel />
+        : provider === 'ollama' ? <OllamaPanel />
+        : provider === 'copilot' ? <CopilotPanel />
+        : provider === 'claude' ? <ClaudePanel />
+        : provider === 'gemini' ? <GeminiPanel />
+        : provider === 'grok' ? <GrokPanel />
+        : provider === 'glm' ? <GlmPanel />
+        : provider === 'antigravity' ? <AntigravityPanel />
+        : provider === 'wprovider' ? <WProviderPanel />
+        : provider === 'omniroute' ? <OmniRoutePanel />
+        : provider === 'openrouter' ? <OpenRouterPanel /> : <LmStudioPanel />}
     </div>
   )
 }

@@ -7,6 +7,7 @@
  */
 
 export const IPC = {
+  providerSetup: { inspect: 'provider-setup:inspect', install: 'provider-setup:install', credits: 'provider-setup:credits' },
   window: {
     minimize: 'window:minimize',
     maximizeToggle: 'window:maximizeToggle',

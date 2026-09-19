@@ -2,7 +2,6 @@ import { app } from 'electron'
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
 import {
-  cpSync,
   createWriteStream,
   existsSync,
   mkdirSync,
@@ -12,9 +11,10 @@ import {
   statSync,
   type WriteStream
 } from 'node:fs'
+import { cp } from 'node:fs/promises'
 import { request as httpRequest } from 'node:http'
 import { createConnection, createServer } from 'node:net'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import type { OmnirouteStatus } from '../../shared/ipc'
 import { getStore } from '../store'
 
@@ -31,7 +31,7 @@ import { getStore } from '../store'
  */
 
 const PORT_CANDIDATES = [20128, 20129, 20130, 20131, 20132]
-const HEALTH_INTERVAL_MS = 750
+const HEALTH_INTERVAL_MS = 250
 const HEALTH_PROBE_TIMEOUT_MS = 2000
 /** Upstream's own first-boot window: initial migrations can take minutes. */
 const BOOT_BUDGET_MS = 180_000
@@ -284,7 +284,7 @@ function storageKey(): string {
 }
 
 /** One-time data backup when the bundled OmniRoute version changes. */
-function backupDataOnVersionChange(version: string): void {
+async function backupDataOnVersionChange(version: string): Promise<void> {
   const store = getStore()
   const last = store.getSetting<string>('omniroute.lastVersion')
   if (last && last !== version) {
@@ -292,7 +292,7 @@ function backupDataOnVersionChange(version: string): void {
     const backupDir = join(dataRoot(), `data-backup-${last}`)
     if (existsSync(dataDir) && !existsSync(backupDir)) {
       try {
-        cpSync(dataDir, backupDir, { recursive: true })
+        await cp(dataDir, backupDir, { recursive: true })
       } catch {
         /* best-effort safety net */
       }
@@ -310,6 +310,10 @@ function sidecarEnv(port: number): NodeJS.ProcessEnv {
     // process.execPath) only — never to our own GUI process.
     ELECTRON_RUN_AS_NODE: '1',
     OMNIROUTE_SERVER_HOST: '127.0.0.1',
+    HOSTNAME: '127.0.0.1',
+    OMNIROUTE_PORT: String(port),
+    API_PORT: String(port),
+    DASHBOARD_PORT: String(port),
     PORT: String(port),
     DATA_DIR: join(dataRoot(), 'data'),
     REQUIRE_API_KEY: 'false',
@@ -349,6 +353,7 @@ function nativeFetch(url: string, options: any = {}): Promise<any> {
 async function waitForHealth(port: number): Promise<void> {
   const startedAt = Date.now()
   while (Date.now() - startedAt < BOOT_BUDGET_MS) {
+    if (sidecar.intentionalStop) throw new Error('OmniRoute startup cancelled')
     if (sidecar.child === null || sidecar.child.exitCode !== null) {
       throw new Error(`sidecar exited during startup\n${ringTail(20)}`)
     }
@@ -452,9 +457,11 @@ export function startOmniroute(): Promise<OmnirouteStatus> {
     sidecar.intentionalStop = false
     sidecar.startAttemptAt = Date.now()
 
+    setPhase('starting')
     try {
-      backupDataOnVersionChange(manifest.version)
+      await backupDataOnVersionChange(manifest.version)
       const port = await pickPort()
+      if (sidecar.intentionalStop) throw new Error('OmniRoute startup cancelled')
       sidecar.port = port
       setPhase('starting')
 
@@ -462,7 +469,13 @@ export function startOmniroute(): Promise<OmnirouteStatus> {
       openLog()
       captureOutput(`<starting omniroute@${manifest.version} on 127.0.0.1:${port}>\n`)
 
-      const child = spawn(process.execPath, [entry, 'serve', '--no-open'], {
+      // Launch the built server directly. Ascora already supervises it; loading
+      // the upstream CLI adds a TS loader, every CLI command and a second supervisor.
+      const packageRoot = join(dirname(entry), '..')
+      const serverEntry = ['dist', 'app'].flatMap((folder) =>
+        ['server-ws.mjs', 'server.js'].map((file) => join(packageRoot, folder, file))
+      ).find((file) => existsSync(file))
+      const child = spawn(process.execPath, serverEntry ? [serverEntry] : [entry, 'serve', '--no-open'], {
         cwd: omnirouteRoot(),
         windowsHide: true,
         // POSIX: own process group so the whole tree can be signalled at once.
@@ -474,17 +487,21 @@ export function startOmniroute(): Promise<OmnirouteStatus> {
       child.stdout.on('data', (chunk: string) => captureOutput(chunk))
       child.stderr.on('data', (chunk: string) => captureOutput(chunk))
       sidecar.child = child
+      child.on('error', (error) => { captureOutput(`${error.message}\n`); if (sidecar.child === child) sidecar.child = null })
       attachExitHandler(child)
 
       await waitForHealth(port)
       await disableManagementLogin(port)
+      if (sidecar.intentionalStop) throw new Error('OmniRoute startup cancelled')
+      captureOutput(`<ready in ${Date.now() - sidecar.startAttemptAt}ms>\n`)
 
       getStore().setSetting('omniroute.port', port)
       setPhase('ready')
       return currentStatus()
     } catch (err) {
       await killChildAndWait()
-      setPhase('error', err instanceof Error ? err.message : String(err))
+      if (sidecar.intentionalStop) setPhase('stopped')
+      else setPhase('error', err instanceof Error ? err.message : String(err))
       return currentStatus()
     }
   })().finally(() => {
@@ -565,6 +582,7 @@ export function stopOmniroute(): Promise<void> {
   }
   const promise = (async (): Promise<void> => {
     await killChildAndWait()
+    await sidecar.startPromise
     sidecar.child = null
     closeLog()
     if (sidecar.phase !== 'stopped') setPhase('stopped')

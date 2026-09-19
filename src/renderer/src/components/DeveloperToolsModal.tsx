@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState, type JSX } from 'react'
-import { createPortal } from 'react-dom'
 import type {
   DeveloperToolId,
   DeveloperToolsInfo,
@@ -10,11 +9,6 @@ import { Icon } from './Icon'
 import { api } from '@/lib/api'
 import { tr, type TranslationKey } from '@/language'
 import { useApp } from '@/state/store'
-
-interface DeveloperToolsModalProps {
-  open: boolean
-  onClose: () => void
-}
 
 interface ToolDefinition {
   id: DeveloperToolId
@@ -150,7 +144,7 @@ function commandFor(
   return tool.linux[linuxManager(manager)]
 }
 
-export function DeveloperToolsModal({ open, onClose }: DeveloperToolsModalProps): JSX.Element | null {
+export function DeveloperToolsPage(): JSX.Element {
   const language = useApp((state) => state.appLanguage)
   const t = (key: TranslationKey, values?: Record<string, string | number>): string =>
     tr(language, key, values)
@@ -183,19 +177,9 @@ export function DeveloperToolsModal({ open, onClose }: DeveloperToolsModalProps)
   }
 
   useEffect(() => {
-    if (!open) return
     setPlatform(currentPlatform)
     void refresh()
-  }, [open])
-
-  useEffect(() => {
-    if (!open) return
-    const closeOnEscape = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape' && !busy) onClose()
-    }
-    document.addEventListener('keydown', closeOnEscape)
-    return () => document.removeEventListener('keydown', closeOnEscape)
-  }, [busy, onClose, open])
+  }, [])
 
   const installable = platform === currentPlatform && info?.available === true
   const missingIds = useMemo(
@@ -242,38 +226,14 @@ export function DeveloperToolsModal({ open, onClose }: DeveloperToolsModalProps)
     }
   }
 
-  if (!open) return null
-
-  return createPortal(
-    <div
-      className="modal-backdrop tools-modal-backdrop"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget && !busy) onClose()
-      }}
-    >
-      <section
-        className="modal tools-modal"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="developer-tools-title"
-        aria-describedby="developer-tools-description"
-        data-testid="developer-tools-modal"
-      >
+  return (
+      <section className="tools-settings-page" aria-labelledby="developer-tools-title">
         <header className="tools-modal-header">
           <span className="tools-modal-symbol"><Icon name="terminal" size={19} /></span>
           <div>
             <h2 id="developer-tools-title">{t('tools.title')}</h2>
             <p id="developer-tools-description">{t('tools.subtitle')}</p>
           </div>
-          <button
-            className="modal-close"
-            title={t('common.close')}
-            aria-label={t('common.close')}
-            disabled={busy}
-            onClick={onClose}
-          >
-            <Icon name="close" size={16} />
-          </button>
         </header>
 
         <div className="tools-platform-tabs" role="tablist" aria-label={t('tools.operatingSystem')}>
@@ -365,7 +325,5 @@ export function DeveloperToolsModal({ open, onClose }: DeveloperToolsModalProps)
           </button>
         </footer>
       </section>
-    </div>,
-    document.body
   )
 }

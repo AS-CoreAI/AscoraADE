@@ -1,3 +1,4 @@
+import { PROVIDERS } from '@/lib/providers'
 import { useEffect, useId, useRef, useState, type JSX } from 'react'
 import { Icon } from './Icon'
 import type { LlmProvider } from '@shared/ipc'
@@ -27,7 +28,7 @@ export function ProviderSelect({
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
   const listboxId = useId()
-  const selected = options.find((option) => option.value === value) ?? options[0]
+  const selected = options.find((option) => option.value === value)
 
   useEffect(() => {
     if (!open) return
@@ -66,7 +67,7 @@ export function ProviderSelect({
         aria-controls={listboxId}
         onClick={() => setOpen((current) => !current)}
       >
-        <span className="provider-select-label">{selected?.label ?? value}</span>
+        <span className="provider-select-label">{selected?.label ?? PROVIDERS.find((item) => item.id === value)?.name ?? value}</span>
         <Icon name="chevronDown" size={12} />
       </button>
       {open && (

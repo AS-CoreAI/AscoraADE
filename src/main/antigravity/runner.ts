@@ -65,6 +65,9 @@ export function resolveAntigravityPath(configured?: string): { path: string; fou
   // Standard install locations
   const candidates = [
     join(homedir(), '.gemini', 'antigravity', 'bin', 'agentapi.bat'),
+    join(homedir(), '.gemini', 'antigravity', 'bin', 'agentapi'),
+    '/Applications/Antigravity.app/Contents/Resources/app/bin/agentapi',
+    '/usr/share/antigravity/resources/app/bin/agentapi',
     process.env.LOCALAPPDATA &&
       join(process.env.LOCALAPPDATA, 'Programs', 'antigravity', 'resources', 'bin', 'language_server.exe')
   ].filter((c): c is string => !!c)
@@ -99,15 +102,6 @@ function bridgePath(): string {
 
 // ---------- install / auth probe ----------
 
-function authState(): { loggedIn: boolean; note: string } {
-  const oauthCreds = join(homedir(), '.gemini', 'oauth_creds.json')
-  const googleAccounts = join(homedir(), '.gemini', 'google_accounts.json')
-  if (existsSync(oauthCreds) || existsSync(googleAccounts)) {
-    return { loggedIn: true, note: 'Google OAuth credentials found (shared with Antigravity)' }
-  }
-  return { loggedIn: false, note: 'Sign in to Antigravity first, then try again' }
-}
-
 export async function checkAntigravity(configured?: string): Promise<CodexCheckResult> {
   const { path, found } = resolveAntigravityPath(configured)
   if (!found) {
@@ -126,19 +120,34 @@ export async function checkAntigravity(configured?: string): Promise<CodexCheckR
       ok: true,
       installed: false,
       path,
-      error: 'Python not found. Install Python 3 and the google-antigravity SDK (pip install google-antigravity).'
+      error: 'Python not found. Install Python 3 to run the Antigravity bridge.'
     }
   }
 
-  const auth = authState()
-  return {
-    ok: true,
-    installed: true,
-    path,
-    version: 'Antigravity',
-    loggedIn: auth.loggedIn,
-    authNote: auth.note
-  }
+  return new Promise((resolve) => {
+    const child = crossSpawn(python, [bridgePath(), '--check'], {
+      windowsHide: true,
+      env: { ...process.env, ANTIGRAVITY_AGENTAPI: path, PYTHONIOENCODING: 'utf-8' }
+    })
+    let output = ''
+    let detail = ''
+    const timer = setTimeout(() => killTree(child as ChildProcessWithoutNullStreams), 25_000)
+    child.stdout?.on('data', (data) => { output += String(data) })
+    child.stderr?.on('data', (data) => { detail = (detail + String(data)).slice(-2000) })
+    child.on('error', (error) => {
+      clearTimeout(timer)
+      resolve({ ok: false, installed: false, path, error: error.message })
+    })
+    child.on('close', () => {
+      clearTimeout(timer)
+      try {
+        const result = JSON.parse(output.trim()) as CodexCheckResult
+        resolve({ ...result, path, version: 'Antigravity' })
+      } catch {
+        resolve({ ok: false, installed: true, path, error: detail || 'Antigravity connection check timed out.' })
+      }
+    })
+  })
 }
 
 // ---------- run streaming ----------
@@ -177,7 +186,7 @@ function pickSession(o: Record<string, unknown>): string | undefined {
   const candidates = [o.sessionID, o.session_id, o.sessionId, obj(o.info).id, o.id]
   for (const c of candidates) {
     const s = str(c)
-    if (s.startsWith('agy_') || s.startsWith('sess_')) return s
+    if ((o.type === 'session' || s.startsWith('agy_') || s.startsWith('sess_')) && /^[a-zA-Z0-9_-]+$/.test(s)) return s
   }
   return undefined
 }
@@ -191,14 +200,35 @@ function pickUsage(o: Record<string, unknown>): TokenUsage | null {
 }
 
 function mapTool(name: string, input: Record<string, unknown>): Partial<CodexItem> & { type: string } {
-  const path = str(input.filePath) || str(input.file_path) || str(input.path)
-  if (name === 'Bash' || name === 'run_command') return { type: 'command_execution', command: str(input.command) }
+  const clean = (v: unknown): string => {
+    let s = str(v).trim()
+    if (s.startsWith('"') && s.endsWith('"') && s.length >= 2) {
+      try {
+        s = JSON.parse(s)
+      } catch {
+        /* keep original */
+      }
+    }
+    return s
+  }
+  const cmd = clean(input.CommandLine) || clean(input.command)
+  const path =
+    clean(input.AbsolutePath) ||
+    clean(input.TargetFile) ||
+    clean(input.DirectoryPath) ||
+    clean(input.SearchPath) ||
+    clean(input.filePath) ||
+    clean(input.file_path) ||
+    clean(input.path)
+  const pattern = clean(input.Pattern) || clean(input.Query) || clean(input.pattern)
+
+  if (name === 'Bash' || name === 'run_command') return { type: 'command_execution', command: cmd }
   if (['Edit', 'Write', 'edit_file', 'write_file', 'replace_file_content'].includes(name))
     return { type: 'file_change', changes: [{ path, kind: name.includes('rite') ? 'add' : 'update' }] }
-  if (name === 'Read' || name === 'read_file') return { type: 'read_file', text: path }
+  if (name === 'Read' || name === 'read_file' || name === 'view_file') return { type: 'read_file', text: path }
   if (['Grep', 'Glob', 'List', 'list_dir', 'find_by_name', 'grep_search'].includes(name))
-    return { type: 'list_dir', text: str(input.pattern) || str(input.path) || '.' }
-  const summary = str(input.command) || str(input.pattern) || path || str(input.url) || str(input.query)
+    return { type: 'list_dir', text: pattern || path || '.' }
+  const summary = clean(input.toolSummary) || cmd || pattern || path || clean(input.url) || clean(input.query)
   return { type: name.toLowerCase(), text: summary }
 }
 
@@ -210,7 +240,7 @@ export async function runAntigravity(
 ): Promise<CodexRunResult> {
   killRun(id)
 
-  const { found } = resolveAntigravityPath(config.antigravityPath)
+  const { path: agentapiPath, found } = resolveAntigravityPath(config.antigravityPath)
   if (!found) {
     return {
       ok: false,
@@ -222,7 +252,7 @@ export async function runAntigravity(
   if (!python) {
     return {
       ok: false,
-      error: 'Python not found. Install Python 3 and run: pip install google-antigravity'
+      error: 'Python not found. Install Python 3 to run the Antigravity bridge'
     }
   }
 
@@ -242,7 +272,7 @@ export async function runAntigravity(
       child = crossSpawn(python, args, {
         cwd: params.cwd,
         windowsHide: true,
-        env: { ...process.env, PYTHONUNBUFFERED: '1', NO_COLOR: '1' }
+        env: { ...process.env, ANTIGRAVITY_AGENTAPI: agentapiPath, PYTHONUNBUFFERED: '1', PYTHONIOENCODING: 'utf-8', NO_COLOR: '1' }
       }) as ChildProcessWithoutNullStreams
     } catch (err) {
       resolve({ ok: false, error: err instanceof Error ? err.message : String(err) })
@@ -336,7 +366,7 @@ export async function runAntigravity(
       rawStdout += chunk
       stdoutBuf += chunk
       let nl: number
-      while ((nl = stdoutBuf.indexOf('\\n')) >= 0) {
+      while ((nl = stdoutBuf.indexOf('\n')) >= 0) {
         const line = stdoutBuf.slice(0, nl).trim()
         stdoutBuf = stdoutBuf.slice(nl + 1)
         if (line) handleLine(line)
@@ -379,7 +409,7 @@ export async function runAntigravity(
       if (code === 0) {
         resolve({ ok: true, code, threadId: sessionId, usage })
       } else {
-        const reason = (rawStderr.trim() || rawStdout.trim()).split('\\n').slice(-6).join('\\n')
+        const reason = (rawStderr.trim() || rawStdout.trim()).split('\n').slice(-6).join('\n')
         resolve({ ok: false, code, threadId: sessionId, usage, error: reason || `Antigravity bridge exited with code ${code}` })
       }
     })

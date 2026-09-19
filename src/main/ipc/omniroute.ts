@@ -223,11 +223,10 @@ export function registerOmnirouteHandlers(): void {
     }
   })
 
-  // Warm start: if OmniRoute was the active provider last session, bring the
-  // sidecar up in the background so the first chat doesn't wait for boot.
-  if (getStore().getSetting<string>('llm.provider') === 'omniroute') {
-    void startOmniroute().catch(() => {
-      /* surfaced via status */
-    })
+  // Prewarm as soon as the window can render, independently of the chat provider.
+  // An explicitly hidden provider does not need a background process.
+  const visibility = getStore().getSetting<Record<string, boolean>>('providers.visibility')
+  if (visibility?.omniroute !== false) {
+    setImmediate(() => { void startOmniroute().catch(() => { /* surfaced via status */ }) })
   }
 }

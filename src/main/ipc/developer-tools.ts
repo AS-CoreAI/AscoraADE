@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron'
-import { spawn, spawnSync } from 'node:child_process'
+import { spawn, execFile } from 'node:child_process'
 import { accessSync, constants } from 'node:fs'
 import { getuid } from 'node:process'
 import {
@@ -111,27 +111,18 @@ const PACKAGES: Record<DeveloperToolsManager, Record<DeveloperToolId, string[]>>
   }
 }
 
-function commandWorks(file: string): boolean {
-  const result = spawnSync(file, ['--version'], {
-    encoding: 'utf8',
-    timeout: 2_000,
-    windowsHide: true
+function commandOutput(file: string, args: string[], timeout = 15_000): Promise<{ ok: boolean; output: string }> {
+  return new Promise((resolve) => {
+    execFile(file, args, { encoding: 'utf8', maxBuffer: 4 * 1024 * 1024, timeout, windowsHide: true },
+      (error, stdout, stderr) => resolve({ ok: !error, output: error ? '' : `${stdout}\n${stderr}`.toLowerCase() }))
   })
-  return !result.error && result.status === 0
 }
 
-function commandOutput(file: string, args: string[]): string {
-  const result = spawnSync(file, args, {
-    encoding: 'utf8',
-    maxBuffer: 4 * 1024 * 1024,
-    timeout: 15_000,
-    windowsHide: true
-  })
-  if (result.error || result.status !== 0) return ''
-  return `${result.stdout || ''}\n${result.stderr || ''}`.toLowerCase()
+async function commandWorks(file: string): Promise<boolean> {
+  return (await commandOutput(file, ['--version'], 2000)).ok
 }
 
-function executableFile(candidates: string[]): string | undefined {
+async function executableFile(candidates: string[]): Promise<string | undefined> {
   for (const candidate of candidates) {
     if (candidate.includes('/') || candidate.includes('\\')) {
       try {
@@ -141,15 +132,15 @@ function executableFile(candidates: string[]): string | undefined {
         continue
       }
     }
-    if (commandWorks(candidate)) return candidate
+    if (await commandWorks(candidate)) return candidate
   }
   return undefined
 }
 
-function managerChoice(): ManagerChoice | undefined {
+async function managerChoice(): Promise<ManagerChoice | undefined> {
   if (process.platform === 'win32') {
     const localAppData = process.env.LOCALAPPDATA
-    const winget = executableFile([
+    const winget = await executableFile([
       'winget',
       ...(localAppData ? [`${localAppData}\\Microsoft\\WindowsApps\\winget.exe`] : [])
     ])
@@ -157,7 +148,7 @@ function managerChoice(): ManagerChoice | undefined {
   }
 
   if (process.platform === 'darwin') {
-    const brew = executableFile(['/opt/homebrew/bin/brew', '/usr/local/bin/brew', 'brew'])
+    const brew = await executableFile(['/opt/homebrew/bin/brew', '/usr/local/bin/brew', 'brew'])
     return brew ? { name: 'brew', file: brew } : undefined
   }
 
@@ -167,27 +158,27 @@ function managerChoice(): ManagerChoice | undefined {
       ['dnf', 'dnf'],
       ['pacman', 'pacman']
     ] as const) {
-      if (commandWorks(file)) return { name, file }
+      if (await commandWorks(file)) return { name, file }
     }
   }
   return undefined
 }
 
-function installedPackages(manager?: ManagerChoice): string {
+async function installedPackages(manager?: ManagerChoice): Promise<string> {
   if (!manager) return ''
   if (manager.name === 'winget') {
-    return commandOutput(manager.file, ['list', '--disable-interactivity'])
+    return (await commandOutput(manager.file, ['list', '--disable-interactivity'])).output
   }
   if (manager.name === 'brew') {
-    return `${commandOutput(manager.file, ['list', '--formula'])}\n${commandOutput(manager.file, ['list', '--cask'])}`
+    return (await Promise.all([commandOutput(manager.file, ['list', '--formula']), commandOutput(manager.file, ['list', '--cask'])])).map((result) => result.output).join('\n')
   }
   if (manager.name === 'apt') {
-    return commandOutput('dpkg-query', ['-W', '-f=${binary:Package}\n'])
+    return (await commandOutput('dpkg-query', ['-W', '-f=${binary:Package}\n'])).output
   }
   if (manager.name === 'dnf') {
-    return commandOutput('rpm', ['-qa', '--qf', '%{NAME}\n'])
+    return (await commandOutput('rpm', ['-qa', '--qf', '%{NAME}\n'])).output
   }
-  return commandOutput(manager.file, ['-Qq'])
+  return (await commandOutput(manager.file, ['-Qq'])).output
 }
 
 function packageIsListed(packageList: string, name: string): boolean {
@@ -197,19 +188,19 @@ function packageIsListed(packageList: string, name: string): boolean {
   )
 }
 
-function inspectTools(): DeveloperToolsInfo {
-  const manager = managerChoice()
-  const packageList = installedPackages(manager)
+async function inspectTools(): Promise<DeveloperToolsInfo> {
+  const manager = await managerChoice()
+  const packageList = await installedPackages(manager)
   return {
     platform: process.platform,
     manager: manager?.name,
     available: !!manager,
-    tools: DEVELOPER_TOOL_IDS.map((id) => ({
+    tools: await Promise.all(DEVELOPER_TOOL_IDS.map(async (id) => ({
       id,
       installed:
-        TOOL_PROBES[id].some(commandWorks) ||
+        (await Promise.all(TOOL_PROBES[id].map(commandWorks))).some(Boolean) ||
         !!manager && PACKAGES[manager.name][id].some((name) => packageIsListed(packageList, name))
-    })),
+    }))),
     error: manager ? undefined : 'No supported package manager was found.'
   }
 }
@@ -262,7 +253,7 @@ async function installTools(requested: unknown): Promise<DeveloperToolsInstallRe
     return { ok: false, installed: [], failed: [], error: 'No valid tools were selected.' }
   }
 
-  const manager = managerChoice()
+  const manager = await managerChoice()
   if (!manager) {
     return {
       ok: false,

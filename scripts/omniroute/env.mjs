@@ -15,6 +15,10 @@ export function omnirouteEnvPins({ port, dataDir, storageKey }) {
   return {
     ELECTRON_RUN_AS_NODE: '1',
     OMNIROUTE_SERVER_HOST: '127.0.0.1',
+    HOSTNAME: '127.0.0.1',
+    OMNIROUTE_PORT: String(port),
+    API_PORT: String(port),
+    DASHBOARD_PORT: String(port),
     PORT: String(port),
     DATA_DIR: dataDir,
     REQUIRE_API_KEY: 'false',

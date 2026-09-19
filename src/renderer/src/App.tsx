@@ -2,7 +2,7 @@ import { useEffect, type JSX } from 'react'
 import { TitleBar } from '@/components/TitleBar'
 import { LeftRail } from '@/components/LeftRail'
 import { StatusBar } from '@/components/StatusBar'
-import { ConnectionSettings } from '@/components/ConnectionSettings'
+import { SettingsView } from '@/views/SettingsView'
 import { CopilotAuthModal } from '@/components/CopilotAuthModal'
 import { SkillsModal } from '@/components/SkillsModal'
 import { SshModal } from '@/components/SshModal'
@@ -45,7 +45,9 @@ export function App(): JSX.Element {
       <div className="body">
         <LeftRail />
         <div className="main">
-          {view === 'analytics' ? (
+          {view === 'settings' ? (
+            <SettingsView />
+          ) : view === 'analytics' ? (
             <AnalyticsView />
           ) : view === 'vpn' ? (
             <VpnView />
@@ -59,7 +61,6 @@ export function App(): JSX.Element {
           <StatusBar />
         </div>
       </div>
-      <ConnectionSettings />
       <CopilotAuthModal />
       <SkillsModal />
       <SshModal />

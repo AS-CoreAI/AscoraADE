@@ -1,3 +1,4 @@
+import { registerProviderSetupHandlers } from './provider-setup'
 import { registerWindowHandlers } from './window'
 import { registerDialogHandlers } from './dialog'
 import { registerFsHandlers } from './fs'
@@ -44,6 +45,7 @@ export function registerIpc(): void {
   registerAnalyticsHandlers()
   registerGitHandlers()
   registerTerminalHandlers()
+  registerProviderSetupHandlers()
   registerDeveloperToolsHandlers()
   registerAgentHandlers()
   registerWebHandlers()
