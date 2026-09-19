@@ -5,9 +5,8 @@
 //
 // Usage:
 //   node scripts/omniroute/vendor.mjs            full vendor + smoke test
-//   node scripts/omniroute/vendor.mjs --ensure   skip when manifest already
-//                                                matches pin.json (fast path
-//                                                for dist:* builds)
+//   node scripts/omniroute/vendor.mjs --ensure   reuse/repair a matching pinned
+//                                                artifact, then verify boot
 //   node scripts/omniroute/vendor.mjs --no-smoke vendor without the boot test
 import crossSpawn from 'cross-spawn'
 import {
@@ -23,6 +22,7 @@ import {
 } from 'node:fs'
 import { dirname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { BUILTIN_PATCHES, applyBuiltinPatches } from './vendor-patches.mjs'
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url))
 const ROOT = resolve(SCRIPT_DIR, '..', '..')
@@ -31,52 +31,15 @@ const PATCHES_DIR = join(SCRIPT_DIR, 'patches')
 const STAGING = join(ROOT, '.build', 'omniroute-staging')
 const OUT = join(ROOT, '.build', 'omniroute')
 const MANIFEST = join(OUT, 'VENDOR_MANIFEST.json')
+// All recursive trimming/promotion stays in these two generated build folders.
+for (const target of [STAGING, OUT]) {
+  if (dirname(target) !== join(ROOT, '.build')) throw new Error(`Unsafe vendor path: ${target}`)
+}
 
 // Docs/locale languages that ship with the app (matches src/renderer/src/language/index.ts).
 const KEEP_LANGS = new Set(['en', 'ru', 'uk', 'de', 'fr', 'it', 'pl', 'zh', 'ko', 'ja', 'hi'])
 const LANG_DIR_RE = /^[a-z]{2}(?:[-_][A-Za-z]{2,4})?$/
 const LICENSE_RE = /^(licen[cs]e|notice|copying)(\.|$)/i
-
-// Pinned 3.8.48 compatibility shims required by Ascora's zero-install runtime.
-// Each replacement is exact and count-checked: an upstream bump must review
-// the changed source instead of silently applying a fuzzy patch.
-const BUILTIN_PATCHES = [
-  {
-    id: 'reuse-electron-runtime:serve',
-    path: join('node_modules', 'omniroute', 'bin', 'cli', 'commands', 'serve.mjs'),
-    from: 'spawn("node",',
-    to: 'spawn(process.execPath,',
-    expected: 2
-  },
-  {
-    id: 'reuse-electron-runtime:supervisor',
-    path: join('node_modules', 'omniroute', 'bin', 'cli', 'runtime', 'processSupervisor.mjs'),
-    from: 'spawn("node",',
-    to: 'spawn(process.execPath,',
-    expected: 1
-  },
-  {
-    id: 'enable-node-sqlite-adapter',
-    root: join(
-      'node_modules',
-      'omniroute',
-      'dist',
-      '.build',
-      'next',
-      'server',
-      'chunks'
-    ),
-    extension: '.js',
-    pattern:
-      /let\{DatabaseSync:([A-Za-z_$][\w$]*)\}=\(\(\)=>\{let \1=Error\("Cannot find module 'node:sqlite': Unsupported external type Url for commonjs reference"\);throw \1\.code="MODULE_NOT_FOUND",\1\}\)\(\);/g,
-    // getBuiltinModule works in both CommonJS and ESM chunks. Turbopack uses
-    // different minified identifiers in each duplicate, hence the capture.
-    to: 'let{DatabaseSync:$1}=process.getBuiltinModule("node:sqlite");',
-    // Turbopack duplicates this factory into shared, SSR and route chunks.
-    // Keep the count pinned so a new upstream build cannot be patched partly.
-    expected: 10
-  }
-]
 
 // Upstream's prebundled standalone tree (dist/node_modules inside the package)
 // ships prebuilt N-API binaries. Policy:
@@ -119,6 +82,17 @@ function readJson(path) {
   return JSON.parse(readFileSync(path, 'utf8'))
 }
 
+function smokeVendored() {
+  if (args.has('--no-smoke')) { log('smoke test skipped (--no-smoke)'); return }
+  log('running smoke test…')
+  const smoke = crossSpawn.sync(process.execPath, [join(SCRIPT_DIR, 'smoke.mjs')], { stdio: 'inherit', cwd: ROOT })
+  if (smoke.status !== 0) {
+    rmSync(MANIFEST, { force: true })
+    fail('smoke test failed — the vendored tree does not boot; manifest removed')
+  }
+  log('done — vendored tree is bootable')
+}
+
 const pin = readJson(PIN_PATH)
 if (!pin.name || !pin.version) fail('pin.json must contain name and version')
 
@@ -130,7 +104,19 @@ if (args.has('--ensure') && existsSync(MANIFEST)) {
     manifest.version === pin.version &&
     JSON.stringify(manifestBuiltinPatches) === JSON.stringify(expectedBuiltinPatches)
   ) {
-    log(`already vendored ${pin.name}@${pin.version} — nothing to do`)
+    log(`already vendored ${pin.name}@${pin.version} — verifying boot`)
+    smokeVendored()
+    process.exit(0)
+  }
+  // New compatibility shims can repair this exact pinned artifact without
+  // downloading/unpacking its gigabyte-sized dependency tree again.
+  if (manifest.version === pin.version && manifest.integrity === pin.resolvedIntegrity &&
+      manifestBuiltinPatches.length > 0 &&
+      manifestBuiltinPatches.every((id, index) => expectedBuiltinPatches[index] === id)) {
+    const pending = BUILTIN_PATCHES.slice(manifestBuiltinPatches.length)
+    applyBuiltinPatches(OUT, pending, log)
+    writeFileSync(MANIFEST, JSON.stringify({ ...manifest, builtinPatches: expectedBuiltinPatches }, null, 2))
+    smokeVendored()
     process.exit(0)
   }
   log(`manifest or built-in patch set is stale for ${pin.name}@${pin.version} — re-vendoring`)
@@ -333,47 +319,8 @@ if (!resumeStaging) {
     })
   }
 
-  function patchTargets(patch) {
-    if (patch.path) return [join(STAGING, patch.path)]
-    const root = join(STAGING, patch.root)
-    const files = []
-    function walk(dir) {
-      for (const entry of readdirSync(dir, { withFileTypes: true })) {
-        const path = join(dir, entry.name)
-        if (entry.isDirectory()) walk(path)
-        else if (!patch.extension || entry.name.endsWith(patch.extension)) files.push(path)
-      }
-    }
-    if (existsSync(root)) walk(root)
-    return files
-  }
+  applyBuiltinPatches(STAGING, BUILTIN_PATCHES, log)
 
-  for (const patch of BUILTIN_PATCHES) {
-    const targets = patchTargets(patch)
-    if (targets.length === 0) {
-      fail(`built-in patch ${patch.id} target is missing: ${patch.path ?? patch.root}`)
-    }
-    let occurrences = 0
-    const changed = []
-    for (const path of targets) {
-      const source = readFileSync(path, 'utf8')
-      const count = patch.pattern
-        ? [...source.matchAll(patch.pattern)].length
-        : source.split(patch.from).length - 1
-      occurrences += count
-      if (count > 0) changed.push([path, source])
-    }
-    if (occurrences !== patch.expected) {
-      fail(
-        `built-in patch ${patch.id} expected ${patch.expected} exact occurrence(s), found ${occurrences}; ` +
-          'review this shim against the pinned upstream release'
-      )
-    }
-    for (const [path, source] of changed) {
-      writeFileSync(path, patch.pattern ? source.replace(patch.pattern, patch.to) : source.replaceAll(patch.from, patch.to))
-    }
-    log(`applied built-in patch ${patch.id} (${occurrences} replacement${occurrences === 1 ? '' : 's'})`)
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -484,14 +431,4 @@ log(
 // ---------------------------------------------------------------------------
 // 6. Smoke test — an unbootable vendored tree must never reach a build
 // ---------------------------------------------------------------------------
-if (args.has('--no-smoke')) {
-  log('smoke test skipped (--no-smoke)')
-  process.exit(0)
-}
-log('running smoke test…')
-const smoke = crossSpawn.sync(process.execPath, [join(SCRIPT_DIR, 'smoke.mjs')], { stdio: 'inherit', cwd: ROOT })
-if (smoke.status !== 0) {
-  rmSync(MANIFEST, { force: true }) // ensure --ensure never shortcuts over a broken tree
-  fail('smoke test failed — the vendored tree does not boot; manifest removed')
-}
-log('done — vendored tree is bootable')
+smokeVendored()

@@ -6,7 +6,7 @@
 //   3. a storage write + process restart   (node:sqlite really persists and
 //      the worker reuses Electron instead of requiring a system Node install)
 //
-// Usage: node scripts/omniroute/smoke.mjs [--timeout <seconds>]
+// Usage: node scripts/omniroute/smoke.mjs [--timeout <seconds>] [--resources <dir>] [--electron <binary>]
 import crossSpawn from 'cross-spawn'
 import { spawn } from 'node:child_process'
 import { createRequire } from 'node:module'
@@ -17,10 +17,19 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { randomBytes } from 'node:crypto'
 import { omnirouteEnvPins } from './env.mjs'
+import ts from 'typescript'
+import { runInNewContext } from 'node:vm'
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url))
 const ROOT = resolve(SCRIPT_DIR, '..', '..')
-const OUT = join(ROOT, '.build', 'omniroute')
+const option = (name) => {
+  const index = process.argv.indexOf(name)
+  if (index < 0) return undefined
+  const value = process.argv[index + 1]
+  if (!value || value.startsWith('--')) throw new Error(`Missing value for ${name}`)
+  return value
+}
+const OUT = option('--resources') ? resolve(option('--resources'), 'omniroute') : join(ROOT, '.build', 'omniroute')
 const MANIFEST = join(OUT, 'VENDOR_MANIFEST.json')
 
 const timeoutArgIdx = process.argv.indexOf('--timeout')
@@ -31,6 +40,12 @@ const logLines = []
 let child = null
 let dataDir = ''
 let exited = false
+let startupOutput = ''
+let startupError
+const startupExports = {}
+runInNewContext(ts.transpileModule(readFileSync(join(ROOT, 'src/shared/omniroute-startup.ts'), 'utf8'), {
+  compilerOptions: { module: ts.ModuleKind.CommonJS }
+}).outputText, { exports: startupExports })
 
 function log(msg) {
   console.log(`[omniroute:smoke] ${msg}`)
@@ -118,7 +133,7 @@ const entry = process.argv.includes('--cli') ? cliEntry : serverEntry || cliEntr
 if (!existsSync(entry)) fail(`manifest entry ${manifest.entry} is missing`)
 
 const require = createRequire(import.meta.url)
-const electronBin = process.env.ELECTRON_EXEC || require('electron')
+const electronBin = option('--electron') || process.env.ELECTRON_EXEC || require('electron')
 if (typeof electronBin !== 'string' || !existsSync(electronBin)) {
   fail('could not resolve the Electron binary (set ELECTRON_EXEC to override)')
 }
@@ -134,16 +149,21 @@ log(`spawning ${manifest.name}@${manifest.version} on ${base} (data: ${dataDir})
 
 function spawnSidecar() {
   exited = false
-  const spawned = spawn(electronBin, entry === cliEntry ? [entry, 'serve', '--no-open'] : [entry], {
+  startupOutput = ''
+  startupError = undefined
+  const spawned = spawn(electronBin, ['--require', join(SCRIPT_DIR, 'smoke-isolation.cjs'), ...(entry === cliEntry ? [entry, 'serve', '--no-open'] : [entry])], {
     cwd: OUT,
     windowsHide: true,
     detached: process.platform !== 'win32',
     env: {
       ...process.env,
+      NODE_PATH: '',
+      ASCORA_OMNIROUTE_SMOKE_ROOT: OUT,
       ...omnirouteEnvPins({ port, dataDir: join(dataDir, 'data'), storageKey })
     }
   })
   child = spawned
+  spawned.on('error', (error) => { startupError = error.message; exited = true })
   spawned.on('exit', (code, signal) => {
     if (child === spawned) exited = true
     logLines.push(`<sidecar exited: code=${code} signal=${signal}>`)
@@ -151,6 +171,8 @@ function spawnSidecar() {
   for (const stream of [spawned.stdout, spawned.stderr]) {
     stream.setEncoding('utf8')
     stream.on('data', (chunk) => {
+      startupOutput = (startupOutput + String(chunk)).slice(-16_384)
+      startupError ??= startupExports.omnirouteStartupFailure(startupOutput)
       for (const line of String(chunk).split(/\r?\n/)) {
         if (line.trim()) logLines.push(line)
       }
@@ -163,11 +185,12 @@ async function waitForHealth(label) {
   const bootStart = Date.now()
   let lastResponse = null
   while (Date.now() - bootStart < BOOT_BUDGET_MS) {
+    if (startupError) fail(`${label} startup failed: ${startupError}`)
     if (exited) fail(`sidecar exited before ${label} became healthy (DOA build?)`)
     try {
       const res = await fetchJson(`${base}/api/monitoring/health`, {}, 2000)
       lastResponse = res
-      if (res.status === 200) {
+      if (res.status === 200 && !startupError) {
         log(`${label} healthy after ${((Date.now() - bootStart) / 1000).toFixed(1)}s`)
         return
       }

@@ -17,6 +17,7 @@ import { createConnection, createServer } from 'node:net'
 import { dirname, join } from 'node:path'
 import type { OmnirouteStatus } from '../../shared/ipc'
 import { getStore } from '../store'
+import { omnirouteStartupFailure } from '@shared/omniroute-startup'
 
 /**
  * Lifecycle manager for the bundled OmniRoute gateway sidecar.
@@ -58,6 +59,8 @@ interface Sidecar {
   ring: string[]
   logStream: WriteStream | null
   logBytes: number
+  startupOutput: string
+  startupError: string | undefined
 }
 
 const sidecar: Sidecar = {
@@ -74,7 +77,9 @@ const sidecar: Sidecar = {
   restartTimestamps: [],
   ring: [],
   logStream: null,
-  logBytes: 0
+  logBytes: 0,
+  startupOutput: '',
+  startupError: undefined
 }
 
 const listeners = new Set<(status: OmnirouteStatus) => void>()
@@ -203,6 +208,10 @@ function closeLog(): void {
 }
 
 function captureOutput(chunk: string): void {
+  if (sidecar.phase === 'starting') {
+    sidecar.startupOutput = (sidecar.startupOutput + chunk).slice(-16_384)
+    sidecar.startupError ??= omnirouteStartupFailure(sidecar.startupOutput)
+  }
   for (const line of chunk.split(/\r?\n/)) {
     if (!line.trim()) continue
     sidecar.ring.push(line)
@@ -354,6 +363,7 @@ async function waitForHealth(port: number): Promise<void> {
   const startedAt = Date.now()
   while (Date.now() - startedAt < BOOT_BUDGET_MS) {
     if (sidecar.intentionalStop) throw new Error('OmniRoute startup cancelled')
+    if (sidecar.startupError) throw new Error(`OmniRoute startup failed: ${sidecar.startupError}`)
     if (sidecar.child === null || sidecar.child.exitCode !== null) {
       throw new Error(`sidecar exited during startup\n${ringTail(20)}`)
     }
@@ -362,7 +372,7 @@ async function waitForHealth(port: number): Promise<void> {
         signal: AbortSignal.timeout(HEALTH_PROBE_TIMEOUT_MS)
       })
       const child = sidecar.child
-      if (res.status === 200 && child && child.exitCode === null) return
+      if (res.status === 200 && child && child.exitCode === null && !sidecar.startupError) return
     } catch {
       /* not up yet */
     }
@@ -456,6 +466,9 @@ export function startOmniroute(): Promise<OmnirouteStatus> {
     sidecar.version = manifest.version
     sidecar.intentionalStop = false
     sidecar.startAttemptAt = Date.now()
+    sidecar.ring = []
+    sidecar.startupOutput = ''
+    sidecar.startupError = undefined
 
     setPhase('starting')
     try {

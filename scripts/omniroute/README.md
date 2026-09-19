@@ -14,8 +14,9 @@ installer is substantially smaller because electron-builder compresses the resou
 | Command | What it does |
 |---|---|
 | `npm run omniroute:vendor` | Fetch the pinned version → trim → assert → manifest → smoke test |
-| `npm run omniroute:ensure` | Same, but no-op when `.build/omniroute` already matches the pin (used by `dist:*`) |
+| `npm run omniroute:ensure` | Reuse the pinned artifact, apply newly added compatibility shims if needed, and always verify boot (used by `dist:*`) |
 | `npm run omniroute:smoke` | Boot twice against one data dir and verify API + persistence exactly like production |
+| `node scripts/omniroute/smoke.mjs --resources <resources-dir> --electron <exe>` | Verify the actual packaged resources and executable; also runs automatically through electron-builder's `afterPack` hook |
 | `npm run omniroute:providers -- E:\\OmniRoute` | Regenerate the native 256-provider catalog and copy provider icons from an upstream source checkout |
 | `npm run omniroute:update [-- x.y.z]` | Bump the pin (default: latest), re-vendor, smoke; **auto-reverts the pin on failure** |
 
@@ -46,7 +47,7 @@ must stay in sync with it (cross-referenced comments in both files).
 | `REQUIRE_API_KEY` | `false` | Loopback trust; hardening (Bearer) is a stage-2 item |
 | `OMNIROUTE_SKIP_POSTINSTALL` | `1` | No install-time work at runtime |
 | `OMNIROUTE_NO_UPDATE_NOTIFIER` | `1` | Updates ride ADE releases, not upstream's notifier |
-| `OMNIROUTE_ENABLE_LIVE_WS` | `0` | We never show their dashboard; flip to `1` if an admin flow needs it |
+| `OMNIROUTE_ENABLE_LIVE_WS` | `1` | Ascora's native admin pages consume Combo Studio and traffic-inspector live data |
 | `STORAGE_ENCRYPTION_KEY` | persisted random hex | Stable key so their encrypted-at-rest provider keys survive restarts |
 | `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD` | `1` | playwright is a regular dep upstream; no browser downloads ever |
 | `NODE_ENV` | `production` | Prebuilt Next.js standalone server |
@@ -59,7 +60,8 @@ must stay in sync with it (cross-referenced comments in both files).
 - whole feature packages we never use, at every `node_modules` level including their
   prebundled `dist/node_modules`: `@img` (sharp), `@ngrok` (tunnels), `onnxruntime-node`
   (ML compression), plus `better-sqlite3` and `@types` (an exact, count-checked
-  compatibility shim enables `node:sqlite`, built into Electron 43's Node 24)
+  compatibility shims enable `node:sqlite`, built into Electron 43's Node 24, and
+  replace the OMP credentials module's eager native import)
 - every `*.node` binary EXCEPT the allowlist below
 - esbuild platform packages are omitted with the rest of the optional graph, then the exact
   `@esbuild/win32-x64` and `@esbuild/linux-x64` versions matching the installed esbuild JS
@@ -73,18 +75,26 @@ app's no-native-build-pipeline stance is preserved. Kept binaries are listed in
 `VENDOR_MANIFEST.json.keptNative`.
 
 **Hard assertions:** no `*.node` outside the allowlist; the `bin` entry from their
-`package.json` exists. A tree that fails assertions or the smoke test never reaches a build
-(`dist:*` runs `omniroute:ensure` first, and a failed smoke deletes the manifest).
+`package.json` exists. `dist:*` runs `omniroute:ensure` first, and a failed vendor smoke
+deletes the manifest. The `afterPack` hook also boots the copied resources twice and
+checks API/storage persistence; a failure rejects packaging. Native builds use the
+packaged executable, while cross-builds use the build host's Electron. The smoke's
+CommonJS resolution guard prevents missing packages from being borrowed from Ascora's
+development `node_modules` above the artifact directory.
 
-**Zero-install compatibility shims:** `vendor.mjs` replaces upstream's literal `node`
+**Zero-install compatibility shims:** `vendor-patches.mjs` replaces upstream's literal `node`
 worker launches with `process.execPath` (the Ascora Electron binary in Node mode) and repairs
-Turbopack's broken `node:sqlite` external. Every replacement is exact/count-checked and listed
+Turbopack's broken `node:sqlite` external. The OMP credentials module also uses `DatabaseSync`,
+including its `readOnly` option, so its eager import cannot abort instrumentation before
+the main database's fallback runs. Every replacement is exact/count-checked and listed
 in `VENDOR_MANIFEST.json.builtinPatches`; upstream drift makes vendoring fail for review. The
 restart smoke exists specifically to prevent regression to the write-once sql.js fallback.
 
 ## Smoke test triage
 
 `smoke.mjs` prints the last 40 sidecar log lines on failure. Typical causes:
+- **Fatal instrumentation/module-loading errors** — production and smoke tests report these
+  immediately even when Next keeps its HTTP listener alive, instead of exhausting the health deadline.
 - **DOA upstream publish** — sidecar exits before health. Pin the previous version back.
 - **Provider POST shape drift** — storage falls back to the `/api/settings` round-trip and
   logs a warning; update the payload variants in `smoke.mjs` and check `OmniRoutePanel`'s

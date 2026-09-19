@@ -3,6 +3,7 @@ productName: Ascora ADE
 copyright: Copyright © 2026 ASCore AI (ascoreai.com)
 
 npmRebuild: false
+afterPack: scripts/omniroute/after-pack.cjs
 
 directories:
   output: dist
