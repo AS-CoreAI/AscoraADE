@@ -8,13 +8,14 @@ const contract = new Module(filename)
 contract._compile(ts.transpileModule(readFileSync(filename, 'utf8'), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 }
 }).outputText, filename)
-const config = { ...contract.exports.DEFAULT_LLM_CONFIG }
+const config = { ...contract.exports.DEFAULT_LLM_CONFIG, ...JSON.parse(localStorage.getItem('settings-smoke-llm') || '{}') }
 const status = { state: 'ready', port: 20128, version: '3.8.48', baseUrl: 'http://127.0.0.1:20128/v1', logsPath: '' }
 const values = JSON.parse(localStorage.getItem('settings-smoke') || '{"appearance.language":"ru"}')
 const save = () => localStorage.setItem('settings-smoke', JSON.stringify(values))
 const usage = { ok: true, loggedIn: true, windows: [{ label: '5 часов', percent: 32, severity: 'normal', resetsAt: '2026-09-19T18:00:00Z' }] }
 const missing = new Set(['gemini'])
-const fixture = window.settingsFixture = { signedOut: ['copilot'], checkFailures: [], usageFailures: [], percent: 32, emit: null, finish: null }
+const fixture = window.settingsFixture = { signedOut: ['copilot'], checkFailures: [], usageFailures: [], percent: 32, emit: null, finish: null,
+  unslothModels: ['unsloth-fixture/model-a', 'unsloth-fixture/model-b'], modelRequests: [], analytics: [] }
 const workspace = { id: 'settings-test', name: 'Settings test', path: 'E:\\fixture', createdAt: Date.now(), updatedAt: Date.now() }
 const group = (name) => new Proxy({}, { get: (_, method) => {
   if (String(method).startsWith('on')) return () => () => {}
@@ -25,8 +26,23 @@ const group = (name) => new Proxy({}, { get: (_, method) => {
     }
     if (name === 'llm') {
       if (method === 'config') return config
-      if (method === 'setConfig') { Object.assign(config, args[0]); return }
-      if (method === 'listModels') return { ok: true, models: [{ id: 'test-model' }] }
+      if (method === 'setConfig') { Object.assign(config, args[0]); localStorage.setItem('settings-smoke-llm', JSON.stringify(config)); return }
+      if (method === 'listModels') {
+        const provider = args[0] || config.provider
+        fixture.modelRequests.push(provider)
+        if (provider === 'unsloth') {
+          if (!config.unslothApiKey || config.unslothApiKey === 'invalid') return { ok: false, error: 'Unsloth rejected the API key.' }
+          return { ok: true, models: fixture.unslothModels.map(id => ({ id })) }
+        }
+        return { ok: true, models: [{ id: 'test-model' }] }
+      }
+      if (method === 'chat') {
+        fixture.chatId = args[0]
+        fixture.chatParams = args[1]
+        fixture.chatDelta = args[2]
+        return new Promise(resolve => { fixture.chatFinish = result => resolve(result) })
+      }
+      if (method === 'abort') { fixture.abortId = args[0]; fixture.chatFinish?.({ ok: false, aborted: true }); return }
       if (method === 'checkLmStudio' || method === 'checkOllama') return true
     }
     if (name === 'workspace') {
@@ -38,12 +54,14 @@ const group = (name) => new Proxy({}, { get: (_, method) => {
     if (name === 'blueprint' || name === 'wprovider') return []
     if (name === 'omniroute') return status
     if (name === 'providerSetup') {
+      if (method === 'inspect' && args[0] === 'unsloth') return { available: false, url: 'https://unsloth.ai/download' }
       if (method === 'inspect') return { available: true, command: 'npm install -g example', url: 'https://example.com' }
       if (method === 'credits') return { ok: true, remaining: 12.3, used: 4.5, limit: 16.8 }
       if (method === 'install') { missing.delete(args[0]); return { ok: true } }
     }
     if (name === 'developerTools') return { platform: 'win32', available: true, manager: 'winget', tools: [] }
     if (name === 'network') return { ok: true, ip: '127.0.0.1', country: 'Test', checkedAt: Date.now() }
+    if (name === 'analytics' && method === 'record') { fixture.analytics.push(args[0]); return }
     if (method === 'check') {
       if (fixture.checkFailures.includes(name)) throw new Error('CLI probe unavailable')
       return { ok: true, installed: !missing.has(name), loggedIn: !missing.has(name) && !fixture.signedOut.includes(name), version: '1.2.3', authNote: 'Test account' }

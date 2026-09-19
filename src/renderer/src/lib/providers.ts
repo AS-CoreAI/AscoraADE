@@ -3,6 +3,7 @@ import type { LlmProvider } from '@shared/ipc'
 export const PROVIDERS: { id: LlmProvider; name: string }[] = [
   { id: 'lmstudio', name: 'LM Studio' },
   { id: 'ollama', name: 'Ollama' },
+  { id: 'unsloth', name: 'Unsloth' },
   { id: 'openrouter', name: 'OpenRouter' },
   { id: 'omniroute', name: 'OmniRoute' },
   { id: 'codex', name: 'Codex' },

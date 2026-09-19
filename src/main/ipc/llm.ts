@@ -25,6 +25,7 @@ import {
 } from '@shared/ipc'
 import { getStore } from '../store'
 import { LmStudioClient, LmStudioError } from '../llm/client'
+import { normalizeUnslothApiKey, normalizeUnslothBaseUrl } from '@shared/unsloth'
 import { getOmnirouteBaseUrl, startOmniroute } from '../omniroute/runner'
 
 let client: LmStudioClient | null = null
@@ -52,6 +53,9 @@ function readConfig(): LlmConfig {
     ollamaBaseUrl:
       store.getSetting<string>('ollama.baseUrl') ?? DEFAULT_LLM_CONFIG.ollamaBaseUrl,
     ollamaModel: store.getSetting<string>('ollama.model') ?? DEFAULT_LLM_CONFIG.ollamaModel,
+    unslothBaseUrl: store.getSetting<string>('unsloth.baseUrl') ?? DEFAULT_LLM_CONFIG.unslothBaseUrl,
+    unslothApiKey: normalizeUnslothApiKey(store.getSetting<string>('unsloth.apiKey') ?? ''),
+    unslothModel: store.getSetting<string>('unsloth.model') ?? DEFAULT_LLM_CONFIG.unslothModel,
     openRouterEnabled,
     openRouterApiKey,
     openRouterModel:
@@ -121,6 +125,8 @@ export function registerLlmHandlers(): void {
 
   ipcMain.handle(IPC.llm.setConfig, (_e, patch: Partial<LlmConfig>) => {
     const store = getStore()
+    // Validate before writing any part of the connection settings.
+    const unslothBaseUrl = typeof patch.unslothBaseUrl === 'string' ? normalizeUnslothBaseUrl(patch.unslothBaseUrl) : undefined
     if (typeof patch.provider === 'string') {
       store.setSetting('llm.provider', patch.provider)
       if (patch.provider === 'omniroute') {
@@ -135,6 +141,9 @@ export function registerLlmHandlers(): void {
       store.setSetting('ollama.baseUrl', patch.ollamaBaseUrl.trim())
     }
     if (typeof patch.ollamaModel === 'string') store.setSetting('ollama.model', patch.ollamaModel.trim())
+    if (unslothBaseUrl !== undefined) store.setSetting('unsloth.baseUrl', unslothBaseUrl)
+    if (typeof patch.unslothApiKey === 'string') store.setSetting('unsloth.apiKey', normalizeUnslothApiKey(patch.unslothApiKey))
+    if (typeof patch.unslothModel === 'string') store.setSetting('unsloth.model', patch.unslothModel.trim())
     if (typeof patch.openRouterEnabled === 'boolean') {
       store.setSetting('openrouter.enabled', patch.openRouterEnabled)
     }
@@ -180,7 +189,7 @@ export function registerLlmHandlers(): void {
 
   ipcMain.handle(IPC.llm.listModels, async (_event, provider?: LlmProvider): Promise<ListModelsResult> => {
     try {
-      if (provider && !['lmstudio', 'ollama', 'openrouter', 'omniroute'].includes(provider)) throw new Error('Unsupported model provider')
+      if (provider && !['lmstudio', 'ollama', 'unsloth', 'openrouter', 'omniroute'].includes(provider)) throw new Error('Unsupported model provider')
       const probe = provider ? new LmStudioClient({ ...readConfig(), provider }) : getClient()
       const models = await probe.listModels(AbortSignal.timeout(15_000))
       return { ok: true, models }
@@ -222,7 +231,9 @@ export function registerLlmHandlers(): void {
       try {
         // Iterate manually so we can read the generator's *return* value, which
         // carries the assembled native tool calls + finish reason.
-        const gen = getClient().streamChat(params, controller.signal)
+        // Keep URL, credentials and provider fixed for the whole request even
+        // if settings change while it is streaming or negotiating tool support.
+        const gen = new LmStudioClient(readConfig()).streamChat(params, controller.signal)
         for (;;) {
           const { value, done } = await gen.next()
           if (done) {

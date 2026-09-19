@@ -16,7 +16,8 @@ const DOWNLOADS: Partial<Record<LlmProvider, string>> = {
   copilot: 'https://docs.github.com/en/copilot/get-started/cli-quickstart',
   gemini: 'https://geminicli.com/docs/', grok: 'https://x.ai/cli',
   glm: 'https://zcode.z.ai/', antigravity: 'https://antigravity.google/download',
-  lmstudio: 'https://lmstudio.ai/download', ollama: 'https://ollama.com/download'
+  lmstudio: 'https://lmstudio.ai/download', ollama: 'https://ollama.com/download',
+  unsloth: 'https://unsloth.ai/download'
 }
 const WINGET: Partial<Record<LlmProvider, string>> = { lmstudio: 'ElementLabs.LMStudio', ollama: 'Ollama.Ollama' }
 const installs = new Map<string, Promise<ProviderInstallResult>>()

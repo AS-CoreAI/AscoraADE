@@ -6,6 +6,7 @@ import {
   type ToolCall,
   type TokenUsage
 } from '@shared/ipc'
+import { normalizeUnslothApiKey, normalizeUnslothBaseUrl } from '@shared/unsloth'
 
 /** What `streamChat` resolves to once the stream ends (its generator return). */
 export interface StreamReturn {
@@ -25,7 +26,7 @@ interface ToolCallDelta {
 const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1'
 
 /**
- * Minimal client for OpenAI-compatible backends (LM Studio, Ollama,
+ * Minimal client for OpenAI-compatible backends (LM Studio, Ollama, Unsloth,
  * OpenRouter, and the bundled OmniRoute gateway).
  *
  *  - GET  {baseUrl}/models           → list available models
@@ -57,6 +58,7 @@ function isAbort(err: unknown): boolean {
 }
 
 function providerName(config: LlmConfig): string {
+  if (config.provider === 'unsloth') return 'Unsloth'
   return config.provider === 'openrouter'
     ? 'OpenRouter'
     : config.provider === 'ollama'
@@ -79,6 +81,10 @@ function connectionError(name: string, url: string, err: unknown): LmStudioError
 }
 
 async function httpError(name: string, url: string, res: Response): Promise<LmStudioError> {
+  if (name === 'Unsloth' && res.status === 401) {
+    await res.body?.cancel()
+    return new LmStudioError('Unsloth rejected the API key. Create a key in Unsloth Settings → API and save it in the Unsloth connection settings.', 'http', 401)
+  }
   const text = await res.text().catch(() => '')
   let detail = text
   try {
@@ -106,6 +112,7 @@ export class LmStudioClient {
   }
 
   get baseUrl(): string {
+    if (this.config.provider === 'unsloth') return normalizeUnslothBaseUrl(this.config.unslothBaseUrl)
     if (this.config.provider === 'openrouter') return OPENROUTER_BASE_URL
     if (this.config.provider === 'ollama') return stripTrailingSlash(this.config.ollamaBaseUrl)
     if (this.config.provider === 'omniroute') return stripTrailingSlash(this.config.omnirouteBaseUrl)
@@ -118,6 +125,9 @@ export class LmStudioClient {
 
   private headers(): Record<string, string> {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    if (this.config.provider === 'unsloth') {
+      headers.Authorization = `Bearer ${normalizeUnslothApiKey(this.config.unslothApiKey)}`
+    }
     if (this.config.provider === 'openrouter') {
       const apiKey = normalizeOpenRouterApiKey(this.config.openRouterApiKey)
       if (apiKey) headers.Authorization = `Bearer ${apiKey}`
@@ -127,7 +137,10 @@ export class LmStudioClient {
     return headers
   }
 
-  private requireOpenRouterKey(): void {
+  private requireApiKey(): void {
+    if (this.config.provider === 'unsloth' && !normalizeUnslothApiKey(this.config.unslothApiKey)) {
+      throw new LmStudioError('Unsloth requires an API key. Create one in Unsloth Settings → API and save it in the Unsloth connection settings.', 'connection')
+    }
     if (this.config.provider !== 'openrouter') return
     if (!this.config.openRouterEnabled || !normalizeOpenRouterApiKey(this.config.openRouterApiKey)) {
       throw new LmStudioError('OpenRouter is not enabled or its API key is empty.', 'connection')
@@ -145,6 +158,10 @@ export class LmStudioClient {
 
   private model(params: ChatParams): string {
     if (params.model) return params.model
+    if (this.config.provider === 'unsloth') {
+      if (!this.config.unslothModel) throw new LmStudioError('Load a model in Unsloth, then refresh the model list in connection settings.', 'connection')
+      return this.config.unslothModel
+    }
     if (this.config.provider === 'openrouter') return this.config.openRouterModel || 'openrouter/free'
     if (this.config.provider === 'ollama') return this.config.ollamaModel
     if (this.config.provider === 'omniroute') return this.config.omnirouteModel || 'auto'
@@ -153,7 +170,7 @@ export class LmStudioClient {
 
   /** GET /models — never throws for empty lists, only for real failures. */
   async listModels(signal?: AbortSignal): Promise<LlmModel[]> {
-    this.requireOpenRouterKey()
+    this.requireApiKey()
     this.requireOmniroute()
     const name = this.providerName
     const url = `${this.baseUrl}/models`
@@ -180,7 +197,7 @@ export class LmStudioClient {
    * Throws `LmStudioError` (kind 'aborted' when cancelled via signal).
    */
   async *streamChat(params: ChatParams, signal?: AbortSignal): AsyncGenerator<string, StreamReturn> {
-    this.requireOpenRouterKey()
+    this.requireApiKey()
     this.requireOmniroute()
     const name = this.providerName
     const url = `${this.baseUrl}/chat/completions`
@@ -207,6 +224,21 @@ export class LmStudioClient {
       })
     } catch (err) {
       throw connectionError(name, url, err)
+    }
+    // Some Unsloth GGUF templates accept text but reject even the presence of
+    // native tools. Retry only that explicit rejection, before any generation,
+    // using Ascora's existing text-tool protocol. Never discard tool history.
+    if (this.config.provider === 'unsloth' && res.status === 400 && params.tools?.length &&
+        !params.messages.some((message) => message.role === 'tool' || message.tool_calls?.length)) {
+      const error = await httpError(name, url, res)
+      if (!/does not advertise tools|does not support (?:native )?tool/i.test(error.message)) throw error
+      delete basePayload.tools
+      try {
+        res = await fetch(url, {
+          method: 'POST', headers: this.headers(), signal,
+          body: JSON.stringify({ ...basePayload, stream: true, stream_options: { include_usage: true } })
+        })
+      } catch (err) { throw connectionError(name, url, err) }
     }
     if (!res.ok) throw await httpError(name, url, res)
     if (!res.body) throw new LmStudioError(`${name} returned an empty response body`, 'parse')

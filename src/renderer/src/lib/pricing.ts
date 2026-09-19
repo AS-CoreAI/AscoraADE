@@ -39,7 +39,7 @@ const PRICE_RULES: PriceRule[] = [
 const DEFAULT_RATE = { input: 0.5, output: 1.5 }
 
 /** Providers that don't bill per token: local runtimes and web chats. */
-export const FREE_PROVIDERS: ReadonlySet<string> = new Set(['lmstudio', 'ollama', 'wprovider'])
+export const FREE_PROVIDERS: ReadonlySet<string> = new Set(['lmstudio', 'ollama', 'unsloth', 'wprovider'])
 
 export function modelRate(model: string): { input: number; output: number } {
   const name = model.toLowerCase()

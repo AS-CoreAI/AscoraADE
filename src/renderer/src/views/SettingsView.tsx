@@ -95,7 +95,7 @@ function ProviderPage({ provider }: { provider: LlmProvider }): JSX.Element {
     <header className="settings-content-header">
       <div><div className="settings-eyebrow">{ru ? 'ПРОВАЙДЕРЫ' : 'PROVIDERS'}</div><h1>{name}</h1>
         <p>{ru ? 'Подключение, учётная запись и параметры агента.' : 'Connection, account and agent preferences.'}</p></div>
-      <button className="btn" disabled={s.provider === provider || (!!s.activeSsh && !isSshCapableProvider(provider)) || (provider === 'openrouter' && (!s.openRouterEnabled || !s.openRouterApiKey.trim()))}
+      <button className="btn" disabled={s.provider === provider || (!!s.activeSsh && !isSshCapableProvider(provider)) || (provider === 'unsloth' && !s.unslothApiKey.trim()) || (provider === 'openrouter' && (!s.openRouterEnabled || !s.openRouterApiKey.trim()))}
         onClick={() => void s.setProvider(provider).catch((error) => setMessage(String(error)))}>
         {s.provider === provider ? (ru ? 'Активный провайдер' : 'Active provider') : (ru ? 'Использовать в чате' : 'Use in chat')}
       </button>
@@ -147,7 +147,7 @@ function ProviderPage({ provider }: { provider: LlmProvider }): JSX.Element {
           <progress max="100" value={remaining} aria-label={win.label} />
           {win.resetsAt && <small>{ru ? 'Обновление: ' : 'Resets: '}{new Date(win.resetsAt).toLocaleString(s.appLanguage)}</small>}
         </div>
-      })}</div> : !(provider === 'openrouter' && credits) && <p className="field-hint">{usage?.error || (provider === 'lmstudio' || provider === 'ollama'
+      })}</div> : !(provider === 'openrouter' && credits) && <p className="field-hint">{usage?.error || (provider === 'lmstudio' || provider === 'ollama' || provider === 'unsloth'
         ? (ru ? 'Локальный сервер не сообщает лимиты подписки.' : 'The local server does not report subscription limits.')
         : (ru ? 'Лимиты пока не получены. Если провайдер не передаёт их через интеграцию, проверьте остаток в личном кабинете.' : 'Limits are not available yet. If the provider does not expose them through this integration, check your account dashboard.'))}</p>}
       {usageUrl && <button className="btn" onClick={() => void api.live.openExternal(usageUrl)}>{ru ? 'Открыть лимиты в личном кабинете' : 'Open account usage'}</button>}

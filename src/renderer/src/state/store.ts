@@ -1,4 +1,5 @@
 import type { SettingsSection } from '@/lib/providers'
+import { normalizeUnslothApiKey, normalizeUnslothBaseUrl } from '@shared/unsloth'
 import { create } from 'zustand'
 import type {
   Workspace,
@@ -868,6 +869,7 @@ function modelLabel(s: {
   provider: LlmProvider
   model: string
   ollamaModel: string
+  unslothModel: string
   openRouterModel: string
   codexModel: string
   copilotModel: string
@@ -884,6 +886,8 @@ function modelLabel(s: {
       return s.model || 'local model'
     case 'ollama':
       return s.ollamaModel || 'Ollama'
+    case 'unsloth':
+      return s.unslothModel || 'Unsloth'
     case 'openrouter':
       return s.openRouterModel || 'openrouter/free'
     case 'codex':
@@ -1049,6 +1053,7 @@ export function parseFileRef(ref: string): { path: string; line?: number } | nul
  * paths) stay global — they describe one local install, not a per-project choice.
  */
 interface WorkspaceLlm {
+  unslothModel?: string
   antigravityModel?: AntigravityModel
   antigravityReasoning?: AntigravityReasoning
   provider: LlmProvider
@@ -1081,6 +1086,7 @@ interface WorkspaceLlm {
 
 /** Snapshot the active backend selection for persisting against a workspace. */
 function snapshotLlm(s: {
+  unslothModel: string
   antigravityModel: AntigravityModel
   antigravityReasoning: AntigravityReasoning
   provider: LlmProvider
@@ -1107,6 +1113,7 @@ function snapshotLlm(s: {
   omnirouteModel: string
 }): WorkspaceLlm {
   return {
+    unslothModel: s.unslothModel,
     antigravityModel: s.antigravityModel,
     antigravityReasoning: s.antigravityReasoning,
     provider: s.provider,
@@ -1308,6 +1315,10 @@ interface AppState {
   // Ollama
   ollamaBaseUrl: string
   ollamaModel: string
+  // Unsloth Studio (connection credentials stay global, outside chat snapshots).
+  unslothBaseUrl: string
+  unslothApiKey: string
+  unslothModel: string
   models: string[]
   connection: Connection
   connectionError?: string
@@ -1526,6 +1537,8 @@ interface AppState {
   setBaseUrl: (url: string) => Promise<void>
   setOllamaModel: (m: string) => void
   setOllamaBaseUrl: (url: string) => Promise<void>
+  setUnslothModel: (model: string) => void
+  setUnslothConnection: (url: string, key: string) => Promise<void>
   setProvider: (p: LlmProvider) => Promise<void>
   setOpenRouterEnabled: (enabled: boolean) => Promise<void>
   setOpenRouterApiKey: (apiKey: string) => Promise<void>
@@ -1637,6 +1650,7 @@ let localServerProbeTimer: ReturnType<typeof setInterval> | null = null
 let omnirouteStatusUnsubscribe: (() => void) | null = null
 
 export const useApp = create<AppState>((set, get) => {
+  let modelRefreshRequest = 0
   /** Snapshot the foreground (active task) state as a RunState. */
   const foregroundRun = (s: AppState): RunState => ({
     workspaceId: s.active?.id ?? '',
@@ -1760,6 +1774,7 @@ export const useApp = create<AppState>((set, get) => {
         provider: saved.provider,
         model: saved.model,
         ollamaModel: saved.ollamaModel ?? DEFAULT_LLM_CONFIG.ollamaModel,
+        unslothModel: saved.unslothModel ?? DEFAULT_LLM_CONFIG.unslothModel,
         openRouterModel: saved.openRouterModel ?? DEFAULT_LLM_CONFIG.openRouterModel,
         codexModel: saved.codexModel,
         codexSandbox: saved.codexSandbox,
@@ -1795,6 +1810,7 @@ export const useApp = create<AppState>((set, get) => {
       antigravityReasoning: get().antigravityReasoning,
       model: get().model,
       ollamaModel: get().ollamaModel,
+      unslothModel: get().unslothModel,
       openRouterModel: get().openRouterModel,
       codexModel: get().codexModel,
       codexSandbox: get().codexSandbox,
@@ -1878,6 +1894,9 @@ export const useApp = create<AppState>((set, get) => {
   model: '',
   ollamaBaseUrl: DEFAULT_LLM_CONFIG.ollamaBaseUrl,
   ollamaModel: DEFAULT_LLM_CONFIG.ollamaModel,
+  unslothBaseUrl: DEFAULT_LLM_CONFIG.unslothBaseUrl,
+  unslothApiKey: DEFAULT_LLM_CONFIG.unslothApiKey,
+  unslothModel: DEFAULT_LLM_CONFIG.unslothModel,
   models: [],
   connection: 'unknown',
   lmStudioReachable: false,
@@ -2055,6 +2074,9 @@ export const useApp = create<AppState>((set, get) => {
       model: cfg.model,
       ollamaBaseUrl: cfg.ollamaBaseUrl,
       ollamaModel: cfg.ollamaModel,
+      unslothBaseUrl: cfg.unslothBaseUrl,
+      unslothApiKey: cfg.unslothApiKey,
+      unslothModel: cfg.unslothModel,
       openRouterEnabled: cfg.openRouterEnabled,
       openRouterApiKey: cfg.openRouterApiKey,
       openRouterModel: cfg.openRouterModel,
@@ -3068,14 +3090,19 @@ export const useApp = create<AppState>((set, get) => {
   },
 
   async refreshModels() {
-    set({ connection: 'connecting', connectionError: undefined })
-    const res = await api.llm.listModels()
-    const isOpenRouter = get().provider === 'openrouter'
-    const isOllama = get().provider === 'ollama'
-    const isOmniroute = get().provider === 'omniroute'
+    const provider = get().provider
+    if (!['lmstudio', 'ollama', 'unsloth', 'openrouter', 'omniroute'].includes(provider)) return
+    const request = ++modelRefreshRequest
+    set({ connection: 'connecting', connectionError: undefined, models: [] })
+    const res = await api.llm.listModels(provider).catch((error: unknown) => ({ ok: false as const, error: String(error), models: [] }))
+    if (request !== modelRefreshRequest || get().provider !== provider) return
+    const isOpenRouter = provider === 'openrouter'
+    const isOllama = provider === 'ollama'
+    const isUnsloth = provider === 'unsloth'
+    const isOmniroute = provider === 'omniroute'
     if (res.ok) {
       const models = (res.models ?? []).map((m) => m.id)
-      const configuredModel = isOpenRouter
+      const configuredModel = isUnsloth ? get().unslothModel : isOpenRouter
         ? get().openRouterModel
         : isOllama
           ? get().ollamaModel
@@ -3089,7 +3116,7 @@ export const useApp = create<AppState>((set, get) => {
         models[0] ||
         ''
       set(
-        isOpenRouter
+        isUnsloth ? { models, connection: 'connected', unslothModel: selected } : isOpenRouter
           ? { models, connection: 'connected', openRouterModel: selected }
           : isOllama
             ? { models, connection: 'connected', ollamaModel: selected, ollamaReachable: true }
@@ -3097,9 +3124,9 @@ export const useApp = create<AppState>((set, get) => {
               ? { models, connection: 'connected', omnirouteModel: selected }
               : { models, connection: 'connected', model: selected, lmStudioReachable: true }
       )
-      if (selected) {
+      if (selected || isUnsloth) {
         void api.llm.setConfig(
-          isOpenRouter
+          isUnsloth ? { unslothModel: selected } : isOpenRouter
             ? { openRouterModel: selected }
             : isOllama
               ? { ollamaModel: selected }
@@ -3107,6 +3134,7 @@ export const useApp = create<AppState>((set, get) => {
                 ? { omnirouteModel: selected }
                 : { model: selected }
         )
+        get().persistWorkspaceLlm()
       }
     } else {
       // Drop the previous backend's model list so a failed provider never shows
@@ -3143,6 +3171,19 @@ export const useApp = create<AppState>((set, get) => {
     set({ ollamaBaseUrl: url })
     await api.llm.setConfig({ ollamaBaseUrl: url })
     await get().refreshModels()
+  },
+
+  setUnslothModel(unslothModel) {
+    set({ unslothModel })
+    void api.llm.setConfig({ unslothModel })
+    get().persistWorkspaceLlm()
+  },
+
+  async setUnslothConnection(url, key) {
+    const patch = { unslothBaseUrl: normalizeUnslothBaseUrl(url), unslothApiKey: normalizeUnslothApiKey(key) }
+    await api.llm.setConfig(patch)
+    set(patch)
+    // The settings form refreshes this provider independently of the chat.
   },
 
   async setProvider(provider) {
@@ -3862,6 +3903,7 @@ export const useApp = create<AppState>((set, get) => {
     const mode = get().mode
     const lmModel = get().model
     const ollamaModel = get().ollamaModel
+    const unslothModel = get().unslothModel
     const orModel = get().openRouterModel
     const codexModel = get().codexModel
     const codexSandbox = get().codexSandbox
@@ -4292,6 +4334,7 @@ export const useApp = create<AppState>((set, get) => {
 
       const isOpenRouter = agentProvider === 'openrouter'
       const isOllama = agentProvider === 'ollama'
+      const isUnsloth = agentProvider === 'unsloth'
       const isWProvider = agentProvider === 'wprovider'
       const isOmniroute = agentProvider === 'omniroute'
       let omnirouteContinues = 0
@@ -4389,9 +4432,9 @@ export const useApp = create<AppState>((set, get) => {
               }
             )
           : await api.llm.chat(
-              crypto.randomUUID(),
+              replyId,
               {
-                model: isOpenRouter
+                model: isUnsloth ? unslothModel : isOpenRouter
                   ? orModel
                   : isOllama
                     ? ollamaModel
@@ -4445,7 +4488,7 @@ export const useApp = create<AppState>((set, get) => {
             workspaceId,
             workspaceName,
             taskId,
-            provider: isWProvider
+            provider: isUnsloth ? 'unsloth' : isWProvider
               ? 'wprovider'
               : isOpenRouter
                 ? 'openrouter'
@@ -4454,7 +4497,7 @@ export const useApp = create<AppState>((set, get) => {
                   : isOmniroute
                     ? 'omniroute'
                     : 'lmstudio',
-            model: isWProvider
+            model: isUnsloth ? unslothModel || 'Unsloth' : isWProvider
               ? `${wproviderService}-web`
               : isOpenRouter
                 ? orModel || 'openrouter/free'

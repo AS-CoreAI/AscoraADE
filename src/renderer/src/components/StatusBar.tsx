@@ -64,6 +64,7 @@ export function StatusBar(): JSX.Element {
   const provider = useApp((s) => s.provider)
   const model = useApp((s) => s.model)
   const ollamaModel = useApp((s) => s.ollamaModel)
+  const unslothModel = useApp((s) => s.unslothModel)
   const openRouterModel = useApp((s) => s.openRouterModel)
   const mode = useApp((s) => s.mode)
   const connection = useApp((s) => s.connection)
@@ -305,6 +306,8 @@ export function StatusBar(): JSX.Element {
         connection === 'connected' && models.length > 0
           ? `OpenRouter: ${t('status.connected')} - ${modelCount(models.length)}`
           : `OpenRouter: ${connectionStatusLabel(connection)}`
+    } else if (provider === 'unsloth') {
+      label = `Unsloth: ${connectionStatusLabel(connection)}${models.length ? ` · ${modelCount(models.length)}` : ''}`
     } else if (isOllama) {
       label =
         connection === 'connected' && models.length > 0
@@ -313,7 +316,7 @@ export function StatusBar(): JSX.Element {
     }
   }
 
-  const modelLabel = isOmniroute
+  const modelLabel = provider === 'unsloth' ? unslothModel || t('status.noModel') : isOmniroute
     ? omnirouteModel || 'auto'
     : isWProvider
     ? `${wproviderLabel} · Web`

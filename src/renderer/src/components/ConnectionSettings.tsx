@@ -132,6 +132,7 @@ function useCliAuth(
 
 function useProviderModels(provider: LlmProvider) {
   const configKey = useApp((s) => provider === 'openrouter' ? `${s.openRouterEnabled}:${s.openRouterApiKey}`
+    : provider === 'unsloth' ? `${s.unslothBaseUrl}:${s.unslothApiKey}`
     : provider === 'lmstudio' ? s.baseUrl : provider === 'ollama' ? s.ollamaBaseUrl : s.omnirouteStatus.state)
   const request = useRef(0)
   const [models, setModels] = useState<string[]>([])
@@ -139,6 +140,13 @@ function useProviderModels(provider: LlmProvider) {
   const [connectionError, setConnectionError] = useState<string>()
   const refreshModels = async (): Promise<void> => {
     const id = ++request.current
+    if (provider === 'unsloth' && !useApp.getState().unslothApiKey) {
+      setModels([])
+      setConnection('unknown')
+      setConnectionError(undefined)
+      if (useApp.getState().provider === provider) void useApp.getState().refreshModels()
+      return
+    }
     setConnection('connecting')
     try {
       const result = await api.llm.listModels(provider)
@@ -298,6 +306,81 @@ function OllamaPanel(): JSX.Element {
       </div>
     </>
   )
+}
+
+function UnslothPanel(): JSX.Element {
+  const t = useT()
+  const ru = useApp((s) => s.appLanguage === 'ru')
+  const baseUrl = useApp((s) => s.unslothBaseUrl)
+  const apiKey = useApp((s) => s.unslothApiKey)
+  const model = useApp((s) => s.unslothModel)
+  const setModel = useApp((s) => s.setUnslothModel)
+  const setConnection = useApp((s) => s.setUnslothConnection)
+  const { models, connection, connectionError, refreshModels } = useProviderModels('unsloth')
+  const [url, setUrl] = useState(baseUrl)
+  const [key, setKey] = useState(apiKey)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    if (connection === 'connected' && !models.includes(model)) setModel(models[0] ?? '')
+  }, [models, connection, model, setModel])
+
+  const save = async (): Promise<void> => {
+    setSaving(true)
+    setError('')
+    try {
+      const changed = url !== baseUrl || key !== apiKey
+      await setConnection(url, key)
+      setUrl(useApp.getState().unslothBaseUrl)
+      setKey(useApp.getState().unslothApiKey)
+      // Changed saved settings trigger the hook's refresh automatically.
+      if (!changed || (useApp.getState().unslothBaseUrl === baseUrl && useApp.getState().unslothApiKey === apiKey)) await refreshModels()
+    } catch (err) { setError(err instanceof Error ? err.message : String(err)) }
+    finally { setSaving(false) }
+  }
+
+  return <div className="unsloth-settings provider-settings-form">
+    <p className="field-hint">{ru
+      ? 'Запустите Unsloth и загрузите модель. Укажите адрес сервера с портом из Unsloth (обычно 8888 или 8000) и создайте API-ключ в Settings → API.'
+      : 'Start Unsloth and load a model. Enter its server address and port (usually 8888 or 8000), then create an API key in Settings → API.'}</p>
+    <label className="field">
+      <span className="field-label">{t('settings.baseUrl')}</span>
+      <input className="text-input" type="url" value={url} spellCheck={false}
+        placeholder={DEFAULT_LLM_CONFIG.unslothBaseUrl} onChange={(event) => setUrl(event.target.value)}
+        onKeyDown={(event) => { if (event.key === 'Enter' && !saving) void save() }} />
+      <span className="field-hint">{ru ? 'Можно указать адрес сервера без /v1 — он добавится автоматически.' : 'You can enter the server address without /v1; it will be added automatically.'}</span>
+    </label>
+    <label className="field">
+      <span className="field-label">Unsloth API key</span>
+      <input className="text-input" type="password" value={key} autoComplete="off" spellCheck={false}
+        placeholder="sk-unsloth-…" onChange={(event) => setKey(event.target.value)}
+        onKeyDown={(event) => { if (event.key === 'Enter' && !saving) void save() }} />
+      <span className="field-hint">{ru ? 'Ключ обязателен, в том числе для локального сервера. Сохраняется в настройках приложения.' : 'A key is required even for a local server. It is saved in the application settings.'}</span>
+    </label>
+    <div className="field-row">
+      <button className="btn" disabled={saving || connection === 'connecting'} onClick={() => void save()}>
+        {saving || connection === 'connecting' ? t('common.testing') : ru ? 'Сохранить и проверить' : 'Save and test'}
+      </button>
+      <button className="btn" onClick={() => void api.live.openExternal('https://unsloth.ai/docs/basics/api')}>{ru ? 'Как подключить Unsloth' : 'Unsloth setup guide'}</button>
+    </div>
+    {error && <p className="settings-error" role="alert">{error}</p>}
+    <div className={`conn-line ${connection}`} role="status">
+      {connection === 'connected' && `✓ Unsloth: ${t('settings.connectedModels', { count: models.length })}`}
+      {connection === 'connecting' && t('settings.connecting')}
+      {connection === 'error' && `Unsloth: ${connectionError ?? t('settings.connectionFailed')}`}
+      {connection === 'unknown' && (ru ? 'Добавьте API-ключ для проверки подключения.' : 'Add an API key to test the connection.')}
+    </div>
+    <label className="field">
+      <span className="field-label">{t('common.model')}</span>
+      <select className="text-input" value={models.includes(model) ? model : models[0] ?? ''}
+        disabled={!models.length || connection !== 'connected'} onChange={(event) => setModel(event.target.value)}>
+        {models.length ? models.map((id) => <option key={id} value={id}>{id}</option>) : <option value="">{t('settings.noModels')}</option>}
+      </select>
+      <span className="field-hint">{ru ? 'Модели из API Unsloth. Перед отправкой сообщения загрузите выбранную модель в Unsloth или включите там Model auto-switch в Settings → API.' : 'Models reported by the Unsloth API. Load the selected model in Unsloth before chatting, or enable Model auto-switch in its Settings → API.'}</span>
+    </label>
+    <button className="btn" style={{ alignSelf: 'flex-start' }} disabled={!apiKey || saving || connection === 'connecting'} onClick={() => void refreshModels()}>{t('settings.refreshModels')}</button>
+  </div>
 }
 
 interface OmniRouteProviderConnection {
@@ -1704,6 +1787,7 @@ export function ConnectionSettings({ provider }: { provider: LlmProvider }): JSX
       {provider === 'openrouter' && <OpenRouterSetup />}
       {provider === 'codex' ? <CodexPanel />
         : provider === 'ollama' ? <OllamaPanel />
+        : provider === 'unsloth' ? <UnslothPanel />
         : provider === 'copilot' ? <CopilotPanel />
         : provider === 'claude' ? <ClaudePanel />
         : provider === 'gemini' ? <GeminiPanel />

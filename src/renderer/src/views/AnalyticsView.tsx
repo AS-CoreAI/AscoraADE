@@ -17,6 +17,7 @@ import { useApp } from '@/state/store'
 const PROVIDER_LABEL: Record<string, string> = {
   lmstudio: 'LM Studio',
   ollama: 'Ollama',
+  unsloth: 'Unsloth',
   openrouter: 'OpenRouter',
   omniroute: 'OmniRoute',
   codex: 'Codex',

@@ -267,6 +267,8 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
   const setModel = useApp((s) => s.setModel)
   const ollamaModel = useApp((s) => s.ollamaModel)
   const setOllamaModel = useApp((s) => s.setOllamaModel)
+  const unslothModel = useApp((s) => s.unslothModel)
+  const setUnslothModel = useApp((s) => s.setUnslothModel)
   const lmStudioReachable = useApp((s) => s.lmStudioReachable)
   const ollamaReachable = useApp((s) => s.ollamaReachable)
   const providerVisibility = useApp((s) => s.providerVisibility)
@@ -364,6 +366,7 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
       disabled: ollamaUnavailable || blockedBySsh('ollama'),
       tooltip: sshBlockedTitle('ollama') ?? (ollamaUnavailable ? t('composer.ollamaNotRunning') : undefined)
     },
+    { value: 'unsloth', label: 'Unsloth', disabled: blockedBySsh('unsloth'), tooltip: sshBlockedTitle('unsloth') },
     { value: 'openrouter', label: 'OpenRouter', disabled: blockedBySsh('openrouter'), tooltip: sshBlockedTitle('openrouter') },
     { value: 'omniroute', label: 'OmniRoute' },
     {
@@ -411,13 +414,13 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
     { value: 'wprovider', label: 'Ascora WProvider' }
   ]
   const selectedLocalModel =
-    provider === 'ollama' ? ollamaModel : provider === 'omniroute' ? omnirouteModel : model
+    provider === 'unsloth' ? unslothModel : provider === 'ollama' ? ollamaModel : provider === 'omniroute' ? omnirouteModel : model
   const modelOptions =
     provider === 'openrouter'
       ? openRouterModelOptions(models, openRouterModel)
       : models.length > 0
         ? models
-        : [selectedLocalModel || (provider === 'ollama' ? 'ollama' : 'local-model')]
+        : [selectedLocalModel || (provider === 'unsloth' ? '' : provider === 'ollama' ? 'ollama' : 'local-model')]
   const readOnly = !!activeTaskId && archivedTaskId === activeTaskId
   const canSend =
     (text.trim().length > 0 || attachments.length > 0) &&
@@ -789,6 +792,10 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
             if (blockedBySsh(next)) return
             if (next === 'lmstudio' && lmStudioUnavailable) return
             if (next === 'ollama' && ollamaUnavailable) return
+            if (next === 'unsloth' && !useApp.getState().unslothApiKey.trim()) {
+              openSettings('providers', next)
+              return
+            }
             if (next === 'openrouter' && (!useApp.getState().openRouterEnabled || !useApp.getState().openRouterApiKey.trim())) {
               openSettings('providers', next)
               return
@@ -1033,6 +1040,11 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
                 {m}
               </option>
             ))}
+          </select>
+        ) : provider === 'unsloth' ? (
+          <select className="composer-select" value={unslothModel || ''} title="Unsloth model"
+            disabled={!models.length} onChange={(event) => setUnslothModel(event.target.value)}>
+            {modelOptions.map((id) => <option key={id} value={id}>{id || t('settings.noModels')}</option>)}
           </select>
         ) : provider === 'ollama' ? (
           <select

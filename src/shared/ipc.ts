@@ -360,6 +360,7 @@ export interface TaskRecord extends TaskSummary {
 export type LlmProvider =
   | 'lmstudio'
   | 'ollama'
+  | 'unsloth'
   | 'openrouter'
   | 'codex'
   | 'copilot'
@@ -1058,6 +1059,11 @@ export interface LlmConfig {
   ollamaBaseUrl: string
   /** Default Ollama model id used when selected. */
   ollamaModel: string
+  /** Unsloth Studio's OpenAI-compatible API; requires a key even on localhost. */
+  unslothBaseUrl: string
+  unslothApiKey: string
+  /** Exact model id reported by Unsloth Studio's API. */
+  unslothModel: string
   /** Whether OpenRouter is exposed as a selectable agent backend. */
   openRouterEnabled: boolean
   /** OpenRouter API key. Stored locally in app settings. */
@@ -1135,6 +1141,9 @@ export const DEFAULT_LLM_CONFIG: LlmConfig = {
   model: '',
   ollamaBaseUrl: 'http://localhost:11434/v1',
   ollamaModel: '',
+  unslothBaseUrl: 'http://127.0.0.1:8888/v1',
+  unslothApiKey: '',
+  unslothModel: '',
   openRouterEnabled: false,
   openRouterApiKey: '',
   openRouterModel: 'openrouter/free',
