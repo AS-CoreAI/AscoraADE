@@ -7406,6 +7406,7 @@ button.codex-activity-row:hover {
 .settings-view { flex: 1; min-height: 0; display: flex; overflow: hidden; }
 .settings-nav { width: 230px; flex-shrink: 0; padding: 28px 16px; overflow-y: auto; border-right: 1px solid var(--border); background: var(--bg-rail); }
 .settings-nav-title { display: flex; align-items: center; gap: 10px; padding: 0 10px 16px; font-size: 19px; }
+.settings-nav-title strong { min-width: 0; overflow-wrap: anywhere; }
 .settings-back { display: flex; align-items: center; gap: 6px; color: var(--text-muted); padding: 8px; margin-bottom: 24px; }
 .settings-nav nav > button { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 12px 10px; border-radius: 7px; margin-bottom: 3px; }
 .settings-nav button:hover { background: var(--bg-hover); }
@@ -7472,6 +7473,7 @@ button.codex-activity-row:hover {
 .tools-settings-page .tools-modal-footer { padding: 20px 0; }
 @media (max-width: 1050px) {
   .settings-nav { width: 195px; padding: 22px 10px; }
+  .settings-nav-title { font-size: 17px; gap: 8px; padding-left: 6px; padding-right: 6px; }
   .settings-content { padding: 28px 20px; }
   .settings-content-header { align-items: flex-start; flex-direction: column; }
   .settings-theme-preview { padding: 18px 8px; border-left-width: 16px; }
