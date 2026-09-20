@@ -22,9 +22,9 @@ const RELEASES_URL = `${UPDATE_HOST}/api/releases`
 /** Where the badge sends the user — the site's download section. */
 const DOWNLOAD_PAGE = `${UPDATE_HOST}/#download`
 /** Public GitHub releases feed used only when the site feed cannot be reached. */
-const GITHUB_RELEASES_PAGE = 'https://github.com/AS-CoreAI/Ascora-ADE/releases'
-const GITHUB_LATEST_URL = 'https://api.github.com/repos/AS-CoreAI/Ascora-ADE/releases/latest'
-const GITHUB_RELEASES_URL = 'https://api.github.com/repos/AS-CoreAI/Ascora-ADE/releases?per_page=20'
+const GITHUB_RELEASES_PAGE = 'https://github.com/AS-CoreAI/AscoraADE/releases'
+const GITHUB_LATEST_URL = 'https://api.github.com/repos/AS-CoreAI/AscoraADE/releases/latest'
+const GITHUB_RELEASES_URL = 'https://api.github.com/repos/AS-CoreAI/AscoraADE/releases?per_page=20'
 /** Give up on a slow/unreachable feed rather than hang the badge. */
 const FETCH_TIMEOUT_MS = 8000
 

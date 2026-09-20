@@ -5,6 +5,14 @@ copyright: Copyright © 2026 ASCoreAI (ascoreai.com)
 npmRebuild: false
 afterPack: scripts/omniroute/after-pack.cjs
 
+# Canonical release channel. Normal local builds use --publish never;
+# explicit publication uploads to a draft for checksum/asset review.
+publish:
+  provider: github
+  owner: AS-CoreAI
+  repo: AscoraADE
+  releaseType: draft
+
 directories:
   output: dist
   buildResources: build

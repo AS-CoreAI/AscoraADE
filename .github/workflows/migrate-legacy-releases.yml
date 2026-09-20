@@ -1,0 +1,101 @@
+name: Copy historical release assets
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: historical-release-migration
+  cancel-in-progress: false
+jobs:
+  copy:
+    if: github.repository == 'AS-CoreAI/AscoraADE'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        tag: [v1.0.0, v1.1.0, v1.2.0, v1.2.1, v1.2.2, v1.2.3, v1.2.4, v1.3.0, v1.3.1]
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      RELEASE_TAG: ${{ matrix.tag }}
+    steps:
+      - name: Copy assets and verify SHA-256 before and after upload
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          """One-time copy of existing public release attachments into prepared drafts."""
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          import subprocess
+          import sys
+          import tempfile
+
+          SOURCE = 'AS-CoreAI/Ascora-ADE'
+          TARGET = 'AS-CoreAI/AscoraADE'
+          ALLOWED = {'v1.0.0', 'v1.1.0', 'v1.2.0', 'v1.2.1', 'v1.2.2', 'v1.2.3', 'v1.2.4', 'v1.3.0', 'v1.3.1'}
+
+
+          def api(path):
+              return json.loads(subprocess.check_output(['gh', 'api', path], text=True))
+
+
+          def verify(source, copied):
+              for key in ('name', 'size', 'digest', 'label'):
+                  if source.get(key) != copied.get(key):
+                      raise RuntimeError(f"Asset {source['name']}: {key} mismatch")
+              if copied['state'] != 'uploaded':
+                  raise RuntimeError('Incomplete uploaded asset')
+
+
+          def main():
+              tag = os.environ['RELEASE_TAG']
+              if tag not in ALLOWED or os.environ['GITHUB_REPOSITORY'] != TARGET:
+                  raise RuntimeError('Unexpected migration target')
+              source = api(f'repos/{SOURCE}/releases/tags/{tag}')
+              dest = next(r for r in api(f'repos/{TARGET}/releases?per_page=100') if r['tag_name'] == tag)
+              if not dest['draft'] or dest['name'] != source['name'] or not dest['body'].endswith(source['body'] or ''):
+                  raise RuntimeError('Target must be a prepared migration draft')
+              names = {a['name'] for a in source['assets']}
+              if len(names) != len(source['assets']) or not {a['name'] for a in dest['assets']}.issubset(names):
+                  raise RuntimeError('Unexpected or duplicate asset names')
+              with tempfile.TemporaryDirectory(prefix='ascora-release-') as directory:
+                  for asset in source['assets']:
+                      name = asset['name']
+                      if '/' in name or '\\' in name or name in ('.', '..'):
+                          raise RuntimeError('Invalid asset filename')
+                      existing = next((a for a in dest['assets'] if a['name'] == name), None)
+                      if existing:
+                          verify(asset, existing)
+                          print(f'{tag}: already verified {name}', flush=True)
+                          continue
+                      if not asset['digest'].startswith('sha256:') or not asset['browser_download_url'].startswith(f'https://github.com/{SOURCE}/releases/download/{tag}/'):
+                          raise RuntimeError('Unexpected download metadata')
+                      path = Path(directory) / name
+                      print(f'{tag}: downloading {name} ({asset["size"]} bytes)', flush=True)
+                      subprocess.run(['curl', '--fail', '--location', '--silent', '--show-error', '--retry', '3', '--max-time', '900', '--output', str(path), asset['browser_download_url']], check=True)
+                      with path.open('rb') as downloaded:
+                          digest = 'sha256:' + hashlib.file_digest(downloaded, 'sha256').hexdigest()
+                      if path.stat().st_size != asset['size'] or digest != asset['digest']:
+                          raise RuntimeError(f'{name}: downloaded size/digest mismatch')
+                      print(f'{tag}: uploading verified {name}', flush=True)
+                      upload = str(path) + ('#' + asset['label'] if asset.get('label') else '')
+                      subprocess.run(['gh', 'release', 'upload', tag, '--repo', TARGET, upload], check=True)
+                      copied = next(a for a in api(f'repos/{TARGET}/releases/{dest["id"]}/assets?per_page=100') if a['name'] == name)
+                      verify(asset, copied)
+                      path.unlink()
+                      print(f'{tag}: SHA-256 verified on destination: {name}', flush=True)
+              dest = api(f'repos/{TARGET}/releases/{dest["id"]}')
+              if {a['name'] for a in dest['assets']} != names:
+                  raise RuntimeError('Incomplete release asset set')
+              for asset in source['assets']:
+                  verify(asset, next(a for a in dest['assets'] if a['name'] == asset['name']))
+              print(f'{tag}: all {len(names)} assets verified; left as draft for final review.', flush=True)
+
+
+          if __name__ == '__main__':
+              main()
+
+          PY

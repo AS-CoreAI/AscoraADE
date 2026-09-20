@@ -17,7 +17,7 @@ exceptions, and [CONTRIBUTING.md](CONTRIBUTING.md) before submitting code.
 This is a custom license, not FSL or an OSI-approved open-source license.
 Third-party components retain their own licenses and notices.
 
-**Latest application release:** [1.3.1 — Windows and Linux downloads](https://github.com/AS-CoreAI/Ascora-ADE/releases/tag/v1.3.1).
+**Latest application release:** [1.3.1 — Windows and Linux downloads](https://github.com/AS-CoreAI/AscoraADE/releases/tag/v1.3.1).
 Read [changelog.md](changelog.md) for released features and subsequent changes.
 Previously distributed installers retain their existing license grants; this
 source-publication change does not relabel them retrospectively.
@@ -153,7 +153,10 @@ npm run typecheck   # tsc for main and renderer
 
 **`main`** is the current public source entry point. The **`version1.3.1`**
 branch contains the 1.3.1 development line and the source-publication update;
-older version branches are preserved as history. Application binaries are
-published separately in [AS-CoreAI/Ascora-ADE](https://github.com/AS-CoreAI/Ascora-ADE).
+older version branches are preserved as history. Application binaries and future
+releases are published in [this repository's Releases](https://github.com/AS-CoreAI/AscoraADE/releases).
+Historical releases were copied with their original assets and checksums from
+[AS-CoreAI/Ascora-ADE](https://github.com/AS-CoreAI/Ascora-ADE), which retains old
+download URLs for compatibility. See [RELEASING.md](RELEASING.md) for publication steps.
 For historical license metadata and the start of the 13-year period, see
 [LICENSING.md](LICENSING.md).

@@ -1,6 +1,7 @@
 ## Unreleased
 
 ### Changed
+- **Unified release repository** — moved the release channel to `AS-CoreAI/AscoraADE` alongside the public source. Historical releases retain their descriptions, installers, and SHA-256 checksum files; the old distribution repository keeps existing download URLs working and points to the new channel. Future builds use the new GitHub update fallback and publishing destination.
 - **Public source licensing** — published the original Ascora ADE source under the ASCoreAI Noncommercial Source License 1.0, with an automatic MIT grant for each version after 13 years. During that period, commercial use, including paid employment, client work, and internal business use, is reserved to ASCoreAI unless separately authorized in writing. Added contribution terms and a publication record, corrected the package license metadata, and included the license in future application builds. Existing license grants, previously released installers, and third-party licenses remain unaffected.
 
 ### Security
