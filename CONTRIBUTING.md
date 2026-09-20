@@ -1,9 +1,12 @@
 # Contributing to Ascora ADE
 
 Read [LICENSE.md](LICENSE.md) and [LICENSING.md](LICENSING.md) first. This
-project permits noncommercial public use before each Version's 13-year MIT
-transition. Commercial use, including paid development work, requires
-ASCoreAI's separate express written permission.
+project permits paid development work, internal business use, startup work,
+and other Permitted Purposes under the ASCoreAI Source License 1.1. Selling
+the IDE or its forks and providing paid or advertising-supported access to
+them require ASCoreAI's written permission before each Version's 13-year
+MIT transition. Paid and employer-sponsored contributions are welcome,
+subject to the permissions below.
 
 ## Contribution permissions
 
@@ -18,8 +21,9 @@ By intentionally submitting a contribution for inclusion in Ascora ADE, you:
    irrevocable, sublicensable copyright license to use, reproduce, modify,
    distribute, publicly display, and commercially exploit your contribution,
    and distribute it under this or other license terms. This additional grant
-   lets ASCoreAI operate commercially during the public restriction period;
-   it does not authorize you to use the rest of Ascora ADE commercially.
+   lets ASCoreAI make Restricted Offerings during the public restriction
+   period. Your rights to the rest of Ascora ADE, including use for paid
+   work, remain governed by LICENSE.md.
 4. Grant ASCoreAI a corresponding patent license, to the extent you can grant
    it, for claims necessarily infringed by your contribution alone or its
    intended combination with the project.

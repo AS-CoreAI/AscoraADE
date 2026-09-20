@@ -6,11 +6,12 @@ an agent can inspect code, edit files, run commands, and show changes in the
 editor. Includes local and SSH workspaces, terminals, Git integration,
 Blueprint automation, and settings in eleven languages.
 
-**Source-available:** [ASCoreAI Noncommercial Source License 1.0](LICENSE.md).
-Public use is **noncommercial only for 13 years per version**, then that
-version automatically becomes available under MIT. During the restriction
-period, paid employment, freelance/client work, internal business use, selling
-forks, and paid hosting require ASCoreAI's separate express written permission.
+**Source-available:** [ASCoreAI Source License 1.1](LICENSE.md).
+**Free to use for paid work, freelance/client projects, internal business use,
+and startups.** You may sell independent products created with Ascora without
+paying ASCoreAI or publishing your project's source. Before each version's
+13-year MIT transition, selling the IDE or its forks and providing paid or
+advertising-supported access to them require ASCoreAI's written permission.
 See [LICENSING.md](LICENSING.md) for examples, dates, and existing-license
 exceptions, and [CONTRIBUTING.md](CONTRIBUTING.md) before submitting code.
 

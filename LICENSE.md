@@ -1,4 +1,4 @@
-# ASCoreAI Noncommercial Source License 1.0 — MIT after 13 years
+# ASCoreAI Source License 1.1 — MIT after 13 years
 
 Copyright (c) 2026 ASCoreAI and the respective contributors.
 
@@ -24,50 +24,72 @@ distribution of Covered Software. A Version's "Publication Date" is the date
 on which Licensor first makes that Version publicly available under this
 license, in source or executable form. Dates are measured in UTC. A private
 commit, private backup, or private distribution does not start this period.
+Section 6 preserves the earlier Publication Date for code first published
+under the ASCoreAI Noncommercial Source License 1.0.
 
 A Version's "Change Date" is the thirteenth calendar anniversary of its
 Publication Date. For a February 29 Publication Date, use February 28 if the
 anniversary year has no February 29. The MIT grant in section 5 takes effect
 at 00:00 UTC on the Change Date.
 
-"Commercial Use" means using, copying, modifying, distributing, or providing
-access to Covered Software for commercial advantage or monetary compensation,
-whether directly or indirectly. It includes, without limitation:
+"Restricted Offering" means making Covered Software, a copy, a fork, or a
+derivative work available to others in any of the following ways:
 
-- use in paid employment, freelance work, consulting, or work for a client;
-- use in the internal operations of a business or commercial organization,
-  even if no fee is charged for the Software itself;
-- developing, operating, or supporting a commercial product or service;
-- selling, licensing for a fee, renting, or monetizing the Software, a fork,
-  a derivative work, or access to any of them;
-- providing paid hosting, subscriptions, support, integration, or training
-  that uses the Software, or bundling it with a commercial offering; and
-- using it in an advertising-supported or otherwise monetized service.
+- selling, renting, licensing for a fee, or charging for downloading, using,
+  or receiving updates to that software;
+- providing paid hosted or managed access to that software, including a
+  subscription or an API that provides its IDE or coding-agent functionality;
+  or
+- distributing that software or providing access to it as part of a paid
+  product or service, or monetizing that access through advertising. Calling
+  the software free does not create an exception if payment for a bundle,
+  subscription, or required support is a condition of obtaining or using it.
 
-Being a nonprofit, charity, educational institution, or individual does not
-by itself make a compensated or commercially directed use noncommercial.
+These restrictions concern offerings that contain, incorporate, or derive
+from Covered Software. They do not restrict independently developed products
+or services merely because those products or services were created using
+Ascora ADE or have similar or competing functionality.
 
-"Noncommercial Use" means use that is not Commercial Use. Examples include
-personal experimentation, unpaid hobby projects, and education or research
-that is not carried out as paid work or for commercial advantage.
+"Permitted Purpose" means any purpose that is not a Restricted Offering.
+Permitted Purposes expressly include:
+
+- paid employment, freelance work, consulting, and work for clients;
+- internal use by a business, startup, nonprofit, or other organization,
+  including running a modified version on its own infrastructure for its
+  employees and contractors working on its behalf;
+- developing, operating, supporting, licensing, and selling independent
+  products and services, including commercial startup products;
+- personal use, education, research, and contributions, whether paid or unpaid;
+  and
+- distributing unmodified or modified copies without charging for those
+  copies or access to them, subject to section 3.
+
+Payment for labor does not by itself make use a Restricted Offering.
+Professional services such as development, installation, configuration,
+customization, training, and support are permitted where the fee is for the
+service, the recipient may obtain and use Covered Software under this public
+license without a software or access fee, and the arrangement is not a sale
+of a fork or a paid hosted IDE service. Required service charges must not be
+used to disguise a charge for the software or access to it.
 
 ## 2. Permission before the Change Date
 
 Before the applicable Change Date, Licensor grants You a worldwide,
 non-exclusive, royalty-free right to access, inspect, run, copy, modify, and
-redistribute Covered Software, in source or executable form, solely for
-Noncommercial Use and subject to this license.
+redistribute Covered Software, in source or executable form, for any Permitted
+Purpose and subject to this license.
 
-**No Commercial Use is granted to anyone other than ASCoreAI before the
-applicable Change Date.** In particular, free access to the repository or
-free downloading of the application does not authorize its use for paid work.
-Commercial Use requires a separate express written permission from ASCoreAI;
-it cannot be inferred from a contribution, donation, purchase of an unrelated
-service, repository access, or silence.
+**You may use Ascora ADE for paid work, inside a business, and to build and
+sell your own independent products without a separate commercial license or
+payment to ASCoreAI.** There is no revenue, funding, employee-count, or
+organization-size limit on these permissions.
 
-You must not evade this restriction by acting through an intermediary, by
-describing a commercial payment as a donation, or by providing the Software
-free of charge as part of a commercially directed offering.
+Before the applicable Change Date, making a Restricted Offering is reserved
+to ASCoreAI and requires its separate express written permission for anyone
+else. That permission cannot be inferred from a contribution, donation,
+purchase of an unrelated service, repository access, or silence. A payment
+required to obtain software or access remains a payment even if described
+as a donation or collected through an intermediary.
 
 ## 3. Copies, modifications, and redistribution
 
@@ -80,7 +102,9 @@ release.
 Your modifications and derivative works that contain Covered Software may be
 redistributed only under these terms until that Covered Software's Change
 Date. Recipients receive their rights in Licensor's work directly under this
-license. You must not grant recipients earlier commercial rights to that work.
+license. You must not grant recipients permission to make a Restricted
+Offering of that work before its Change Date unless ASCoreAI separately
+authorizes it in writing.
 
 Copying, rebuilding, renaming, forking, or redistributing a Version does not
 restart or extend its original period. Republishing existing code in a newer
@@ -91,10 +115,13 @@ subject to their restrictions. You may use already-converted code separately
 under MIT without those later additions.
 
 Independent output created using the application is not Covered Software
-merely because the application helped create it. This does not authorize
-Commercial Use of the application to create that output. Output that contains
-copies of Covered Software remains subject to the applicable terms for those
-copies.
+merely because the application helped create it. You may use, license, and
+sell that output, including code, applications, and other commercial products,
+under terms of your choice without a payment or attribution obligation to
+ASCoreAI under this license. This license does not require you to publish
+your independent projects' source code. Output that contains copies of
+Covered Software remains subject to the applicable terms for those copies;
+other parties' rights and licenses remain unaffected.
 
 ## 4. Patents and trademarks
 
@@ -119,7 +146,7 @@ of the project, removal of the repository, later license changes, and transfer
 of Licensor's copyright interests. No later release can postpone it.
 
 From the Change Date, You may choose the MIT terms for the converted code.
-The commercial-use restriction and the other pre-conversion conditions in
+The Restricted Offering limitation and the other pre-conversion conditions in
 sections 2 and 3 no longer apply to use of that code under MIT. Third-party
 licenses, independently applicable rights, and the absence of trademark rights
 remain unaffected.
@@ -147,7 +174,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
-## 6. Third-party material and earlier permissions
+## 6. Third-party material, earlier permissions, and license revision
 
 Dependencies, bundled programs, provider artwork, and other third-party
 material retain their own licenses and notices, including those described in
@@ -159,6 +186,16 @@ validly granted for any copy or code under MIT or another license before its
 application. Such permissions remain governed by their original terms.
 Historical repository metadata is not rewritten by this notice. See
 LICENSING.md for the publication record and treatment of historical sources.
+
+Effective **2026-09-20 UTC**, ASCoreAI also offers under this license the
+Ascora ADE source versions it previously published under the ASCoreAI
+Noncommercial Source License 1.0, to the extent it is entitled to grant those
+rights. You may choose this version 1.1 license for that Covered Software.
+Its Publication Date remains the date it was first publicly available under
+version 1.0; choosing version 1.1 does not restart or extend the 13-year
+period. In particular, code first published under version 1.0 on 2026-09-19
+has a Change Date of 2039-09-19. Existing permissions and irrevocable future
+MIT grants remain available independently of this additional offer.
 
 ## 7. Termination and reservation of rights
 
