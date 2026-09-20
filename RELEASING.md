@@ -65,3 +65,8 @@ bytes and checksum files are preserved. Tags refer to the corresponding cleaned
 public source history, not the distribution repository's binary directories.
 These source archives are not a claim of byte-for-byte reproducible builds.
 The migration does not change existing license grants for older installers.
+
+The migration copied **9 releases and 55 attachments** (6,224,467,568 bytes).
+Each file's name, size, label, and SHA-256 digest was verified against the original
+before publication. The [one-time transfer run](https://github.com/AS-CoreAI/AscoraADE/actions/runs/35477686538)
+completed successfully; its workflow was disabled and removed afterward.
