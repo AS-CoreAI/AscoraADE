@@ -6,6 +6,9 @@ an agent can inspect code, edit files, run commands, and show changes in the
 editor. Includes local and SSH workspaces, terminals, Git integration,
 Blueprint automation, and settings in eleven languages.
 
+**Official channel:** [Ascora ADE on Znosin](https://znosin.com/c/ascoraade) —
+release news, previews, and development updates in English.
+
 **Source-available:** [ASCoreAI Source License 1.1](LICENSE.md).
 **Free to use for paid work, freelance/client projects, internal business use,
 and startups.** You may sell independent products created with Ascora without
