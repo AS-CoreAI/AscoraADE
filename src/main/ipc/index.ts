@@ -4,6 +4,7 @@ import { registerDialogHandlers } from './dialog'
 import { registerFsHandlers } from './fs'
 import { registerSettingsHandlers } from './settings'
 import { registerLlmHandlers } from './llm'
+import { registerComputerHandlers } from './computer'
 import { registerCodexHandlers } from './codex'
 import { registerCopilotHandlers } from './copilot'
 import { registerClaudeHandlers } from './claude'
@@ -32,6 +33,7 @@ export function registerIpc(): void {
   registerFsHandlers()
   registerSettingsHandlers()
   registerLlmHandlers()
+  registerComputerHandlers()
   registerCodexHandlers()
   registerCopilotHandlers()
   registerClaudeHandlers()

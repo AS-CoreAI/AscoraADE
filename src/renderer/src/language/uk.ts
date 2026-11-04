@@ -4,6 +4,18 @@ import en, { type Translation } from './en'
 // Ukrainian wording. New translations belong in this file only.
 const uk: Translation = {
   ...en,
+  'rail.officialChannel': "Офіційний канал",
+  'composer.computer': "Комп’ютер",
+  'composer.computerActive': "Основний екран, миша й клавіатура · Стоп:",
+  'composer.computerChecking': "Перевірка можливостей моделі…",
+  'composer.computerHint': "Дозволити доступ до основного екрана, миші та клавіатури",
+  'composer.computerPlatform': "Керування комп’ютером поки доступне на Windows.",
+  'composer.computerModel': "Виберіть модель із підтримкою зображень і виклику інструментів.",
+  'composer.computerUnknown': "Не вдалося перевірити модель. Перевірте з’єднання й оновіть LM Studio.",
+  'composer.placeholderShort': "Опишіть завдання або поставте запитання…",
+  'composer.askShort': "З підтвердженням",
+  'composer.autoShort': "Автоматично",
+  'composer.enterHint': "Enter — надіслати · Shift+Enter — новий рядок",
   'rail.includesOmniroute': 'Включає OmniRoute (MIT)',
   'rail.omniroute': 'OmniRoute',
   'rail.vpn': 'VPN',

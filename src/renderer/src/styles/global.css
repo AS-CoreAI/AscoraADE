@@ -2822,15 +2822,18 @@ button {
 
 /* ---------- Composer ---------- */
 .composer {
+  container-type: inline-size;
   width: 100%;
   background: var(--bg-input);
   border: 1px solid var(--border-strong);
-  border-radius: 14px;
-  padding: 6px;
-  transition: border-color 0.15s;
+  border-radius: 18px;
+  padding: 10px;
+  box-shadow: 0 6px 24px #00000012, inset 0 1px 0 #ffffff04;
+  transition: border-color 0.15s, box-shadow 0.15s;
 }
 .composer:focus-within {
   border-color: var(--focus-border);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus-border) 10%, transparent), 0 8px 28px #00000014;
 }
 .composer.dragging-files {
   border-color: var(--focus-border);
@@ -2933,7 +2936,7 @@ button {
 }
 .composer-input {
   width: 100%;
-  min-height: 26px;
+  min-height: 76px;
   max-height: 220px;
   resize: none;
   background: transparent;
@@ -2942,24 +2945,55 @@ button {
   color: var(--text);
   font-family: inherit;
   font-size: 14px;
-  line-height: 1.5;
-  padding: 4px 10px 10px;
+  line-height: 1.65;
+  padding: 9px 10px 14px;
+  display: block;
 }
 .composer-input::placeholder {
-  color: var(--text-faint);
+  color: var(--text-muted);
+  opacity: .8;
 }
 .composer-toolbar {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 6px;
-  padding: 4px 4px 2px;
+  gap: 8px;
+  padding: 9px 2px 3px;
+  border-top: 1px solid var(--border);
+}
+.composer-actions, .composer-model-controls { display: flex; align-items: center; gap: 6px; min-width: 0; flex-wrap: wrap; }
+.composer-model-controls { justify-content: flex-end; }
+.composer-model-controls > select, .composer-model-controls > .provider-select-wrap { min-width: 0; max-width: 230px; }
+.composer-model-controls > select { flex: 1 1 110px; text-overflow: ellipsis; }
+.composer-actions > .composer-tool { max-width: 100%; }
+.composer-actions .composer-tool-select { min-width: 0; max-width: 180px; text-overflow: ellipsis; }
+.composer-tool > svg { flex-shrink: 0; }
+.computer-toggle-wrap { display: inline-flex; max-width: 100%; }
+.computer-status-dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+.composer.computer-enabled { border-color: color-mix(in srgb, var(--accent) 60%, var(--border)); }
+.composer-footnote { display: flex; align-items: center; gap: 9px; min-height: 24px; padding: 5px 8px 0; color: var(--text-faint); font-size: 10.5px; }
+.composer-footnote > span:not(.composer-key-hint) { font-weight: 500; }
+.composer-key-hint { margin-left: auto; }
+.composer-footnote kbd { margin-left: auto; white-space: nowrap; font: inherit; border: 1px solid var(--border); border-radius: 4px; padding: 2px 4px; }
+.composer-footnote.computer-notice { color: var(--accent); line-height: 1.4; }
+.composer-footnote.computer-notice svg { flex-shrink: 0; }
+.composer :is(button, select):focus-visible { outline: 2px solid var(--focus-border); outline-offset: 2px; }
+@container (max-width: 650px) {
+  .composer-toolbar { grid-template-columns: minmax(0, 1fr) auto; }
+  .composer-actions { grid-column: 1 / -1; }
+  .composer-model-controls { justify-content: flex-start; }
+  .composer-model-controls > select { max-width: 100%; }
+  .composer-footnote { flex-wrap: wrap; }
 }
 .composer-tool {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 9px;
-  border-radius: var(--radius-sm);
+  padding: 7px 9px;
+  min-height: 32px;
+  border: 1px solid transparent;
+  background: var(--bg-elevated);
+  border-radius: 9px;
   color: var(--text-muted);
   font-size: 12.5px;
 }
@@ -2988,6 +3022,7 @@ button {
 .composer-tool.active svg {
   color: var(--accent);
 }
+.composer-tool.active { background: color-mix(in srgb, var(--accent) 10%, var(--bg-input)); border-color: color-mix(in srgb, var(--accent) 25%, transparent); }
 .composer-tool.active:hover {
   background: var(--bg-hover);
   color: var(--accent);
@@ -3010,14 +3045,15 @@ button {
   flex: 1;
 }
 .composer-select {
-  background: transparent;
-  border: none;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
   outline: none;
   color: var(--text-muted);
   font-family: inherit;
   font-size: 12.5px;
-  padding: 6px 4px;
-  border-radius: var(--radius-sm);
+  padding: 7px 8px;
+  min-height: 32px;
+  border-radius: 9px;
   cursor: pointer;
 }
 .composer-select:hover {
@@ -3302,19 +3338,21 @@ button {
   color: var(--text);
 }
 .send-btn {
-  width: 30px;
-  height: 30px;
-  border-radius: 8px;
-  background: var(--bg-active);
-  border: 1px solid var(--border-strong);
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
+  background: var(--accent);
+  border: 1px solid transparent;
   display: grid;
   place-items: center;
-  color: var(--text);
-  transition: background 0.12s;
+  color: var(--button-primary-text);
+  transition: background 0.12s, transform 0.12s;
 }
 .send-btn:hover {
-  background: var(--control-hover);
+  background: color-mix(in srgb, var(--accent) 85%, var(--text));
 }
+.send-btn:not(:disabled):active { transform: scale(.94); }
+.send-btn.stopping { background: color-mix(in srgb, var(--danger) 12%, var(--bg-input)); border-color: color-mix(in srgb, var(--danger) 30%, transparent); color: var(--danger); }
 .send-btn:disabled {
   color: var(--text-faint);
   cursor: default;

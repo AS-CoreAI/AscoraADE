@@ -9,6 +9,7 @@ import { api } from '@/lib/api'
 import { tr, type TranslationKey } from '@/language'
 
 const TOOL_LABEL_KEY: Record<string, TranslationKey> = {
+  computer: 'composer.computer',
   list_dir: 'chat.tool.listDir',
   read_file: 'chat.tool.readFile',
   search_files: 'chat.tool.search',
@@ -21,7 +22,8 @@ const TOOL_LABEL_KEY: Record<string, TranslationKey> = {
   web_search: 'chat.tool.webSearch'
 }
 
-function toolIcon(tool?: string): 'terminal' | 'folder' | 'file' | 'search' | 'globe' {
+function toolIcon(tool?: string): 'terminal' | 'folder' | 'file' | 'search' | 'globe' | 'monitor' {
+  if (tool === 'computer') return 'monitor'
   if (tool === 'run_command' || tool === 'run_typescript') return 'terminal'
   if (tool === 'list_dir') return 'folder'
   if (tool === 'search_files' || tool === 'web_search') return 'search'
@@ -30,6 +32,7 @@ function toolIcon(tool?: string): 'terminal' | 'folder' | 'file' | 'search' | 'g
 }
 
 function toolSummary(m: ChatMessage): string {
+  if (m.tool === 'computer') return [m.args?.action, m.args?.key, m.args?.text, m.args?.x !== undefined ? `(${m.args.x}, ${m.args.y})` : ''].filter(Boolean).join(' · ')
   if (m.tool === 'run_command') return String(m.args?.command ?? '')
   if (m.tool === 'run_typescript') return String(m.args?.code ?? '').split('\n', 1)[0]
   if (m.tool === 'search_files' || m.tool === 'web_search') return String(m.args?.query ?? '')
@@ -154,7 +157,7 @@ function ToolCard({ m }: { m: ChatMessage }): JSX.Element {
         status === 'done' &&
         m.output && <pre className="tool-output">{m.output}</pre>}
 
-      {(m.tool === 'list_dir' || m.tool === 'read_file') && m.output && status === 'done' && (
+      {(m.tool === 'list_dir' || m.tool === 'read_file' || m.tool === 'computer') && m.output && status === 'done' && (
         <div className="tool-note">{m.output}</div>
       )}
 

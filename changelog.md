@@ -1,8 +1,19 @@
-## Unreleased
+## Ascora ADE 1.3.2
+What's new?
+
+### Added
+- **Official news channel** — added a shortcut in the app sidebar and a link in About to the Ascora ADE channel on Znosin, with localized labels in all 11 languages. The repository README now links to the same channel for release news, previews, and development updates in English.
+- **Computer use for LM Studio on Windows** — added an opt-in Computer button beside the message input. Availability is verified through LM Studio's model capabilities (vision and tool calling), including custom loaded instance IDs. The agent can capture the primary display, click, double-click, move, drag, scroll, type Unicode text, and send keyboard shortcuts. Actions respect Ask/Automatic mode, require the latest screenshot, account for display scaling, and restore the observed window's focus after approval. Stop and Ctrl+Alt+Esc revoke access; switching tasks, models or providers, and closing/reloading the renderer end the session. Only the latest screen image is sent to the model; screenshots are not persisted in chat history. Other operating systems show an unavailable state.
 
 ### Changed
+- **Redesigned chat composer** — a roomier message field, clearer permission controls, grouped provider/model selectors, a prominent Send/Stop button, keyboard hints, and a visible computer-access indicator. The toolbar wraps for narrow panels and supports dark/light themes; new controls are localized in all 11 interface languages.
 - **Unified release repository** — moved the release channel to `AS-CoreAI/AscoraADE` alongside the public source. Historical releases retain their descriptions, installers, and SHA-256 checksum files; the old distribution repository keeps existing download URLs working and points to the new channel. Future builds use the new GitHub update fallback and publishing destination.
 - **Public source licensing** — updated the original Ascora ADE source to the ASCoreAI Source License 1.1, with an automatic MIT grant for each version after 13 years. Paid employment, freelance/client work, internal business use, and startups are explicitly allowed without a separate license or revenue limit; independent products created with Ascora may be sold without royalties or source disclosure. Selling the IDE or its forks and providing paid or advertising-supported access to them require ASCoreAI's written permission before conversion. The broader grant also covers source previously published under the Noncommercial Source License 1.0 without restarting its MIT transition period. Updated contribution terms, licensing examples, and the publication record; future builds include the license. Existing grants, previously released installers, and third-party licenses remain unaffected.
+
+### Fixed
+- **LM Studio stream interruptions during large prompts** — extended generation header/body inactivity timeouts from the HTTP client's default five minutes to thirty minutes while retaining immediate cancellation. Stream failures now explain timeout or connection errors instead of displaying only `terminated`.
+- **Visible local-model reasoning** — streams `reasoning_content`, `reasoning`, and leading `<think>`/`<analysis>` blocks into the existing collapsible reasoning panel, preserving partial reasoning on interruption and keeping it separate from final answers and tool parsing.
+- **Bounded directory results** — directory listings now default to 100 entries, support offsets and filename filtering, and have an additional character budget. Shared formatting covers local/SSH chat and Blueprints, avoiding thousands of filenames being injected into the next prompt at once.
 
 ### Security
 - **VPN publication hardening** — removed the embedded legacy VPN client HMAC secret from the current source. Deployments that still require that protocol must provide the credential at runtime; an unconfigured source build reports an authorization configuration error. Added missing-secret/protocol tests and secret-scanning rules for VPN and Unsloth credentials. Retirement of keys already distributed in older installers requires a coordinated server/client update.

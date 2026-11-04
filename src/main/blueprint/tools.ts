@@ -1,4 +1,5 @@
 import type { AgentSearchMatch, AgentSearchOptions, Workspace } from '@shared/ipc'
+import { formatAgentDirectory, LIST_DIR_USAGE } from '@shared/agent-directory'
 import {
   hasWProviderToolCallIntent,
   parseWProviderTextToolCall,
@@ -43,7 +44,7 @@ export function blueprintAgentModePrompt(workspace?: Workspace): string {
       : 'Commands run in a POSIX shell (sh). Use Unix-compatible commands.'
   const workspaceTools = workspace
     ? [
-        '- list_dir(path): list a directory ("." is the project root)',
+        LIST_DIR_USAGE,
         '- read_file(path, [start_line], [end_line]): read a whole file or a line range',
         '- search_files(query, [path], [regex], [glob], [context], [case_sensitive]): search project files',
         '- write_file(path, content): create or fully overwrite a file',
@@ -154,11 +155,7 @@ export async function executeBlueprintTool(
 
   if (call.name === 'list_dir') {
     const result = await listAgentDir(root, asString(call.args.path) || '.')
-    return result.ok
-      ? `Directory ${result.path}:\n${(result.entries ?? [])
-          .map((entry) => (entry.type === 'directory' ? `${entry.name}/` : entry.name))
-          .join('\n') || '(empty)'}`
-      : `Error: ${result.error}`
+    return formatAgentDirectory(result, call.args).content
   }
 
   if (call.name === 'read_file') {

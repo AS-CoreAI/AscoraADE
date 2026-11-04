@@ -2,6 +2,18 @@
 
 const it: Translation = {
   ...en,
+  'rail.officialChannel': "Canale ufficiale",
+  'composer.computer': "Computer",
+  'composer.computerActive': "Schermo principale, mouse e tastiera · Stop:",
+  'composer.computerChecking': "Verifica delle capacità del modello…",
+  'composer.computerHint': "Consenti accesso a schermo principale, mouse e tastiera",
+  'composer.computerPlatform': "Il controllo del computer è disponibile su Windows.",
+  'composer.computerModel': "Scegli un modello con immagini e chiamate agli strumenti.",
+  'composer.computerUnknown': "Modello non verificato. Controlla la connessione e aggiorna LM Studio.",
+  'composer.placeholderShort': "Descrivi un’attività o fai una domanda…",
+  'composer.askShort': "Con conferma",
+  'composer.autoShort': "Automatico",
+  'composer.enterHint': "Invio per inviare · Maiusc+Invio per una nuova riga",
   'app.language.english': 'Inglese',
   'app.language.russian': 'Russo',
   'app.language.ukrainian': 'Ucraino',

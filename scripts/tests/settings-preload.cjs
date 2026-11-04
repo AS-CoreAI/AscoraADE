@@ -15,11 +15,22 @@ const save = () => localStorage.setItem('settings-smoke', JSON.stringify(values)
 const usage = { ok: true, loggedIn: true, windows: [{ label: 'session limit', percent: 32, severity: 'normal', resetsAt: '2026-09-19T18:00:00Z' }] }
 const missing = new Set(['gemini'])
 const fixture = window.settingsFixture = { signedOut: ['copilot'], checkFailures: [], usageFailures: [], percent: 32, emit: null, finish: null,
-  unslothModels: ['unsloth-fixture/model-a', 'unsloth-fixture/model-b'], modelRequests: [], analytics: [] }
+  unslothModels: ['unsloth-fixture/model-a', 'unsloth-fixture/model-b'], modelRequests: [], analytics: [],
+  computerAvailable: true, computerActions: [], computerStops: [], savedTasks: [] }
 const workspace = { id: 'settings-test', name: 'Settings test', path: 'E:\\fixture', createdAt: Date.now(), updatedAt: Date.now() }
 const group = (name) => new Proxy({}, { get: (_, method) => {
+  if (name === 'computer' && method === 'onStopped') return callback => { Object.defineProperty(fixture, 'computerStopped', { value: callback, writable: true, configurable: true }); return () => { fixture.computerStopped = null } }
   if (String(method).startsWith('on')) return () => () => {}
   return async (...args) => {
+    if (name === 'computer') {
+      if (method === 'check') return { available: fixture.computerAvailable, reason: 'model' }
+      if (method === 'start') { fixture.computerTask = args[0]; return { ok: true, sessionId: 'session-fixture' } }
+      if (method === 'stop') { fixture.computerStops.push(args[0]); return }
+      if (method === 'action') {
+        fixture.computerActions.push(args[1]);
+        return { ok: true, frame: { id: 'frame-' + fixture.computerActions.length, width: 1280, height: 720, image: 'data:image/jpeg;base64,c2NyZWVu' } }
+      }
+    }
     if (name === 'settings') {
       if (method === 'get') return values[args[0]]
       if (method === 'set') { values[args[0]] = args[1]; save(); return }
@@ -47,7 +58,7 @@ const group = (name) => new Proxy({}, { get: (_, method) => {
     }
     if (name === 'workspace') {
       if (method === 'list') return [workspace]
-      if (method === 'saveTask') return args[0]
+      if (method === 'saveTask') { fixture.savedTasks.push(args[0]); return args[0] }
       return []
     }
     if (name === 'fs' && method === 'readTree') return []

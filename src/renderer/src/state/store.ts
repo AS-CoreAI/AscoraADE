@@ -60,6 +60,8 @@ import {
   type WProviderToolName
 } from '@shared/wprovider-tools'
 import { api } from '@/lib/api'
+import { formatAgentDirectory, LIST_DIR_TOOL, LIST_DIR_USAGE } from '@shared/agent-directory'
+import { COMPUTER_PROMPT, COMPUTER_TOOL, type ComputerFrame } from '@shared/computer'
 import { diffStat } from '@/lib/diff'
 import { solveZCodeCaptcha } from '@/lib/zcode-captcha'
 import { isLanguageCode, localeForLanguage, tr, type LanguageCode } from '@/language'
@@ -243,21 +245,10 @@ function localRelativePath(root: string, path: string): string {
 }
 
 const TOOL_NAMES = WPROVIDER_TOOL_NAMES
-type ToolName = WProviderToolName
+type ToolName = WProviderToolName | 'computer'
 
 const TOOLS: ToolDef[] = [
-  {
-    type: 'function',
-    function: {
-      name: 'list_dir',
-      description: 'List files and folders in a workspace directory.',
-      parameters: {
-        type: 'object',
-        properties: { path: { type: 'string', description: 'Workspace-relative dir; "." for root.' } },
-        required: ['path']
-      }
-    }
-  },
+  LIST_DIR_TOOL,
   {
     type: 'function',
     function: {
@@ -431,7 +422,7 @@ function buildSystemPrompt(sshHost?: string, sshRoot?: string): string {
     'ASCORA ADE is only the environment you run in.',
     '',
     'You can use tools to inspect and change the project:',
-    '- list_dir(path): list a directory ("." is the project root)',
+    LIST_DIR_USAGE,
     '- read_file(path, [start_line], [end_line]): read a whole file or just a line range',
     '- search_files(query, [path], [regex], [glob], [context], [case_sensitive]): ripgrep-style ' +
       'search — literal by default, set regex for a pattern, glob (e.g. "**/*.ts") to scope files, ' +
@@ -474,6 +465,8 @@ function buildSystemPrompt(sshHost?: string, sshRoot?: string): string {
  * owning task so stopping one run only rejects that run's pending cards.
  */
 const pendingApprovals = new Map<string, { taskId: string; resolve: (approved: boolean) => void }>()
+const computerSessions = new Map<string, string>()
+let computerStopUnsubscribe: (() => void) | undefined
 /** Task ids whose run was asked to stop; the loop checks this to bail out. */
 const abortedRuns = new Set<string>()
 /** Provider each in-flight run uses, so stopStreaming aborts on the right channel. */
@@ -838,7 +831,7 @@ function safeArgs(json: string): Record<string, unknown> {
 }
 
 function isToolName(name: string): name is ToolName {
-  return (TOOL_NAMES as readonly string[]).includes(name)
+  return name === 'computer' || (TOOL_NAMES as readonly string[]).includes(name)
 }
 
 function truncate(s: string, n: number): string {
@@ -1432,6 +1425,8 @@ interface AppState {
   skillsOpen: boolean
 
   mode: AgentMode
+  computerUse: boolean
+  setComputerUse: (enabled: boolean) => void
   messages: ChatMessage[]
   /** Raw LLM transcript (user/assistant/tool turns) driving multi-turn context. */
   convo: LlmMessage[]
@@ -1704,7 +1699,8 @@ export const useApp = create<AppState>((set, get) => {
    * and clear the foreground run pointers so its in-flight updates land in the
    * snapshot, not on whatever task becomes active next. A no-op when idle.
    */
-  const stashAndDetach = (): void =>
+  const stashAndDetach = (): void => {
+    get().setComputerUse(false)
     set((s) => {
       if (!s.streaming || !s.activeTaskId || !s.active) return {}
       return {
@@ -1718,6 +1714,7 @@ export const useApp = create<AppState>((set, get) => {
         thinkingStartedAt: null
       }
     })
+  }
 
   /**
    * Move a backgrounded run into the foreground (e.g. reopening a task that's
@@ -1983,6 +1980,13 @@ export const useApp = create<AppState>((set, get) => {
   skillsOpen: false,
 
   mode: 'ask',
+  computerUse: false,
+  setComputerUse(enabled) {
+    if (!enabled) {
+      for (const taskId of computerSessions.keys()) get().stopStreaming(taskId)
+    }
+    set({ computerUse: enabled && get().provider === 'lmstudio' && !get().activeSsh })
+  },
   messages: [],
   convo: [],
   streaming: false,
@@ -1992,6 +1996,12 @@ export const useApp = create<AppState>((set, get) => {
   thinkingStartedAt: null,
 
   async init() {
+    if (!computerStopUnsubscribe) {
+      computerStopUnsubscribe = api.computer.onStopped((taskId) => {
+        get().stopStreaming(taskId)
+        set({ computerUse: false })
+      })
+    }
     if (!omnirouteStatusUnsubscribe) {
       omnirouteStatusUnsubscribe = api.omniroute.onStatusChanged((status) => {
         const previous = get().omnirouteStatus
@@ -3150,12 +3160,14 @@ export const useApp = create<AppState>((set, get) => {
   },
 
   setModel(model) {
+    if (get().model !== model) get().setComputerUse(false)
     set({ model })
     void api.llm.setConfig({ model })
     get().persistWorkspaceLlm()
   },
 
   async setBaseUrl(url) {
+    get().setComputerUse(false)
     set({ baseUrl: url })
     await api.llm.setConfig({ baseUrl: url })
     await get().refreshModels()
@@ -3188,6 +3200,7 @@ export const useApp = create<AppState>((set, get) => {
 
   async setProvider(provider) {
     if (get().activeSsh && !isSshCapableProvider(provider)) return
+    if (get().provider !== provider) get().setComputerUse(false)
     set({ provider })
     await api.llm.setConfig({ provider })
     get().persistWorkspaceLlm()
@@ -3902,6 +3915,9 @@ export const useApp = create<AppState>((set, get) => {
     const sshId = get().activeSsh
     const mode = get().mode
     const lmModel = get().model
+    const computerEnabled = get().computerUse && provider === 'lmstudio' && !sshId
+    let computerFrame: ComputerFrame | undefined
+    let computerSession: string | undefined
     const ollamaModel = get().ollamaModel
     const unslothModel = get().unslothModel
     const orModel = get().openRouterModel
@@ -3978,6 +3994,18 @@ export const useApp = create<AppState>((set, get) => {
 
     try {
       const agentProvider = provider
+      if (computerEnabled) {
+        const result = await api.computer.start(taskId, lmModel).catch((error: unknown) => ({ ok: false, error: String(error), sessionId: undefined }))
+        if (!result.ok || !result.sessionId) {
+          finalStatus = 'error'
+          addMsg({ id: crypto.randomUUID(), role: 'assistant', kind: 'text', text: `⚠ ${result.error}` })
+          set({ computerUse: false })
+          return
+        }
+        computerSession = result.sessionId
+        computerSessions.set(taskId, computerSession)
+        if (aborted() || !get().computerUse || get().activeTaskId !== taskId) return
+      }
       if (sshId && !isSshCapableProvider(agentProvider)) {
         finalStatus = 'error'
         addMsg({
@@ -4378,11 +4406,14 @@ export const useApp = create<AppState>((set, get) => {
             'To use a tool, reply with ONLY one fenced ```tool_call block in the exact format above — ' +
             'no prose before or after it. Reply in plain prose (no tool_call block) only when the task is fully done.'
           : ''
-        const systemPrompt = (skillsBlock ? `${base}\n\n${skillsBlock}` : base) + wpNote
+        const systemPrompt = (skillsBlock ? `${base}\n\n${skillsBlock}` : base) + wpNote + (computerSession ? `\n\n${COMPUTER_PROMPT}` : '')
         const messages: LlmMessage[] = [
           { role: 'system', content: systemPrompt },
           ...(readRun(taskId)?.convo ?? [])
         ]
+        if (computerFrame) {
+          messages.push({ role: 'user', content: `Current computer screenshot: frame_id=${computerFrame.id}, ${computerFrame.width}x${computerFrame.height} pixels.`, images: [computerFrame.image] })
+        }
         const onDelta = (delta: string): void => {
           streamedChars += delta.length
           writeRun(taskId, (r) => ({
@@ -4390,17 +4421,19 @@ export const useApp = create<AppState>((set, get) => {
             messages: r.messages.map((m) => (m.id === replyId ? { ...m, text: m.text + delta } : m))
           }))
         }
-        // Providers with visible reasoning (Grok's thinking pane, DeepSeek's
-        // think phase) stream it separately; render it as a collapsible block
-        // ABOVE the answer bubble, mirroring the provider's own UI.
-        let wpThinkingId: string | null = null
-        let wpThinkingStartedAt = 0
-        const onWpThinking = (thinking: string): void => {
+        // Both API and web providers can stream reasoning separately. Keep it
+        // in a collapsible block above the answer and out of tool parsing.
+        let reasoningId: string | null = null
+        let reasoningStartedAt = 0
+        let reasoningChars = 0
+        const onThinking = (thinking: string): void => {
           if (!thinking.trim()) return
-          if (!wpThinkingId) {
+          streamedChars += Math.max(0, thinking.length - reasoningChars)
+          reasoningChars = thinking.length
+          if (!reasoningId) {
             const thinkingId = crypto.randomUUID()
-            wpThinkingId = thinkingId
-            wpThinkingStartedAt = Date.now()
+            reasoningId = thinkingId
+            reasoningStartedAt = Date.now()
             writeRun(taskId, (r) => {
               const idx = r.messages.findIndex((m) => m.id === replyId)
               const msg: ChatMessage = {
@@ -4412,11 +4445,16 @@ export const useApp = create<AppState>((set, get) => {
               }
               const list = [...r.messages]
               list.splice(idx < 0 ? list.length : idx, 0, msg)
-              return { messages: list }
+              return { messages: list, thinkingTokens: tokensFromChars(streamedChars) }
             })
           } else {
-            patch(wpThinkingId, { text: thinking })
+            patch(reasoningId, { text: thinking })
+            writeRun(taskId, { thinkingTokens: tokensFromChars(streamedChars) })
           }
+        }
+        const onChunk = (delta: string, thinking?: string): void => {
+          if (thinking !== undefined) onThinking(thinking)
+          if (delta) onDelta(delta)
         }
         // WProvider relays the turn through the provider's web chat in a hidden
         // browser (the site keeps its own history, so only new messages travel).
@@ -4426,10 +4464,7 @@ export const useApp = create<AppState>((set, get) => {
           ? await api.wprovider.chat(
               replyId,
               { sessionKey: taskId, service: wproviderService, messages },
-              (delta, thinking) => {
-                if (thinking !== undefined) onWpThinking(thinking)
-                if (delta) onDelta(delta)
-              }
+              onChunk
             )
           : await api.llm.chat(
               replyId,
@@ -4442,22 +4477,22 @@ export const useApp = create<AppState>((set, get) => {
                       ? omnirouteModel
                       : lmModel,
                 messages,
-                tools: TOOLS
+                tools: computerSession ? [...TOOLS, COMPUTER_TOOL] : TOOLS
               },
-              onDelta
+              onChunk
             )
         writeRun(taskId, { streamId: null, thinking: false })
         // Settle the reasoning block: the ChatResult carries the definitive
         // text (chunks are throttled) and the measured duration for the header.
-        if (isWProvider) {
+        {
           const finalThinking = (result.thinking ?? '').trim()
-          if (finalThinking && !wpThinkingId) onWpThinking(finalThinking)
-          if (wpThinkingId) {
-            patch(wpThinkingId, {
+          if (finalThinking) onThinking(finalThinking)
+          if (reasoningId) {
+            patch(reasoningId, {
               ...(finalThinking ? { text: finalThinking } : {}),
               reasoningDurationMs:
                 result.thinkingMs ??
-                (wpThinkingStartedAt ? Date.now() - wpThinkingStartedAt : undefined)
+                (reasoningStartedAt ? Date.now() - reasoningStartedAt : undefined)
             })
           }
         }
@@ -4482,7 +4517,7 @@ export const useApp = create<AppState>((set, get) => {
         {
           const usage = result.usage ?? {
             inputTokens: estTokens(messages.map((m) => m.content).join('\n')),
-            outputTokens: estTokens(result.content)
+            outputTokens: estTokens(result.content + (result.thinking ?? ''))
           }
           void api.analytics.record({
             workspaceId,
@@ -4596,6 +4631,11 @@ export const useApp = create<AppState>((set, get) => {
         for (const call of calls) {
           if (aborted()) break
 
+          if (call.name === 'computer' && (!computerSession || calls.length !== 1)) {
+            appendResult(call, computerSession ? 'Error: Call computer alone, once per turn, then inspect the screenshot.' : 'Error: Computer use is disabled. Ask the user to enable it; do not bypass this using commands.')
+            continue
+          }
+
           if (!isToolName(call.name)) {
             const note = `Unknown tool: ${call.name}`
             addMsg({
@@ -4611,7 +4651,8 @@ export const useApp = create<AppState>((set, get) => {
             call.name === 'write_file' ||
             call.name === 'edit_file' ||
             call.name === 'run_command' ||
-            call.name === 'run_typescript'
+            call.name === 'run_typescript' ||
+            (call.name === 'computer' && call.args.action !== 'screenshot')
           // The SSH target (if any) was captured for this run at submit time.
 
           // For file changes, read the current file first so the card can show a diff.
@@ -4637,7 +4678,7 @@ export const useApp = create<AppState>((set, get) => {
 
           const isEdit = call.name === 'write_file' || call.name === 'edit_file'
           const stat = isEdit ? diffStat(oldContent, newContent) : null
-          const needsApproval = mutating && mode === 'ask'
+          const needsApproval = mutating && (call.name === 'computer' ? get().mode : mode) === 'ask'
           addMsg({
             id: cardId, role: 'assistant', kind: 'tool', text: '',
             tool: call.name, args: call.args,
@@ -4669,23 +4710,25 @@ export const useApp = create<AppState>((set, get) => {
           }
 
           // 4) Run the tool and record the outcome on the card + transcript.
-          if (call.name === 'list_dir') {
+          if (call.name === 'computer') {
+            const r = await api.computer.action(computerSession!, call.args).catch((error: unknown) => ({ ok: false, error: String(error), frame: undefined }))
+            computerFrame = r.frame
+            const output = r.ok && r.frame
+              ? `${asStr(call.args.action)}: frame_id=${r.frame.id}, ${r.frame.width}x${r.frame.height} pixels. The screenshot is attached to the next message.`
+              : `Error: ${r.error}`
+            patch(cardId, { status: r.ok ? 'done' : 'error', output: r.ok ? `${asStr(call.args.action)} · ${r.frame?.width} × ${r.frame?.height}` : undefined, error: r.error })
+            appendResult(call, output)
+          } else if (call.name === 'list_dir') {
             const r = sshId
               ? await sshListDir(sshId, asStr(call.args.path) || '.', root)
               : await api.agent.listDir(root, asStr(call.args.path) || '.')
+            const listing = formatAgentDirectory(r, call.args)
             patch(cardId, {
               status: r.ok ? 'done' : 'error',
-              output: r.ok ? `${r.entries?.length ?? 0} entries` : undefined,
+              output: r.ok ? listing.summary : undefined,
               error: r.error
             })
-            appendResult(
-              call,
-              r.ok
-                ? `Directory ${r.path}:\n${(r.entries ?? [])
-                    .map((e) => (e.type === 'directory' ? `${e.name}/` : e.name))
-                    .join('\n') || '(empty)'}`
-                : `Error: ${r.error}`
-            )
+            appendResult(call, listing.content)
           } else if (call.name === 'read_file') {
             const startLine = asLine(call.args.start_line)
             const endLine = asLine(call.args.end_line)
@@ -4901,6 +4944,10 @@ export const useApp = create<AppState>((set, get) => {
         }
       }
     } finally {
+      if (computerSession) {
+        await api.computer.stop(computerSession).catch(() => {})
+        computerSessions.delete(taskId)
+      }
       writeRun(taskId, { streaming: false, streamId: null, thinking: false, thinkingStartedAt: null })
       await get().saveTaskRun(taskId, finalStatus)
       abortedRuns.delete(taskId)
@@ -4958,6 +5005,11 @@ export const useApp = create<AppState>((set, get) => {
     const id = taskId ?? get().activeTaskId
     if (!id) return
     abortedRuns.add(id)
+    const computerSession = computerSessions.get(id)
+    if (computerSession) {
+      void api.computer.stop(computerSession)
+      set({ computerUse: false })
+    }
     writeRun(id, { thinking: false })
     const streamId = readRun(id)?.streamId
     if (streamId) {

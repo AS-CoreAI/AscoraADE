@@ -2,6 +2,18 @@
 
 const pl: Translation = {
   ...en,
+  'rail.officialChannel': "Oficjalny kanał",
+  'composer.computer': "Komputer",
+  'composer.computerActive': "Główny ekran, mysz i klawiatura · Stop:",
+  'composer.computerChecking': "Sprawdzanie możliwości modelu…",
+  'composer.computerHint': "Zezwól na dostęp do głównego ekranu, myszy i klawiatury",
+  'composer.computerPlatform': "Sterowanie komputerem jest dostępne w systemie Windows.",
+  'composer.computerModel': "Wybierz model obsługujący obrazy i wywoływanie narzędzi.",
+  'composer.computerUnknown': "Nie zweryfikowano modelu. Sprawdź połączenie i zaktualizuj LM Studio.",
+  'composer.placeholderShort': "Opisz zadanie lub zadaj pytanie…",
+  'composer.askShort': "Z potwierdzeniem",
+  'composer.autoShort': "Automatycznie",
+  'composer.enterHint': "Enter — wyślij · Shift+Enter — nowy wiersz",
   'app.language.english': 'Angielski',
   'app.language.russian': 'Rosyjski',
   'app.language.ukrainian': 'Ukraiński',

@@ -2,6 +2,18 @@
 
 const fr: Translation = {
   ...en,
+  'rail.officialChannel': "Canal officiel",
+  'composer.computer': "Ordinateur",
+  'composer.computerActive': "Écran principal, souris et clavier · Arrêt :",
+  'composer.computerChecking': "Vérification du modèle…",
+  'composer.computerHint': "Autoriser l’accès à l’écran principal, à la souris et au clavier",
+  'composer.computerPlatform': "Le contrôle de l’ordinateur est disponible sous Windows.",
+  'composer.computerModel': "Choisissez un modèle prenant en charge les images et les appels d’outils.",
+  'composer.computerUnknown': "Modèle non vérifié. Vérifiez la connexion et mettez LM Studio à jour.",
+  'composer.placeholderShort': "Décrivez une tâche ou posez une question…",
+  'composer.askShort': "Avec confirmation",
+  'composer.autoShort': "Automatique",
+  'composer.enterHint': "Entrée pour envoyer · Maj+Entrée pour un saut de ligne",
   'app.language.english': 'Anglais',
   'app.language.russian': 'Russe',
   'app.language.french': 'Français',

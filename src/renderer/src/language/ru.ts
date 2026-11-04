@@ -1,6 +1,18 @@
 ﻿import type { Translation } from './en'
 
 const ru: Translation = {
+  'rail.officialChannel': "Официальный канал",
+  'composer.computer': "Компьютер",
+  'composer.computerActive': "Основной экран, мышь и клавиатура · Стоп:",
+  'composer.computerChecking': "Проверяю возможности модели…",
+  'composer.computerHint': "Разрешить доступ к основному экрану, мыши и клавиатуре",
+  'composer.computerPlatform': "Управление компьютером пока доступно на Windows.",
+  'composer.computerModel': "Выберите модель с поддержкой изображений и вызова инструментов.",
+  'composer.computerUnknown': "Не удалось проверить возможности модели. Проверьте подключение и обновите LM Studio.",
+  'composer.placeholderShort': "Опишите задачу или задайте вопрос…",
+  'composer.askShort': "С подтверждением",
+  'composer.autoShort': "Автоматически",
+  'composer.enterHint': "Enter — отправить · Shift+Enter — новая строка",
   'app.language.english': 'Английский',
   'app.language.russian': 'Русский',
   'app.language.french': 'Французский',

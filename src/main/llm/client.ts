@@ -7,6 +7,8 @@ import {
   type TokenUsage
 } from '@shared/ipc'
 import { normalizeUnslothApiKey, normalizeUnslothBaseUrl } from '@shared/unsloth'
+import { Agent, fetch as undiciFetch, type RequestInit as ChatRequestInit, type Response as ChatResponse } from 'undici'
+import type { ComputerSupport } from '@shared/computer'
 
 /** What `streamChat` resolves to once the stream ends (its generator return). */
 export interface StreamReturn {
@@ -14,6 +16,8 @@ export interface StreamReturn {
   finishReason?: string
   /** Token usage from the final stream frame, when the server reports it. */
   usage?: TokenUsage
+  thinking?: string
+  thinkingMs?: number
 }
 
 /** Partial tool_call fragment as it streams in (OpenAI delta shape). */
@@ -24,6 +28,62 @@ interface ToolCallDelta {
 }
 
 const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1'
+
+// Local prefill/reasoning can be silent for longer than Undici's 5-minute
+// defaults. Apply a 30-minute inactivity limit only to generation requests;
+// model discovery keeps its short timeout and Stop still aborts immediately.
+const chatDispatcher = new Agent({ headersTimeout: 30 * 60_000, bodyTimeout: 30 * 60_000 })
+
+function chatFetch(url: string, init: ChatRequestInit): Promise<ChatResponse> {
+  return undiciFetch(url, { ...init, dispatcher: chatDispatcher })
+}
+
+/** Some templates put a leading <think> block in content instead of a field. */
+class ThinkingParser {
+  private pending = ''
+  private phase: 'start' | 'thinking' | 'answer' = 'start'
+  private closing = '</think>'
+
+  push(text: string, final = false): { content: string; thinking: string } {
+    this.pending += text
+    if (this.phase === 'start') {
+      const start = this.pending.trimStart()
+      const tag = ['<think>', '<analysis>'].find((opening) => start.startsWith(opening))
+      if (tag) {
+        this.closing = tag === '<think>' ? '</think>' : '</analysis>'
+        this.pending = start.slice(tag.length)
+        this.phase = 'thinking'
+      } else if (!final && (!start || ['<think>', '<analysis>'].some((opening) => opening.startsWith(start)))) {
+        return { content: '', thinking: '' }
+      } else {
+        this.phase = 'answer'
+      }
+    }
+    if (this.phase === 'thinking') {
+      const end = this.pending.indexOf(this.closing)
+      if (end >= 0) {
+        const thinking = this.pending.slice(0, end)
+        const content = this.pending.slice(end + this.closing.length)
+        this.pending = ''
+        this.phase = 'answer'
+        return { thinking, content }
+      }
+      // Hold only a possible split closing tag; stream the rest immediately.
+      let keep = 0
+      if (!final) {
+        for (let n = 1; n < this.closing.length; n += 1) {
+          if (this.pending.endsWith(this.closing.slice(0, n))) keep = n
+        }
+      }
+      const thinking = this.pending.slice(0, this.pending.length - keep)
+      this.pending = this.pending.slice(this.pending.length - keep)
+      return { thinking, content: '' }
+    }
+    const content = this.pending
+    this.pending = ''
+    return { content, thinking: '' }
+  }
+}
 
 /**
  * Minimal client for OpenAI-compatible backends (LM Studio, Ollama, Unsloth,
@@ -36,7 +96,7 @@ const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1'
  * UI can show something friendly instead of a raw stack trace.
  */
 
-export type LmErrorKind = 'connection' | 'http' | 'parse' | 'aborted'
+export type LmErrorKind = 'connection' | 'http' | 'parse' | 'aborted' | 'timeout'
 
 export class LmStudioError extends Error {
   constructor(
@@ -68,19 +128,31 @@ function providerName(config: LlmConfig): string {
       : 'LM Studio'
 }
 
-function connectionError(name: string, url: string, err: unknown): LmStudioError {
-  if (isAbort(err)) return new LmStudioError('Request aborted', 'aborted')
+function connectionError(name: string, url: string, err: unknown, signal?: AbortSignal, streaming = false): LmStudioError {
+  if (signal?.aborted || isAbort(err)) return new LmStudioError('Request aborted', 'aborted')
   const code =
     (err as { cause?: { code?: string }; code?: string })?.cause?.code ??
     (err as { code?: string })?.code
   const suffix = code ? ` (${code})` : ''
+  if (code === 'UND_ERR_BODY_TIMEOUT' || code === 'UND_ERR_HEADERS_TIMEOUT') {
+    return new LmStudioError(
+      `Timed out waiting for data from ${name}${suffix}. The model may still be processing the prompt. Reduce the context size or check the server logs and try again.`,
+      'timeout'
+    )
+  }
+  if (streaming) {
+    return new LmStudioError(
+      `The response stream from ${name} was interrupted${suffix}. Check the server logs and connection, then try again.`,
+      'connection'
+    )
+  }
   return new LmStudioError(
     `Cannot reach ${name} at ${url}${suffix}. Check the connection settings and try again.`,
     'connection'
   )
 }
 
-async function httpError(name: string, url: string, res: Response): Promise<LmStudioError> {
+async function httpError(name: string, url: string, res: Response | ChatResponse): Promise<LmStudioError> {
   if (name === 'Unsloth' && res.status === 401) {
     await res.body?.cancel()
     return new LmStudioError('Unsloth rejected the API key. Create a key in Unsloth Settings → API and save it in the Unsloth connection settings.', 'http', 401)
@@ -109,6 +181,21 @@ export class LmStudioClient {
 
   update(patch: Partial<LlmConfig>): void {
     this.config = { ...this.config, ...patch }
+  }
+
+  async computerSupport(model: string, signal?: AbortSignal): Promise<ComputerSupport> {
+    if (this.config.provider !== 'lmstudio') return { available: false, reason: 'provider' }
+    try {
+      const url = this.baseUrl.replace(/\/v1$/, '') + '/api/v1/models'
+      const response = await fetch(url, { signal })
+      if (!response.ok) throw new Error(`LM Studio returned HTTP ${response.status}`)
+      const json = await response.json() as { models?: { key: string; type: string; loaded_instances?: { id: string }[]; capabilities?: { vision?: boolean; trained_for_tool_use?: boolean } }[] }
+      const info = json.models?.find(item => item.key === model || item.loaded_instances?.some(instance => instance.id === model))
+      if (!info?.capabilities) return { available: false, reason: 'unknown' }
+      return { available: info.type === 'llm' && info.capabilities.vision === true && info.capabilities.trained_for_tool_use === true, reason: 'model' }
+    } catch (error) {
+      return { available: false, reason: 'unknown', error: error instanceof Error ? error.message : String(error) }
+    }
   }
 
   get baseUrl(): string {
@@ -196,14 +283,23 @@ export class LmStudioClient {
    * and returned as the generator's *return value* alongside the finish reason.
    * Throws `LmStudioError` (kind 'aborted' when cancelled via signal).
    */
-  async *streamChat(params: ChatParams, signal?: AbortSignal): AsyncGenerator<string, StreamReturn> {
+  async *streamChat(
+    params: ChatParams,
+    signal?: AbortSignal,
+    onThinking?: (delta: string) => void
+  ): AsyncGenerator<string, StreamReturn> {
     this.requireApiKey()
     this.requireOmniroute()
     const name = this.providerName
     const url = `${this.baseUrl}/chat/completions`
     const basePayload: Record<string, unknown> = {
       model: this.model(params),
-      messages: params.messages,
+      messages: params.messages.map(({ images, ...message }) => images?.length
+        ? { ...message, content: [
+            { type: 'text', text: message.content },
+            ...images.map(url => ({ type: 'image_url', image_url: { url } }))
+          ] }
+        : message),
       temperature: params.temperature ?? 0.7,
       ...(params.tools && params.tools.length > 0 ? { tools: params.tools } : {})
     }
@@ -214,16 +310,16 @@ export class LmStudioClient {
       ...(this.config.provider === 'openrouter' ? {} : { stream_options: { include_usage: true } })
     })
 
-    let res: Response
+    let res: ChatResponse
     try {
-      res = await fetch(url, {
+      res = await chatFetch(url, {
         method: 'POST',
         headers: this.headers(),
         body,
         signal
       })
     } catch (err) {
-      throw connectionError(name, url, err)
+      throw connectionError(name, url, err, signal)
     }
     // Some Unsloth GGUF templates accept text but reject even the presence of
     // native tools. Retry only that explicit rejection, before any generation,
@@ -234,11 +330,11 @@ export class LmStudioClient {
       if (!/does not advertise tools|does not support (?:native )?tool/i.test(error.message)) throw error
       delete basePayload.tools
       try {
-        res = await fetch(url, {
+        res = await chatFetch(url, {
           method: 'POST', headers: this.headers(), signal,
           body: JSON.stringify({ ...basePayload, stream: true, stream_options: { include_usage: true } })
         })
-      } catch (err) { throw connectionError(name, url, err) }
+      } catch (err) { throw connectionError(name, url, err, signal) }
     }
     if (!res.ok) throw await httpError(name, url, res)
     if (!res.body) throw new LmStudioError(`${name} returned an empty response body`, 'parse')
@@ -253,6 +349,17 @@ export class LmStudioClient {
     let usage: TokenUsage | undefined
     let yielded = false
     let streamDone = false
+    const thinkingParser = new ThinkingParser()
+    let thinking = ''
+    let thinkingStartedAt: number | undefined
+    let thinkingUpdatedAt: number | undefined
+    const addThinking = (delta: string): void => {
+      if (!delta) return
+      thinkingStartedAt ??= Date.now()
+      thinkingUpdatedAt = Date.now()
+      thinking += delta
+      onThinking?.(delta)
+    }
 
     const assembled = (): StreamReturn => ({
       toolCalls: [...toolAcc.entries()]
@@ -260,7 +367,8 @@ export class LmStudioClient {
         .map(([, t]) => ({ id: t.id, name: t.name, arguments: t.arguments }))
         .filter((t) => t.name),
       finishReason,
-      usage
+      usage,
+      ...(thinking ? { thinking, thinkingMs: thinkingUpdatedAt! - thinkingStartedAt! } : {})
     })
 
     try {
@@ -279,8 +387,14 @@ export class LmStudioClient {
           try {
             const json = JSON.parse(data)
             const choice = json?.choices?.[0]
+            const reasoning: unknown = choice?.delta?.reasoning_content ?? choice?.delta?.reasoning
+            if (typeof reasoning === 'string') addThinking(reasoning)
             const content: unknown = choice?.delta?.content
-            if (typeof content === 'string' && content.length > 0) { yielded = true; yield content }
+            if (typeof content === 'string' && content.length > 0) {
+              const parsed = thinkingParser.push(content)
+              addThinking(parsed.thinking)
+              if (parsed.content) { yielded = true; yield parsed.content }
+            }
 
             const calls: unknown = choice?.delta?.tool_calls
             if (Array.isArray(calls)) {
@@ -312,19 +426,24 @@ export class LmStudioClient {
         if (streamDone) break
       }
     } catch (err) {
-      if (isAbort(err)) throw new LmStudioError('Request aborted', 'aborted')
-      throw err
+      throw connectionError(name, url, err, signal, true)
     } finally {
+      // [DONE] can arrive before the socket closes. Release the connection even
+      // on cancellation or if a consumer stops iterating the generator early.
+      await reader.cancel().catch(() => {})
       reader.releaseLock()
     }
+    const tail = thinkingParser.push('', true)
+    addThinking(tail.thinking)
+    if (tail.content) { yielded = true; yield tail.content }
 
     // OmniRoute routes some web/free providers that ignore `stream: true` and
     // return an empty SSE stream even though a non-streaming request answers
     // (the native Playground uses stream:false and works). Fall back once so the
     // chat turn isn't a blank "(no content returned)". Scoped to OmniRoute only.
-    if (this.config.provider === 'omniroute' && !yielded && toolAcc.size === 0) {
+    if (this.config.provider === 'omniroute' && !yielded && !thinking && toolAcc.size === 0) {
       try {
-        const fbRes = await fetch(url, {
+        const fbRes = await chatFetch(url, {
           method: 'POST',
           headers: this.headers(),
           body: JSON.stringify({ ...basePayload, stream: false }),

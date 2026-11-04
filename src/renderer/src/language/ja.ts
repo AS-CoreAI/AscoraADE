@@ -2,6 +2,18 @@
 
 const ja: Translation = {
   ...en,
+  'rail.officialChannel': "公式チャンネル",
+  'composer.computer': "コンピューター",
+  'composer.computerActive': "メイン画面・マウス・キーボード · 停止:",
+  'composer.computerChecking': "モデルの機能を確認中…",
+  'composer.computerHint': "メイン画面・マウス・キーボードへのアクセスを許可",
+  'composer.computerPlatform': "コンピューター操作は Windows で利用できます。",
+  'composer.computerModel': "画像とツール呼び出しに対応するモデルを選択してください。",
+  'composer.computerUnknown': "モデルを確認できません。接続を確認し、LM Studio を更新してください。",
+  'composer.placeholderShort': "タスクを説明するか、質問してください…",
+  'composer.askShort': "操作前に確認",
+  'composer.autoShort': "自動",
+  'composer.enterHint': "Enter で送信 · Shift+Enter で改行",
   'app.language.english': '英語',
   'app.language.russian': 'ロシア語',
   'app.language.ukrainian': 'ウクライナ語',

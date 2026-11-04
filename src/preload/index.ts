@@ -126,6 +126,17 @@ preloadWindow.addEventListener?.(
  * `window.ascora` via contextBridge (context isolation is on).
  */
 const api = {
+  computer: {
+    check: (model: string): Promise<import('@shared/computer').ComputerSupport> => ipcRenderer.invoke(IPC.computer.check, model),
+    start: (taskId: string, model: string): Promise<import('@shared/computer').ComputerResult> => ipcRenderer.invoke(IPC.computer.start, taskId, model),
+    action: (sessionId: string, args: Record<string, unknown>): Promise<import('@shared/computer').ComputerResult> => ipcRenderer.invoke(IPC.computer.action, sessionId, args),
+    stop: (sessionId: string): Promise<void> => ipcRenderer.invoke(IPC.computer.stop, sessionId),
+    onStopped: (callback: (taskId: string) => void): (() => void) => {
+      const listener = (_event: IpcRendererEvent, taskId: string): void => callback(taskId)
+      ipcRenderer.on(IPC.computer.stopped, listener)
+      return () => ipcRenderer.removeListener(IPC.computer.stopped, listener)
+    }
+  },
   window: {
     minimize: (): Promise<void> => ipcRenderer.invoke(IPC.window.minimize),
     maximizeToggle: (): Promise<boolean> => ipcRenderer.invoke(IPC.window.maximizeToggle),
@@ -240,10 +251,10 @@ const api = {
     checkLmStudio: (): Promise<boolean> => ipcRenderer.invoke(IPC.llm.checkLmStudio),
     /** Same probe for the local Ollama server. */
     checkOllama: (): Promise<boolean> => ipcRenderer.invoke(IPC.llm.checkOllama),
-    /** Streams a chat completion; `onChunk` fires per content delta. */
-    chat: (id: string, params: ChatParams, onChunk: (delta: string) => void): Promise<ChatResult> => {
+    /** Streams content deltas and, when provided, the accumulated reasoning. */
+    chat: (id: string, params: ChatParams, onChunk: (delta: string, thinking?: string) => void): Promise<ChatResult> => {
       const listener = (_e: IpcRendererEvent, payload: ChatChunkPayload): void => {
-        if (payload.id === id) onChunk(payload.delta)
+        if (payload.id === id) onChunk(payload.delta, payload.thinking)
       }
       ipcRenderer.on(IPC.llm.chunk, listener)
       return ipcRenderer

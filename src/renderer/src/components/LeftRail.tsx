@@ -18,6 +18,7 @@ interface VisibleWorkspace {
 
 /** How many recent tasks a folder shows before "Show more" reveals the rest. */
 const TASK_PREVIEW_COUNT = 5
+const OFFICIAL_CHANNEL_URL = 'https://znosin.com/c/ascoraade'
 
 function formatTaskTime(timestamp: number, language: AppLanguage): string {
   const date = new Date(timestamp)
@@ -144,6 +145,7 @@ export function LeftRail(): JSX.Element {
   /** Open an external link in the OS browser (renderer can't navigate away). */
   const openLink = (url: string): void => {
     setAboutOpen(false)
+    setOmniMenuOpen(false)
     void api.live.openExternal(url)
   }
 
@@ -691,6 +693,15 @@ export function LeftRail(): JSX.Element {
         >
           <Icon name="settings" size={17} />
         </button>
+        <button
+          type="button"
+          className="rail-settings rail-channel"
+          title={`${t('rail.officialChannel')} · Znosin`}
+          aria-label={t('rail.officialChannel')}
+          onClick={() => openLink(OFFICIAL_CHANNEL_URL)}
+        >
+          <Icon name="message" size={17} />
+        </button>
         <span style={{ flex: 1 }} />
         <div
           className="about-wrap"
@@ -715,6 +726,11 @@ export function LeftRail(): JSX.Element {
               <p>
                 {t('rail.website')}{' '}
                 <a onClick={() => openLink('https://ade.ascoreai.com')}>ade.ascoreai.com</a>
+              </p>
+              <p>
+                <a href={OFFICIAL_CHANNEL_URL} onClick={(event) => { event.preventDefault(); openLink(OFFICIAL_CHANNEL_URL) }}>
+                  {t('rail.officialChannel')} · Znosin
+                </a>
               </p>
               <p>
                 <a onClick={() => openLink('https://github.com/diegosouzapw/OmniRoute')}>

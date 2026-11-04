@@ -79,6 +79,13 @@ export const IPC = {
     chunk: 'llm:chunk',
     abort: 'llm:abort'
   },
+  computer: {
+    check: 'computer:check',
+    start: 'computer:start',
+    action: 'computer:action',
+    stop: 'computer:stop',
+    stopped: 'computer:stopped'
+  },
   codex: {
     check: 'codex:check',
     login: 'codex:login',
@@ -590,6 +597,8 @@ export interface ToolCall {
 export interface LlmMessage {
   role: LlmRole
   content: string
+  /** Ephemeral image inputs; never saved in conversation history. */
+  images?: string[]
   /** Present on assistant turns that requested native tool calls. */
   tool_calls?: { id: string; type: 'function'; function: { name: string; arguments: string } }[]
   /** Present on `role: 'tool'` results, linking back to the call. */
@@ -1189,7 +1198,7 @@ export interface ChatParams {
 export interface ChatChunkPayload {
   id: string
   delta: string
-  /** Full reasoning text captured so far, sent whenever it grows (WProvider). */
+  /** Full reasoning text captured so far, sent whenever it grows. */
   thinking?: string
 }
 

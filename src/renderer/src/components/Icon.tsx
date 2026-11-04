@@ -53,8 +53,10 @@ export type IconName =
   | 'activity'
   | 'flask'
   | 'shield'
+  | 'monitor'
 
 const paths: Record<IconName, JSX.Element> = {
+  monitor: <><rect x="3" y="4" width="18" height="13" rx="2" /><path d="M8 21h8M12 17v4" /><path d="m9 8 5 3-3 1-1 3z" /></>,
   shield: (
     <>
       <path d="M12 3 20 6v5c0 5.2-3.2 8.4-8 10-4.8-1.6-8-4.8-8-10V6z" />

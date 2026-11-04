@@ -2,6 +2,18 @@
 
 const zh: Translation = {
   ...en,
+  'rail.officialChannel': "官方频道",
+  'composer.computer': "电脑",
+  'composer.computerActive': "主屏幕、鼠标和键盘 · 停止：",
+  'composer.computerChecking': "正在检查模型能力…",
+  'composer.computerHint': "允许访问主屏幕、鼠标和键盘",
+  'composer.computerPlatform': "电脑控制目前仅支持 Windows。",
+  'composer.computerModel': "请选择支持图像和工具调用的模型。",
+  'composer.computerUnknown': "无法确认模型能力。请检查连接并更新 LM Studio。",
+  'composer.placeholderShort': "描述任务或提出问题…",
+  'composer.askShort': "操作前确认",
+  'composer.autoShort': "自动",
+  'composer.enterHint': "Enter 发送 · Shift+Enter 换行",
   'app.language.english': '英语',
   'app.language.russian': '俄语',
   'app.language.ukrainian': '乌克兰语',

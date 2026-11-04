@@ -2,6 +2,18 @@
 
 const ko: Translation = {
   ...en,
+  'rail.officialChannel': "공식 채널",
+  'composer.computer': "컴퓨터",
+  'composer.computerActive': "주 화면, 마우스 및 키보드 · 중지:",
+  'composer.computerChecking': "모델 기능 확인 중…",
+  'composer.computerHint': "주 화면, 마우스 및 키보드 접근 허용",
+  'composer.computerPlatform': "컴퓨터 제어는 Windows에서 사용할 수 있습니다.",
+  'composer.computerModel': "이미지와 도구 호출을 지원하는 모델을 선택하세요.",
+  'composer.computerUnknown': "모델을 확인할 수 없습니다. 연결을 확인하고 LM Studio를 업데이트하세요.",
+  'composer.placeholderShort': "작업을 설명하거나 질문하세요…",
+  'composer.askShort': "작업 전 확인",
+  'composer.autoShort': "자동",
+  'composer.enterHint': "Enter로 전송 · Shift+Enter로 줄 바꿈",
   'app.language.english': '영어',
   'app.language.russian': '러시아어',
   'app.language.ukrainian': '우크라이나어',

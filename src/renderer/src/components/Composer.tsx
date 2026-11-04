@@ -6,6 +6,7 @@ import { OmniModelPicker } from './OmniModelPicker'
 import { useApp, type AgentMode, type AppLanguage } from '@/state/store'
 import { api } from '@/lib/api'
 import { tr, type TranslationKey } from '@/language'
+import type { ComputerSupport } from '@shared/computer'
 import {
   DEFAULT_LLM_CONFIG,
   WPROVIDER_SERVICE_INFO,
@@ -263,6 +264,9 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
   const provider = useApp((s) => s.provider)
   const setProvider = useApp((s) => s.setProvider)
   const model = useApp((s) => s.model)
+  const baseUrl = useApp((s) => s.baseUrl)
+  const computerUse = useApp((s) => s.computerUse)
+  const setComputerUse = useApp((s) => s.setComputerUse)
   const models = useApp((s) => s.models)
   const setModel = useApp((s) => s.setModel)
   const ollamaModel = useApp((s) => s.ollamaModel)
@@ -333,6 +337,24 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
   const omniRu = appLanguage === 'ru' || appLanguage === 'uk'
 
   const [text, setText] = useState('')
+  const [computerSupport, setComputerSupport] = useState<ComputerSupport | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    setComputerSupport(null)
+    if (provider !== 'lmstudio' || activeSsh || !model) return
+    void api.computer.check(model).then((result) => {
+      if (cancelled) return
+      setComputerSupport(result)
+      if (!result.available) setComputerUse(false)
+    }).catch(() => { if (!cancelled) setComputerSupport({ available: false, reason: 'unknown' }) })
+    return () => { cancelled = true }
+  }, [provider, model, baseUrl, activeSsh, lmStudioReachable, setComputerUse])
+  const computerHint = computerUse ? t('composer.computerActive')
+    : !computerSupport ? t('composer.computerChecking')
+      : computerSupport.available ? t('composer.computerHint')
+        : computerSupport.reason === 'platform' ? t('composer.computerPlatform')
+          : computerSupport.reason === 'model' ? t('composer.computerModel')
+            : t('composer.computerUnknown')
   const [attachments, setAttachments] = useState<AttachmentFile[]>([])
   const [draggingFiles, setDraggingFiles] = useState(false)
   const [attaching, setAttaching] = useState(false)
@@ -593,7 +615,7 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
   }
 
   return (
-    <div className={`composer${draggingFiles ? ' dragging-files' : ''}`}>
+    <div className={`composer${draggingFiles ? ' dragging-files' : ''}${computerUse ? ' computer-enabled' : ''}`}>
       {showFolder && (
         <button className="composer-folder" onClick={openFolder} title={t('composer.changeFolder')}>
           <Icon name="folder" size={15} />
@@ -641,7 +663,8 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
       <textarea
         ref={ref}
         className="composer-input"
-        placeholder={t('composer.placeholder')}
+        placeholder={t('composer.placeholderShort')}
+        aria-label={t('composer.placeholderShort')}
         disabled={readOnly}
         value={text}
         onChange={(e) => {
@@ -657,10 +680,12 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
       />
 
       <div className="composer-toolbar">
+        <div className="composer-actions">
         <button
           type="button"
           className="composer-tool icon-only"
           title={activeSsh ? t('composer.attachLocalWorkspaces') : t('composer.attachFiles')}
+          aria-label={t('composer.attachFiles')}
           disabled={!canAttach}
           onClick={() => void openAttachmentPicker()}
         >
@@ -778,13 +803,24 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
             onClick={() => setMode(mode === 'ask' ? 'auto' : 'ask')}
           >
             <Icon name="hand" size={15} />
-            {t(MODE_LABEL_KEY[mode])}
+            <span>{t(mode === 'ask' ? 'composer.askShort' : 'composer.autoShort')}</span>
             <Icon name="chevronDown" size={13} />
           </button>
         )}
-
-        <span className="composer-spacer" />
-
+        {provider === 'lmstudio' && !activeSsh && (
+          <span className="computer-toggle-wrap" title={computerHint}>
+            <button type="button" className={`composer-tool computer-toggle${computerUse ? ' active' : ''}`}
+              aria-label={t('composer.computer')} aria-pressed={computerUse}
+              disabled={!computerUse && (!computerSupport?.available || streaming || readOnly)}
+              onClick={() => setComputerUse(!computerUse)}>
+              <Icon name="monitor" size={15} />
+              <span>{t('composer.computer')}</span>
+              {computerUse && <i className="computer-status-dot" />}
+            </button>
+          </span>
+        )}
+        </div>
+        <div className="composer-model-controls">
         <ProviderSelect
           value={provider}
           options={providerOptions.filter((option) => providerVisibility[option.value] !== false)}
@@ -1073,16 +1109,20 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
             ))}
           </select>
         )}
-
+        </div>
         {streaming ? (
-          <button className="send-btn" onClick={() => stopStreaming()} title={t('common.stop')}>
-            <Icon name="maximize" size={12} />
+          <button className="send-btn stopping" onClick={() => stopStreaming()} title={t('common.stop')} aria-label={t('common.stop')}>
+            <Icon name="stop" size={14} />
           </button>
         ) : (
-          <button className="send-btn" disabled={!canSend} onClick={send} title={t('composer.send')}>
-            <Icon name="send" size={16} />
+          <button className="send-btn" disabled={!canSend} onClick={send} title={t('composer.send')} aria-label={t('composer.send')}>
+            <Icon name="arrowUp" size={18} />
           </button>
         )}
+      </div>
+      <div className={`composer-footnote${computerUse ? ' computer-notice' : ''}`}>
+        {computerUse ? <><Icon name="monitor" size={12} /><span>{t('composer.computerActive')}</span><kbd>Ctrl+Alt+Esc</kbd></>
+          : <><span>@</span><span>/</span><span>$</span><span>#</span><span className="composer-key-hint">{t('composer.enterHint')}</span></>}
       </div>
     </div>
   )

@@ -2,6 +2,18 @@
 
 const hi: Translation = {
   ...en,
+  'rail.officialChannel': "आधिकारिक चैनल",
+  'composer.computer': "कंप्यूटर",
+  'composer.computerActive': "मुख्य स्क्रीन, माउस और कीबोर्ड · रोकें:",
+  'composer.computerChecking': "मॉडल की क्षमताएँ जाँची जा रही हैं…",
+  'composer.computerHint': "मुख्य स्क्रीन, माउस और कीबोर्ड तक पहुँच की अनुमति दें",
+  'composer.computerPlatform': "कंप्यूटर नियंत्रण Windows पर उपलब्ध है।",
+  'composer.computerModel': "चित्रों और टूल कॉल का समर्थन करने वाला मॉडल चुनें।",
+  'composer.computerUnknown': "मॉडल की जाँच नहीं हो सकी। कनेक्शन जाँचें और LM Studio अपडेट करें।",
+  'composer.placeholderShort': "कोई कार्य बताएँ या प्रश्न पूछें…",
+  'composer.askShort': "पहले पुष्टि करें",
+  'composer.autoShort': "स्वचालित",
+  'composer.enterHint': "Enter से भेजें · Shift+Enter से नई पंक्ति",
   'app.language.english': 'अंग्रेज़ी',
   'app.language.russian': 'रूसी',
   'app.language.ukrainian': 'यूक्रेनी',

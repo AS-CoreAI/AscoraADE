@@ -32,7 +32,7 @@ let client: LmStudioClient | null = null
 /** In-flight chat requests, keyed by the renderer-supplied request id. */
 const aborters = new Map<string, AbortController>()
 
-function readConfig(): LlmConfig {
+export function readConfig(): LlmConfig {
   const store = getStore()
   const openRouterEnabled =
     store.getSetting<boolean>('openrouter.enabled') ?? DEFAULT_LLM_CONFIG.openRouterEnabled
@@ -228,12 +228,20 @@ export function registerLlmHandlers(): void {
       const controller = new AbortController()
       aborters.set(id, controller)
       let content = ''
+      let thinking = ''
+      let thinkingStartedAt: number | undefined
+      let thinkingMs = 0
       try {
         // Iterate manually so we can read the generator's *return* value, which
         // carries the assembled native tool calls + finish reason.
         // Keep URL, credentials and provider fixed for the whole request even
         // if settings change while it is streaming or negotiating tool support.
-        const gen = new LmStudioClient(readConfig()).streamChat(params, controller.signal)
+        const gen = new LmStudioClient(readConfig()).streamChat(params, controller.signal, (delta) => {
+          thinkingStartedAt ??= Date.now()
+          thinkingMs = Date.now() - thinkingStartedAt
+          thinking += delta
+          if (!e.sender.isDestroyed()) e.sender.send(IPC.llm.chunk, { id, delta: '', thinking })
+        })
         for (;;) {
           const { value, done } = await gen.next()
           if (done) {
@@ -242,7 +250,9 @@ export function registerLlmHandlers(): void {
               content,
               toolCalls: value.toolCalls,
               finishReason: value.finishReason,
-              usage: value.usage
+              usage: value.usage,
+              thinking: value.thinking,
+              thinkingMs: value.thinkingMs
             }
           }
           content += value
@@ -250,9 +260,9 @@ export function registerLlmHandlers(): void {
         }
       } catch (err) {
         if (err instanceof LmStudioError && err.kind === 'aborted') {
-          return { ok: true, content, aborted: true }
+          return { ok: true, content, thinking, thinkingMs, aborted: true }
         }
-        return { ok: false, content, error: errorMessage(err) }
+        return { ok: false, content, thinking, thinkingMs, error: errorMessage(err) }
       } finally {
         aborters.delete(id)
       }
