@@ -76,6 +76,7 @@ export const IPC = {
     listModels: 'llm:listModels',
     checkLmStudio: 'llm:checkLmStudio',
     contextLength: 'llm:contextLength',
+    modelInfo: 'llm:modelInfo',
     checkOllama: 'llm:checkOllama',
     chat: 'llm:chat',
     chunk: 'llm:chunk',
@@ -623,6 +624,14 @@ export interface LlmModel {
   id: string
 }
 
+export type LmStudioReasoning = 'off' | 'on' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'
+export interface LmStudioModelInfo {
+  /** Actual loaded instance window. Null when unloaded, ambiguous or unavailable. */
+  contextLength: number | null
+  reasoningOptions: LmStudioReasoning[]
+  reasoningDefault?: LmStudioReasoning
+}
+
 function stripWrappingQuotes(value: string): string {
   return value.replace(/^['"]|['"]$/g, '').trim()
 }
@@ -1068,6 +1077,8 @@ export interface LlmConfig {
   baseUrl: string
   /** Default LM Studio model id used when a request doesn't specify one. */
   model: string
+  /** Per-chat reasoning selection; empty uses the model's server default. */
+  lmStudioReasoning: LmStudioReasoning | ''
   /** OpenAI-compatible base for Ollama, usually http://localhost:11434/v1. */
   ollamaBaseUrl: string
   /** Default Ollama model id used when selected. */
@@ -1152,6 +1163,7 @@ export const DEFAULT_LLM_CONFIG: LlmConfig = {
   provider: 'lmstudio',
   baseUrl: 'http://localhost:1234/v1',
   model: '',
+  lmStudioReasoning: '',
   ollamaBaseUrl: 'http://localhost:11434/v1',
   ollamaModel: '',
   unslothBaseUrl: 'http://127.0.0.1:8888/v1',
@@ -1196,6 +1208,8 @@ export interface ChatParams {
   messages: LlmMessage[]
   temperature?: number
   maxTokens?: number
+  /** Empty uses the server default; omitted uses the saved LM Studio selection. */
+  reasoning?: LmStudioReasoning | ''
   /** When set, advertised to the model for native function-calling. */
   tools?: ToolDef[]
 }

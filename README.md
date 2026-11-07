@@ -150,8 +150,15 @@ npm run typecheck   # tsc for main and renderer
 - **LM Studio context:** Ascora summarizes older context with the selected model
   between steps, keeping recent exchanges and the full visible transcript.
   The trigger uses a conservative token estimate against 70% of the loaded
-  instance's context window (8,192 tokens if discovery is unavailable), accounting
-  for system/tool overhead, or 60 conversation messages. The original context
+  instance's context window, accounting for system/tool overhead. The window is
+  read from LM Studio before every turn, with no fixed upper cap, including
+  million-token windows. When the loaded window is unknown, Ascora shows that
+  explicitly and leaves limits to the server rather than guessing a size.
+  Reasoning levels come from the selected model's capabilities and persist per
+  workspace/chat. The summary's length target does not cap reasoning: total
+  generation allowance uses the space remaining in the loaded window. Incomplete
+  summaries get a continuation attempt; failure can defer compaction while the
+  original still fits. The original context
   is archived in `task_context_checkpoints` before replacement; each summary is
   visible in the chat. Cancellation or invalid summaries retain the original.
   Recovery restores conversation progress, not the model's in-memory KV cache.

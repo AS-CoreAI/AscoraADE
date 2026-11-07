@@ -3,6 +3,7 @@ import { Icon } from './Icon'
 import { FileIcon } from './FileIcon'
 import { ProviderSelect, type ProviderSelectOption } from './ProviderSelect'
 import { OmniModelPicker } from './OmniModelPicker'
+import { LmStudioControls } from './LmStudioControls'
 import { useApp, type AgentMode, type AppLanguage } from '@/state/store'
 import { api } from '@/lib/api'
 import { tr, type TranslationKey } from '@/language'
@@ -821,6 +822,7 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
         )}
         </div>
         <div className="composer-model-controls">
+        {provider === 'lmstudio' && <LmStudioControls disabled={streaming || readOnly} />}
         <ProviderSelect
           value={provider}
           options={providerOptions.filter((option) => providerVisibility[option.value] !== false)}

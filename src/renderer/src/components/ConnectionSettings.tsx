@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type JSX } from 'react'
 import { Icon } from './Icon'
+import { LmStudioControls } from './LmStudioControls'
 import { api } from '@/lib/api'
 import {
   CODEX_MODEL_PRESETS,
@@ -228,6 +229,7 @@ function LmStudioPanel(): JSX.Element {
         </select>
       </label>
 
+      <LmStudioControls settings />
       <div className={`conn-line ${connection}`}>
         {connection === 'connected' && `✓ ${t('settings.connectedModels', { count: models.length })}`}
         {connection === 'connecting' && t('settings.connecting')}

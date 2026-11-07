@@ -50,6 +50,7 @@ export function readConfig(): LlmConfig {
     provider,
     baseUrl: store.getSetting<string>('llm.baseUrl') ?? DEFAULT_LLM_CONFIG.baseUrl,
     model: store.getSetting<string>('llm.model') ?? DEFAULT_LLM_CONFIG.model,
+    lmStudioReasoning: store.getSetting<LlmConfig['lmStudioReasoning']>('llm.reasoning') ?? '',
     ollamaBaseUrl:
       store.getSetting<string>('ollama.baseUrl') ?? DEFAULT_LLM_CONFIG.ollamaBaseUrl,
     ollamaModel: store.getSetting<string>('ollama.model') ?? DEFAULT_LLM_CONFIG.ollamaModel,
@@ -137,6 +138,9 @@ export function registerLlmHandlers(): void {
     }
     if (typeof patch.baseUrl === 'string') store.setSetting('llm.baseUrl', patch.baseUrl.trim())
     if (typeof patch.model === 'string') store.setSetting('llm.model', patch.model)
+    if (typeof patch.lmStudioReasoning === 'string' && ['', 'off', 'on', 'minimal', 'low', 'medium', 'high', 'xhigh'].includes(patch.lmStudioReasoning)) {
+      store.setSetting('llm.reasoning', patch.lmStudioReasoning)
+    }
     if (typeof patch.ollamaBaseUrl === 'string') {
       store.setSetting('ollama.baseUrl', patch.ollamaBaseUrl.trim())
     }
@@ -213,6 +217,9 @@ export function registerLlmHandlers(): void {
 
   ipcMain.handle(IPC.llm.contextLength, (_e, model: string): Promise<number | null> =>
     new LmStudioClient({ ...readConfig(), provider: 'lmstudio' }).contextLength(model, AbortSignal.timeout(2500)))
+
+  ipcMain.handle(IPC.llm.modelInfo, (_e, model: string) =>
+    new LmStudioClient({ ...readConfig(), provider: 'lmstudio' }).modelInfo(model, AbortSignal.timeout(2500)))
 
   // Same probe for the local Ollama server.
   ipcMain.handle(IPC.llm.checkOllama, async (): Promise<boolean> => {

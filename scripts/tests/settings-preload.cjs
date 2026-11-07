@@ -38,7 +38,9 @@ const group = (name) => new Proxy({}, { get: (_, method) => {
       if (method === 'set') { values[args[0]] = args[1]; save(); return }
     }
     if (name === 'llm') {
-      if (method === 'contextLength') return 8192
+      if (method === 'contextLength') return fixture.contextLength === undefined ? 8192 : fixture.contextLength
+      if (method === 'modelInfo') return { contextLength: fixture.contextLength === undefined ? 8192 : fixture.contextLength,
+        reasoningOptions: ['off', 'low', 'medium', 'xhigh'], reasoningDefault: 'xhigh' }
       if (method === 'config') return config
       if (method === 'setConfig') { Object.assign(config, args[0]); localStorage.setItem('settings-smoke-llm', JSON.stringify(config)); return }
       if (method === 'listModels') {

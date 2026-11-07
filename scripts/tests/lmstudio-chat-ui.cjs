@@ -55,6 +55,9 @@ app.whenReady().then(async () => {
   await win.loadFile(resolve(__dirname, '../../out/renderer/index.html'))
   await click('.ws-item')
   await waitFor(`!!document.querySelector('.composer-input')`)
+  await waitFor(`document.querySelector('.lmstudio-reasoning')?.disabled === false`)
+  assert.deepEqual(await evaluate(`Array.from(document.querySelector('.lmstudio-reasoning').options).map(o => o.value)`), ['', 'off', 'low', 'medium', 'xhigh'])
+  await evaluate(`{ const select = document.querySelector('.lmstudio-reasoning'); select.value = 'low'; select.dispatchEvent(new Event('change', { bubbles: true })); }`)
   await evaluate(`{
     const input = document.querySelector('.composer-input');
     Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(input, 'Проверь журналы игры');
@@ -66,6 +69,8 @@ app.whenReady().then(async () => {
   await waitFor(`document.querySelector('.send-btn')?.disabled === false`)
   await click('.send-btn')
   await waitFor(`typeof window.settingsFixture.chatDelta === 'function'`)
+  assert.equal(await evaluate(`window.settingsFixture.chatParams.reasoning`), 'low')
+  const firstRequest = await evaluate('window.settingsFixture.chatParams')
   assert.equal(await evaluate(`window.ascora.llm.config().then(c => c.provider)`), 'lmstudio')
   await evaluate(`window.settingsFixture.chatDelta('', 'Сначала посмотрю содержимое папки.')`)
   await click('.reasoning-head')
@@ -105,10 +110,11 @@ app.whenReady().then(async () => {
   await reload()
   await click('.task-item')
   await waitFor(`document.querySelector('.chat-full-scroll')?.textContent.includes('Ответ до сбоя.')`)
+  assert.equal(await evaluate(`document.querySelector('.lmstudio-reasoning').value`), 'low', 'Chat reasoning choice survives reload')
   await evaluate(`document.querySelectorAll('.reasoning-head').forEach(button => button.click())`)
   await waitFor(`document.querySelector('.chat-full-scroll')?.textContent.includes('Размышление до сбоя.')`)
 
-  async function seedCompaction(id) {
+  async function seedCompaction(id, contextLength) {
     await evaluate(`window.ascora.workspace.saveTask({ id: ${JSON.stringify(id)}, workspaceId: 'settings-test',
       title: ${JSON.stringify(id)}, status: 'idle', updatedAt: Date.now(),
       messages: [{ id: 'original', role: 'user', kind: 'text', text: 'Original goal stays visible' }],
@@ -118,12 +124,19 @@ app.whenReady().then(async () => {
     await waitFor(`Array.from(document.querySelectorAll('.task-item')).some(el => el.textContent.includes(${JSON.stringify(id)}))`)
     await evaluate(`Array.from(document.querySelectorAll('.task-item')).find(el => el.textContent.includes(${JSON.stringify(id)})).click()`)
     await waitFor(`!!document.querySelector('.composer-input')`)
+    if (contextLength) await evaluate(`window.settingsFixture.contextLength = ${contextLength}; window.dispatchEvent(new Event('focus'));`)
     await send('Continue from saved progress')
     await waitFor(`window.settingsFixture.chatParams?.messages[0].content.startsWith('Write a compact continuation note')`)
   }
 
   await seedCompaction('compaction-success')
   assert.equal(await evaluate(`window.settingsFixture.checkpoints.length`), 1)
+  const unfinishedId = await evaluate('window.settingsFixture.chatId')
+  assert.ok(await evaluate('window.settingsFixture.chatParams.maxTokens > 2048'))
+  await evaluate(`window.settingsFixture.chatFinish({ ok: true, content: '', thinking: 'Saved summary reasoning at length limit', finishReason: 'length' })`)
+  await waitFor(`window.settingsFixture.chatId !== ${JSON.stringify(unfinishedId)}`)
+  assert.ok(await evaluate(`window.settingsFixture.chatParams.messages.at(-1).content.includes('Saved summary reasoning at length limit')`))
+  assert.ok(await evaluate(`window.settingsFixture.savedTasks.at(-1).messages.some(m => m.reasoning && m.text.includes('Saved summary reasoning'))`))
   let summaryCalls = 0
   for (; summaryCalls < 30; summaryCalls++) {
     if (!await evaluate(`window.settingsFixture.chatParams.messages[0].content.startsWith('Write a compact continuation note')`)) break
@@ -151,7 +164,45 @@ app.whenReady().then(async () => {
   await waitFor(`window.settingsFixture.savedTasks.at(-1)?.status === 'idle'`)
   assert.ok(await evaluate(`window.settingsFixture.savedTasks.at(-1).convo.length >= 25`))
   assert.ok(!await evaluate(`window.settingsFixture.savedTasks.at(-1).convo.some(m => m.content.startsWith('[Saved context summary]'))`))
+
+  // Reloaded model window changes are read on the next turn, not frozen at submit/startup.
+  await evaluate(`window.settingsFixture.contextLength = 1000000; window.dispatchEvent(new Event('focus'));`)
+  await waitFor(`document.querySelector('.lmstudio-context').textContent.replace(/[^0-9]/g, '') === '1000000'`)
+  await send('Continue with the million-token window')
+  await waitFor(`window.settingsFixture.chatParams.messages.at(-1)?.content === 'Continue with the million-token window'`)
+  assert.ok(await evaluate(`window.settingsFixture.chatParams.maxTokens > 900000`))
+  const incompleteId = await evaluate('window.settingsFixture.chatId')
+  await evaluate(`window.settingsFixture.chatFinish({ ok: true, content: '', thinking: 'Unfinished agent reasoning', finishReason: 'length' })`)
+  await waitFor(`window.settingsFixture.chatId !== ${JSON.stringify(incompleteId)}`)
+  assert.ok(await evaluate(`window.settingsFixture.chatParams.messages.at(-1).content.includes('Unfinished agent reasoning')`))
+  await evaluate(`window.settingsFixture.chatFinish({ ok: true, content: 'Continued the actual task.' })`)
+  await waitFor(`window.settingsFixture.savedTasks.at(-1)?.status === 'idle'`)
+
+  await evaluate(`window.settingsFixture.contextLength = null; window.dispatchEvent(new Event('focus'));`)
+  await waitFor(`document.querySelector('.lmstudio-context').textContent.includes('не сообщил')`)
+  await send('Use the server when context is unknown')
+  await waitFor(`window.settingsFixture.chatParams.messages.at(-1)?.content === 'Use the server when context is unknown'`)
+  assert.equal(await evaluate(`window.settingsFixture.chatParams.maxTokens`), undefined)
+  await evaluate(`window.settingsFixture.chatFinish({ ok: true, content: 'Server chooses the limit.' })`)
+  await waitFor(`window.settingsFixture.savedTasks.at(-1)?.status === 'idle'`)
+
+  // A summary failure at ~80% usage must retain the original and resume work.
+  const { loadTypeScript } = require('./llm-fixture.cjs')
+  const { contextTokens, conversationTokens } = loadTypeScript('src/shared/context-compaction.ts')
+  const source = Array.from({ length: 24 }, (_, i) => ({ role: i % 2 ? 'assistant' : 'user', content: 'Step ' + i + ': ' + 'verified progress '.repeat(100) }))
+  const used = conversationTokens([...source, { role: 'user', content: 'Continue from saved progress' }]) + contextTokens(firstRequest.messages[0].content + JSON.stringify(firstRequest.tools)) + 256
+  await seedCompaction('compaction-deferred', Math.ceil(used / 0.8))
+  const failingId = await evaluate('window.settingsFixture.chatId')
+  await evaluate(`window.settingsFixture.chatFinish({ ok: false, content: '', error: 'Summary server failure' })`)
+  await waitFor(`window.settingsFixture.chatId !== ${JSON.stringify(failingId)}`)
+  assert.ok(await evaluate(`window.settingsFixture.chatParams.messages.length >= 26`))
+  assert.ok(!await evaluate(`window.settingsFixture.chatParams.messages.some(m => m.content.startsWith('[Saved context summary]'))`))
+  await evaluate(`window.settingsFixture.chatFinish({ ok: true, content: 'Continued with original context.' })`)
+  await waitFor(`window.settingsFixture.savedTasks.at(-1)?.status === 'idle'`)
+  await evaluate(`document.querySelectorAll('.reasoning-head').forEach(button => button.click())`)
+  assert.ok(await evaluate(`document.querySelector('.chat-full-scroll').textContent.includes('Продолжаю с сохранённым')`))
+  writeFileSync(join(output, 'reasoning-control-context.png'), (await win.webContents.capturePage()).toPNG())
   assert.deepEqual(errors, [])
-  console.log('LM Studio chat UI OK: live checkpoints, reasoning/prose after renderer restart, bounded tool results, context compaction, archived source, summary after restart, cancellation retains original context')
+  console.log('LM Studio chat UI OK: persisted reasoning control, live checkpoints/recovery, million-token and unknown windows, incomplete response continuation, compaction retry/defer/cancel, archived source')
   app.exit(0)
 }).catch(error => { console.error(error, errors); app.exit(1) })

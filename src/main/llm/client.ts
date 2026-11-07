@@ -3,6 +3,8 @@ import {
   type ChatParams,
   type LlmConfig,
   type LlmModel,
+  type LmStudioModelInfo,
+  type LmStudioReasoning,
   type ToolCall,
   type TokenUsage
 } from '@shared/ipc'
@@ -185,17 +187,36 @@ export class LmStudioClient {
 
   /** The loaded instance's window, not the model's theoretical maximum. */
   async contextLength(model: string, signal?: AbortSignal): Promise<number | null> {
+    return (await this.modelInfo(model, signal))?.contextLength ?? null
+  }
+
+  async modelInfo(model: string, signal?: AbortSignal): Promise<LmStudioModelInfo | null> {
     const url = this.baseUrl.replace(/\/v1$/, '') + '/api/v1/models'
     try {
       const response = await fetch(url, { signal })
       if (!response.ok) return null
       const json = await response.json() as { models?: {
         key: string; loaded_instances?: { id: string; config?: { context_length?: number } }[]
+        capabilities?: { reasoning?: { allowed_options?: string[]; default?: string } }
       }[] }
       const info = json.models?.find(item => item.key === model || item.loaded_instances?.some(instance => instance.id === model))
-      const instance = info?.loaded_instances?.find(item => item.id === model) ?? info?.loaded_instances?.[0]
+      if (!info) return null
+      const instances = info.loaded_instances ?? []
+      // A key with several differently configured instances is ambiguous. Do not
+      // guess the first one's window or substitute the theoretical model maximum.
+      const instance = instances.find(item => item.id === model) ?? (instances.length === 1 ? instances[0] : undefined)
       const length = instance?.config?.context_length
-      return typeof length === 'number' && Number.isFinite(length) && length >= 1024 ? length : null
+      const reasoning = info.capabilities?.reasoning
+      const supported = ['off', 'on', 'minimal', 'low', 'medium', 'high', 'xhigh']
+      const options = [...new Set(reasoning?.allowed_options?.filter(value => supported.includes(value)) ?? [])] as LmStudioReasoning[]
+      // Graded models already expose their enabled levels; a redundant "on"
+      // cannot be represented faithfully by Chat Completions' effort enum.
+      const graded = options.some(value => !['off', 'on'].includes(value))
+      return {
+        contextLength: typeof length === 'number' && Number.isSafeInteger(length) && length > 0 ? length : null,
+        reasoningOptions: options.filter(value => value !== 'on' || !graded),
+        reasoningDefault: supported.includes(reasoning?.default ?? '') ? reasoning!.default as LmStudioReasoning : undefined
+      }
     } catch { return null }
   }
 
@@ -308,6 +329,7 @@ export class LmStudioClient {
     this.requireOmniroute()
     const name = this.providerName
     const url = `${this.baseUrl}/chat/completions`
+    const reasoning = params.reasoning ?? this.config.lmStudioReasoning
     const basePayload: Record<string, unknown> = {
       model: this.model(params),
       messages: params.messages.map(({ images, ...message }) => images?.length
@@ -318,6 +340,10 @@ export class LmStudioClient {
         : message),
       temperature: params.temperature ?? 0.7,
       ...(params.maxTokens ? { max_tokens: params.maxTokens } : {}),
+      // LM Studio's native model metadata says off/on; its OpenAI endpoint
+      // accepts none/high for toggle models, and the named levels otherwise.
+      ...(this.config.provider === 'lmstudio' && reasoning
+        ? { reasoning_effort: reasoning === 'off' ? 'none' : reasoning === 'on' ? 'high' : reasoning } : {}),
       ...(params.tools && params.tools.length > 0 ? { tools: params.tools } : {})
     }
     const body = JSON.stringify({

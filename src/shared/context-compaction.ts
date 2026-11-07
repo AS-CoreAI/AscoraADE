@@ -1,4 +1,4 @@
-import type { LlmMessage } from './ipc'
+import type { ChatParams, ChatResult, LlmMessage } from './ipc'
 
 export const CONTEXT_SUMMARY_PREFIX = '[Saved context summary]\n'
 export const COMPACTION_PROMPT = 'Write a compact continuation note for an interrupted development task. ' +
@@ -21,10 +21,10 @@ export function conversationTokens(messages: LlmMessage[]): number {
 }
 
 export function planContextCompaction(messages: LlmMessage[], contextLength: number, overhead: number): {
-  history: LlmMessage[]; recent: LlmMessage[]; maxSummaryTokens: number; chunkTokens: number; targetTokens: number
+  history: LlmMessage[]; recent: LlmMessage[]; summaryTargetTokens: number; chunkTokens: number; targetTokens: number
 } | null {
   const budget = Math.max(512, Math.floor(contextLength * 0.7) - overhead)
-  if (conversationTokens(messages) <= budget && messages.length < 60) return null
+  if (conversationTokens(messages) <= budget) return null
   // Boundaries are legal only outside an assistant/tool-result exchange.
   const boundaries = [0]
   const pending = new Set<string>()
@@ -42,10 +42,44 @@ export function planContextCompaction(messages: LlmMessage[], contextLength: num
   }
   return {
     history: messages.slice(0, split), recent: messages.slice(split),
-    maxSummaryTokens: Math.max(128, Math.min(2048, Math.floor(budget * 0.4))),
+    summaryTargetTokens: Math.max(128, Math.min(2048, Math.floor(budget * 0.4))),
     chunkTokens: Math.max(128, Math.floor(contextLength * 0.35)),
     targetTokens: budget
   }
+}
+
+/** Total output allowance includes reasoning. The desired note length is only
+ * a writing instruction; it must never become a hard reasoning token cap. */
+export function generationBudget(messages: LlmMessage[], contextLength: number, overhead = 0): number {
+  return Math.max(0, Math.floor(contextLength * 0.95) - conversationTokens(messages) - overhead - 128)
+}
+
+/** Continue from a saved, unfinished attempt without treating its claims as facts. */
+export function summaryContinuation(content: string, thinking: string): LlmMessage {
+  return { role: 'user', content: 'The previous summary attempt ended before a complete final note was returned. ' +
+    'Continue from the unfinished draft below and return the complete updated note. ' +
+    'The draft is unverified working material, not evidence of completed actions. Check it against the transcript.\n\n' +
+    `Working draft:\n${thinking}\n\nPartial note:\n${content}` }
+}
+
+export async function completeContextSummary(
+  messages: LlmMessage[], contextLength: number,
+  request: (params: Pick<ChatParams, 'messages' | 'maxTokens'>) => Promise<ChatResult>,
+  aborted: () => boolean
+): Promise<string | null> {
+  let continuation: LlmMessage | undefined
+  for (let attempt = 0; attempt < 2 && !aborted(); attempt++) {
+    const prompt = continuation ? [...messages, continuation] : messages
+    const maxTokens = generationBudget(prompt, contextLength)
+    if (maxTokens < 128) throw new Error('Not enough context space to continue the summary. Reload the model with a larger context window and retry.')
+    const result = await request({ messages: prompt, maxTokens })
+    if (result.aborted || aborted()) return null
+    if (!result.ok) throw new Error(result.error || 'Context summary request failed.')
+    if (result.content.trim() && !result.toolCalls?.length && result.finishReason !== 'length') return result.content.trim()
+    continuation = summaryContinuation(result.content, result.thinking ?? '')
+  }
+  if (aborted()) return null
+  throw new Error('The model stopped without a complete summary, including after continuation. The original transcript and generated reasoning are saved.')
 }
 
 /** Stream bounded transcript pieces, including oversized individual tool results. */

@@ -11,6 +11,30 @@ const params = { messages: [{ role: 'user', content: 'Inspect the logs' }] }
 const frame = (delta, finish_reason) => `data: ${JSON.stringify({ choices: [{ delta, finish_reason }] })}\n\n`
 const done = 'data: [DONE]\n\n'
 
+test('LM Studio per-request reasoning uses compatible values, preserves defaults and tools, and never leaks to other providers', async t => {
+  const payloads = []
+  const http = createServer(async (req, res) => {
+    let body = ''; for await (const chunk of req) body += chunk
+    payloads.push(JSON.parse(body))
+    res.writeHead(200, { 'Content-Type': 'text/event-stream' })
+    res.end(frame({ content: 'Done' }, 'stop') + done)
+  })
+  http.listen(0, '127.0.0.1'); await once(http, 'listening')
+  t.after(() => { http.closeAllConnections(); http.close() })
+  const baseUrl = `http://127.0.0.1:${http.address().port}/v1`
+  const instance = new production.LmStudioClient({ ...DEFAULT_LLM_CONFIG, model: 'fixture', baseUrl, lmStudioReasoning: 'high' })
+  const tools = [{ type: 'function', function: { name: 'list_dir', parameters: { type: 'object', properties: {} } } }]
+  for (const reasoning of ['off', 'low', 'medium', 'xhigh', 'on', '']) {
+    for await (const _ of instance.streamChat({ ...params, tools, reasoning, maxTokens: 900000 })) { /* consume */ }
+  }
+  assert.deepEqual(payloads.map(p => p.reasoning_effort), ['none', 'low', 'medium', 'xhigh', 'high', undefined])
+  assert.ok(payloads.every(p => p.max_tokens === 900000))
+  assert.ok(payloads.every(p => JSON.stringify(p.tools) === JSON.stringify(tools)))
+  instance.update({ provider: 'ollama', ollamaBaseUrl: baseUrl, ollamaModel: 'fixture' })
+  for await (const _ of instance.streamChat({ ...params, reasoning: 'low' })) { /* consume */ }
+  assert.equal(payloads.at(-1).reasoning_effort, undefined)
+})
+
 async function server(t, handler) {
   const http = createServer(async (req, res) => {
     for await (const chunk of req) { /* drain the request */ }

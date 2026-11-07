@@ -253,6 +253,7 @@ const api = {
     /** Same probe for the local Ollama server. */
     checkOllama: (): Promise<boolean> => ipcRenderer.invoke(IPC.llm.checkOllama),
     contextLength: (model: string): Promise<number | null> => ipcRenderer.invoke(IPC.llm.contextLength, model),
+    modelInfo: (model: string): Promise<import('@shared/ipc').LmStudioModelInfo | null> => ipcRenderer.invoke(IPC.llm.modelInfo, model),
     /** Streams content deltas and, when provided, the accumulated reasoning. */
     chat: (id: string, params: ChatParams, onChunk: (delta: string, thinking?: string) => void): Promise<ChatResult> => {
       const listener = (_e: IpcRendererEvent, payload: ChatChunkPayload): void => {

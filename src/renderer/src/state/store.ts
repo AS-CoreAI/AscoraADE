@@ -63,7 +63,7 @@ import { api } from '@/lib/api'
 import { formatAgentDirectory, LIST_DIR_TOOL, LIST_DIR_USAGE } from '@shared/agent-directory'
 import { COMPUTER_PROMPT, COMPUTER_TOOL, type ComputerFrame } from '@shared/computer'
 import { checkpointConversation } from '@shared/task-recovery'
-import { COMPACTION_PROMPT, CONTEXT_SUMMARY_PREFIX, compactionChunks, contextTokens, conversationTokens, planContextCompaction } from '@shared/context-compaction'
+import { COMPACTION_PROMPT, CONTEXT_SUMMARY_PREFIX, compactionChunks, completeContextSummary, contextTokens, conversationTokens, generationBudget, planContextCompaction } from '@shared/context-compaction'
 import { diffStat } from '@/lib/diff'
 import { solveZCodeCaptcha } from '@/lib/zcode-captcha'
 import { isLanguageCode, localeForLanguage, tr, type LanguageCode } from '@/language'
@@ -1048,6 +1048,7 @@ export function parseFileRef(ref: string): { path: string; line?: number } | nul
  * paths) stay global — they describe one local install, not a per-project choice.
  */
 interface WorkspaceLlm {
+  lmStudioReasoning?: import('@shared/ipc').LmStudioReasoning | ''
   unslothModel?: string
   antigravityModel?: AntigravityModel
   antigravityReasoning?: AntigravityReasoning
@@ -1081,6 +1082,7 @@ interface WorkspaceLlm {
 
 /** Snapshot the active backend selection for persisting against a workspace. */
 function snapshotLlm(s: {
+  lmStudioReasoning: import('@shared/ipc').LmStudioReasoning | ''
   unslothModel: string
   antigravityModel: AntigravityModel
   antigravityReasoning: AntigravityReasoning
@@ -1108,6 +1110,7 @@ function snapshotLlm(s: {
   omnirouteModel: string
 }): WorkspaceLlm {
   return {
+    lmStudioReasoning: s.lmStudioReasoning,
     unslothModel: s.unslothModel,
     antigravityModel: s.antigravityModel,
     antigravityReasoning: s.antigravityReasoning,
@@ -1307,6 +1310,7 @@ interface AppState {
   // LM Studio
   baseUrl: string
   model: string
+  lmStudioReasoning: import('@shared/ipc').LmStudioReasoning | ''
   // Ollama
   ollamaBaseUrl: string
   ollamaModel: string
@@ -1531,6 +1535,7 @@ interface AppState {
 
   refreshModels: () => Promise<void>
   setModel: (m: string) => void
+  setLmStudioReasoning: (value: import('@shared/ipc').LmStudioReasoning | '') => void
   setBaseUrl: (url: string) => Promise<void>
   setOllamaModel: (m: string) => void
   setOllamaBaseUrl: (url: string) => Promise<void>
@@ -1772,6 +1777,7 @@ export const useApp = create<AppState>((set, get) => {
         antigravityReasoning: saved.antigravityReasoning ?? (saved.antigravityModel === 'pro' ? 'high' : DEFAULT_LLM_CONFIG.antigravityReasoning),
         provider: saved.provider,
         model: saved.model,
+        lmStudioReasoning: saved.lmStudioReasoning ?? '',
         ollamaModel: saved.ollamaModel ?? DEFAULT_LLM_CONFIG.ollamaModel,
         unslothModel: saved.unslothModel ?? DEFAULT_LLM_CONFIG.unslothModel,
         openRouterModel: saved.openRouterModel ?? DEFAULT_LLM_CONFIG.openRouterModel,
@@ -1808,6 +1814,7 @@ export const useApp = create<AppState>((set, get) => {
       antigravityModel: get().antigravityModel,
       antigravityReasoning: get().antigravityReasoning,
       model: get().model,
+      lmStudioReasoning: get().lmStudioReasoning,
       ollamaModel: get().ollamaModel,
       unslothModel: get().unslothModel,
       openRouterModel: get().openRouterModel,
@@ -1891,6 +1898,7 @@ export const useApp = create<AppState>((set, get) => {
   taskLlm: {},
   baseUrl: DEFAULT_LLM_CONFIG.baseUrl,
   model: '',
+  lmStudioReasoning: '',
   ollamaBaseUrl: DEFAULT_LLM_CONFIG.ollamaBaseUrl,
   ollamaModel: DEFAULT_LLM_CONFIG.ollamaModel,
   unslothBaseUrl: DEFAULT_LLM_CONFIG.unslothBaseUrl,
@@ -2084,6 +2092,7 @@ export const useApp = create<AppState>((set, get) => {
       provider: cfg.provider,
       baseUrl: cfg.baseUrl,
       model: cfg.model,
+      lmStudioReasoning: cfg.lmStudioReasoning ?? '',
       ollamaBaseUrl: cfg.ollamaBaseUrl,
       ollamaModel: cfg.ollamaModel,
       unslothBaseUrl: cfg.unslothBaseUrl,
@@ -3145,7 +3154,8 @@ export const useApp = create<AppState>((set, get) => {
             ? { models, connection: 'connected', ollamaModel: selected, ollamaReachable: true }
             : isOmniroute
               ? { models, connection: 'connected', omnirouteModel: selected }
-              : { models, connection: 'connected', model: selected, lmStudioReachable: true }
+              : { models, connection: 'connected', model: selected, lmStudioReachable: true,
+                  lmStudioReasoning: selected === configuredModel ? get().lmStudioReasoning : '' }
       )
       if (selected || isUnsloth) {
         void api.llm.setConfig(
@@ -3155,7 +3165,7 @@ export const useApp = create<AppState>((set, get) => {
               ? { ollamaModel: selected }
               : isOmniroute
                 ? { omnirouteModel: selected }
-                : { model: selected }
+                : { model: selected, lmStudioReasoning: get().lmStudioReasoning }
         )
         get().persistWorkspaceLlm()
       }
@@ -3174,8 +3184,15 @@ export const useApp = create<AppState>((set, get) => {
 
   setModel(model) {
     if (get().model !== model) get().setComputerUse(false)
-    set({ model })
-    void api.llm.setConfig({ model })
+    const lmStudioReasoning = get().model === model ? get().lmStudioReasoning : ''
+    set({ model, lmStudioReasoning })
+    void api.llm.setConfig({ model, lmStudioReasoning })
+    get().persistWorkspaceLlm()
+  },
+
+  setLmStudioReasoning(lmStudioReasoning) {
+    set({ lmStudioReasoning })
+    void api.llm.setConfig({ lmStudioReasoning })
     get().persistWorkspaceLlm()
   },
 
@@ -3928,6 +3945,7 @@ export const useApp = create<AppState>((set, get) => {
     const sshId = get().activeSsh
     const mode = get().mode
     const lmModel = get().model
+    const lmStudioReasoning = get().lmStudioReasoning
     const computerEnabled = get().computerUse && provider === 'lmstudio' && !sshId
     let computerFrame: ComputerFrame | undefined
     let computerSession: string | undefined
@@ -4420,8 +4438,8 @@ export const useApp = create<AppState>((set, get) => {
         return true
       }
 
-      const contextLength = agentProvider === 'lmstudio'
-        ? await api.llm.contextLength(lmModel).catch(() => null) ?? 8192 : 0
+      let compactionDeferred = false
+      let incompleteTurns = 0
       for (let step = 0; step < maxSteps && !aborted(); step += 1) {
         // 1) Stream one model turn into a fresh assistant bubble.
         const replyId = crypto.randomUUID()
@@ -4436,10 +4454,15 @@ export const useApp = create<AppState>((set, get) => {
             'no prose before or after it. Reply in plain prose (no tool_call block) only when the task is fully done.'
           : ''
         const systemPrompt = (skillsBlock ? `${base}\n\n${skillsBlock}` : base) + wpNote + (computerSession ? `\n\n${COMPUTER_PROMPT}` : '')
-        if (agentProvider === 'lmstudio') {
+        // Refresh at each turn: the user may reload the same model with a new window.
+        // Unknown is not 8192; leave generation to the server until it reports a window.
+        const contextLength = agentProvider === 'lmstudio'
+          ? await api.llm.contextLength(lmModel).catch(() => null) : null
+        if (agentProvider === 'lmstudio' && contextLength) {
           const original = readRun(taskId)?.convo ?? []
           const overhead = contextTokens(systemPrompt + JSON.stringify(TOOLS)) + (computerSession ? 1500 : 256)
-          const plan = planContextCompaction(original, contextLength, overhead)
+          const canContinueOriginal = conversationTokens(original) + overhead < contextLength * 0.9
+          const plan = compactionDeferred && canContinueOriginal ? null : planContextCompaction(original, contextLength, overhead)
           if (plan) {
             // The original transcript is durable before asking the model to
             // replace any of its working context. Display history stays intact.
@@ -4454,42 +4477,53 @@ export const useApp = create<AppState>((set, get) => {
               text: tr(get().appLanguage, 'chat.compacting') })
             let summary = ''
             let compacted = false
+            let checkpointReady = false
+            let storageFailed = false
             try {
               await api.workspace.checkpointTask(taskId)
+              checkpointReady = true
               for (const chunk of compactionChunks(plan.history, plan.chunkTokens)) {
                 if (aborted()) break
-                const requestId = crypto.randomUUID()
-                const thinkingId = crypto.randomUUID()
-                let hasThinking = false
-                let partialSummary = ''
-                writeRun(taskId, { streamId: requestId })
-                const result = await api.llm.chat(requestId, {
-                  provider: 'lmstudio', model: lmModel, temperature: 0.2, maxTokens: plan.maxSummaryTokens,
-                  messages: [
-                    { role: 'system', content: COMPACTION_PROMPT },
-                    { role: 'user', content: `Previous note:\n${summary || '(none)'}\n\nNext transcript segment:\n${chunk}` }
-                  ]
-                }, (delta, thinking) => {
-                  if (thinking) {
-                    if (!hasThinking) {
-                      hasThinking = true
-                      addMsg({ id: thinkingId, role: 'assistant', kind: 'text', reasoning: true, text: thinking })
-                    } else patch(thinkingId, { text: thinking })
+                const completed = await completeContextSummary([
+                  { role: 'system', content: COMPACTION_PROMPT + ` Aim for a final note of at most ${plan.summaryTargetTokens} tokens; this is a note length target, not a reasoning limit.` },
+                  { role: 'user', content: `Previous note:\n${summary || '(none)'}\n\nNext transcript segment:\n${chunk}` }
+                ], contextLength, async (params) => {
+                  const requestId = crypto.randomUUID()
+                  const thinkingId = crypto.randomUUID()
+                  let hasThinking = false
+                  let partialSummary = ''
+                  writeRun(taskId, { streamId: requestId })
+                  const result = await api.llm.chat(requestId, {
+                    ...params, provider: 'lmstudio', model: lmModel, reasoning: lmStudioReasoning, temperature: 0.2
+                  }, (delta, thinking) => {
+                    if (thinking) {
+                      if (!hasThinking) {
+                        hasThinking = true
+                        addMsg({ id: thinkingId, role: 'assistant', kind: 'text', reasoning: true, text: thinking })
+                      } else patch(thinkingId, { text: thinking })
+                    }
+                    if (delta) { partialSummary += delta; patch(summaryId, { text: partialSummary }) }
+                  })
+                  if (result.thinking) {
+                    if (!hasThinking) addMsg({ id: thinkingId, role: 'assistant', kind: 'text', reasoning: true, text: result.thinking, reasoningDurationMs: result.thinkingMs })
+                    else patch(thinkingId, { text: result.thinking, reasoningDurationMs: result.thinkingMs })
                   }
-                  if (delta) { partialSummary += delta; patch(summaryId, { text: partialSummary }) }
-                })
-                if (result.thinking) {
-                  if (!hasThinking) addMsg({ id: thinkingId, role: 'assistant', kind: 'text', reasoning: true, text: result.thinking })
-                  else patch(thinkingId, { text: result.thinking, reasoningDurationMs: result.thinkingMs })
-                }
-                if (result.aborted || aborted()) break
-                if (!result.ok || !result.content.trim() || result.toolCalls?.length || result.finishReason === 'length') {
-                  throw new Error(result.error || 'The model did not produce a complete context summary.')
-                }
-                summary = result.content.trim()
+                  // Persist each attempt before continuing, including reasoning-only responses.
+                  await checkpointPending
+                  if (!await get().saveTaskRun(taskId, 'running')) {
+                    storageFailed = true
+                    throw new Error(tr(get().appLanguage, 'chat.checkpointFailed'))
+                  }
+                  return result
+                }, aborted)
+                if (completed === null) break
+                summary = completed
                 patch(summaryId, { text: summary })
                 await checkpointPending
-                if (!await get().saveTaskRun(taskId, 'running')) throw new Error(tr(get().appLanguage, 'chat.checkpointFailed'))
+                if (!await get().saveTaskRun(taskId, 'running')) {
+                  storageFailed = true
+                  throw new Error(tr(get().appLanguage, 'chat.checkpointFailed'))
+                }
               }
               if (!aborted()) {
                 const next: LlmMessage[] = [{ role: 'user', content: CONTEXT_SUMMARY_PREFIX + summary }, ...plan.recent]
@@ -4499,18 +4533,24 @@ export const useApp = create<AppState>((set, get) => {
                 await checkpointPending
                 writeRun(taskId, { convo: next, streamId: null })
                 if (!await get().saveTaskRun(taskId, 'running')) {
+                  storageFailed = true
                   writeRun(taskId, { convo: original })
                   throw new Error(tr(get().appLanguage, 'chat.checkpointFailed'))
                 }
                 compacted = true
               }
             } catch (error) {
-              finalStatus = 'error'
-              patch(summaryId, { text: tr(get().appLanguage, 'chat.compactionFailed') + '\n' + String(error) })
+              compactionDeferred = canContinueOriginal && checkpointReady && !storageFailed
+              if (!compactionDeferred) finalStatus = 'error'
+              const draft = readRun(taskId)?.messages.find(message => message.id === summaryId)?.text ?? ''
+              patch(summaryId, { text: draft + '\n\n' + tr(get().appLanguage, compactionDeferred ? 'chat.compactionDeferred' : 'chat.compactionFailed') + '\n' + String(error) })
             } finally {
               writeRun(taskId, { streamId: replyId })
             }
-            if (!compacted) { removeMsg(replyId); break }
+            if (!compacted && (!compactionDeferred || aborted())) { removeMsg(replyId); break }
+            // The answer follows the compaction activity in the visible timeline.
+            removeMsg(replyId)
+            addMsg({ id: replyId, role: 'assistant', kind: 'text', model: assistantModel, text: '' })
           }
         }
         if (aborted()) { removeMsg(replyId); break }
@@ -4520,6 +4560,13 @@ export const useApp = create<AppState>((set, get) => {
         ]
         if (computerFrame) {
           messages.push({ role: 'user', content: `Current computer screenshot: frame_id=${computerFrame.id}, ${computerFrame.width}x${computerFrame.height} pixels.`, images: [computerFrame.image] })
+        }
+        const outputBudget = contextLength ? generationBudget(messages, contextLength,
+          contextTokens(JSON.stringify(computerSession ? [...TOOLS, COMPUTER_TOOL] : TOOLS)) + (computerFrame ? 1500 : 0)) : undefined
+        if (outputBudget !== undefined && outputBudget < 128) {
+          finalStatus = 'error'
+          patch(replyId, { text: tr(get().appLanguage, 'chat.compactionFailed') })
+          break
         }
         const onDelta = (delta: string): void => {
           streamedChars += delta.length
@@ -4577,6 +4624,8 @@ export const useApp = create<AppState>((set, get) => {
               replyId,
               {
                 provider: agentProvider,
+                ...(agentProvider === 'lmstudio' ? { reasoning: lmStudioReasoning,
+                  ...(outputBudget !== undefined ? { maxTokens: outputBudget } : {}) } : {}),
                 model: isUnsloth ? unslothModel : isOpenRouter
                   ? orModel
                   : isOllama
@@ -4658,6 +4707,22 @@ export const useApp = create<AppState>((set, get) => {
             estimated: !result.usage
           })
         }
+
+        if (agentProvider === 'lmstudio' && (result.finishReason === 'length' || (!result.content.trim() && !result.toolCalls?.length))) {
+          if (result.content.trim()) patch(replyId, { text: result.content })
+          else removeMsg(replyId)
+          if (++incompleteTurns > 2 || step + 1 >= maxSteps) {
+            finalStatus = 'error'
+            addMsg({ id: crypto.randomUUID(), role: 'assistant', kind: 'text', text: tr(get().appLanguage, 'chat.incompleteResponse') })
+            break
+          }
+          pushConvo({ role: 'user', content: 'Your previous response ended before a complete answer or tool call. Continue the task from this unfinished draft. ' +
+            'Do not treat draft claims as verified results. Reissue any incomplete tool call in full.\n\n' + (result.thinking ?? '') + '\n\n' + result.content })
+          await checkpointPending
+          if (!await get().saveTaskRun(taskId, 'running')) { finalStatus = 'error'; break }
+          continue
+        }
+        incompleteTurns = 0
 
         // 2) Resolve tool calls — native first, then the text fallback.
         const native = !!(result.toolCalls && result.toolCalls.length > 0)
