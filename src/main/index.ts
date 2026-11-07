@@ -7,6 +7,13 @@ import { stopOmniroute } from './omniroute/runner'
 import { startPresence, stopPresence } from './presence'
 import { stopAllBlueprints } from './blueprint/runner'
 import { flushVpnUsage } from './vpn/service'
+import { stopAllRuns as stopCodexRuns } from './codex/runner'
+import { stopAllRuns as stopClaudeRuns } from './claude/runner'
+import { stopAllRuns as stopCopilotRuns } from './copilot/runner'
+import { stopAllRuns as stopGeminiRuns } from './gemini/runner'
+import { stopAllRuns as stopGrokRuns } from './grok/runner'
+import { stopAllRuns as stopGlmRuns } from './glm/runner'
+import { stopAllRuns as stopAntigravityRuns } from './antigravity/runner'
 
 // WProvider sign-in pages must look like an ordinary interactive Chromium tab.
 // In particular, Cloudflare Turnstile on Grok loops indefinitely when Blink
@@ -64,6 +71,9 @@ if (!app.requestSingleInstanceLock()) {
     if (quitCleanupStarted) return
     event.preventDefault()
     quitCleanupStarted = true
+    for (const stop of [stopCodexRuns, stopClaudeRuns, stopCopilotRuns, stopGeminiRuns, stopGrokRuns, stopGlmRuns, stopAntigravityRuns]) {
+      try { stop() } catch (error) { console.warn('[shutdown] Agent cleanup failed:', error) }
+    }
     stopAllBlueprints()
     stopPresence()
     stopLiveServer()

@@ -4,6 +4,10 @@ import en, { type Translation } from './en'
 // Ukrainian wording. New translations belong in this file only.
 const uk: Translation = {
   ...en,
+  'chat.contextSummary': "Підсумок контексту",
+  'chat.compacting': "Збереження та стиснення контексту…",
+  'chat.checkpointFailed': "Не вдалося зберегти чат. Перевірте вільне місце й повторіть спробу.",
+  'chat.compactionFailed': "Не вдалося стиснути контекст. Початковий контекст збережено.",
   'rail.officialChannel': "Офіційний канал",
   'composer.computer': "Комп’ютер",
   'composer.computerActive': "Основний екран, миша й клавіатура · Стоп:",

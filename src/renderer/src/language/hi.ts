@@ -2,6 +2,10 @@
 
 const hi: Translation = {
   ...en,
+  'chat.contextSummary': "संदर्भ का सारांश",
+  'chat.compacting': "संदर्भ सहेजा और संक्षिप्त किया जा रहा है…",
+  'chat.checkpointFailed': "चैट सहेजी नहीं जा सकी। डिस्क में खाली जगह जाँचकर फिर कोशिश करें।",
+  'chat.compactionFailed': "संदर्भ संक्षिप्त नहीं किया जा सका। मूल संदर्भ सुरक्षित है।",
   'rail.officialChannel': "आधिकारिक चैनल",
   'composer.computer': "कंप्यूटर",
   'composer.computerActive': "मुख्य स्क्रीन, माउस और कीबोर्ड · रोकें:",

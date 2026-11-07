@@ -1,4 +1,4 @@
-import { app, type WebContents } from 'electron'
+import type { WebContents } from 'electron'
 import { execFileSync, spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import crossSpawn from 'cross-spawn'
 import { existsSync, readFileSync, statSync } from 'node:fs'
@@ -592,6 +592,6 @@ export function killRun(id: string): void {
   killTree(run.child)
 }
 
-app.on('before-quit', () => {
+export function stopAllRuns(): void {
   for (const id of [...runs.keys()]) killRun(id)
-})
+}

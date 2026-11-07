@@ -211,6 +211,9 @@ export function registerLlmHandlers(): void {
     }
   })
 
+  ipcMain.handle(IPC.llm.contextLength, (_e, model: string): Promise<number | null> =>
+    new LmStudioClient({ ...readConfig(), provider: 'lmstudio' }).contextLength(model, AbortSignal.timeout(2500)))
+
   // Same probe for the local Ollama server.
   ipcMain.handle(IPC.llm.checkOllama, async (): Promise<boolean> => {
     const probe = new LmStudioClient({ ...readConfig(), provider: 'ollama' })
@@ -231,16 +234,37 @@ export function registerLlmHandlers(): void {
       let thinking = ''
       let thinkingStartedAt: number | undefined
       let thinkingMs = 0
+      let pendingContent = ''
+      let pendingThinking = false
+      let chunkTimer: NodeJS.Timeout | undefined
+      const flushChunks = (): void => {
+        if (chunkTimer) clearTimeout(chunkTimer)
+        chunkTimer = undefined
+        if (!e.sender.isDestroyed() && (pendingContent || pendingThinking)) {
+          e.sender.send(IPC.llm.chunk, { id, delta: pendingContent, ...(pendingThinking ? { thinking } : {}) })
+        }
+        pendingContent = ''
+        pendingThinking = false
+      }
+      const scheduleChunks = (): void => {
+        // Full reasoning snapshots on every token can flood Electron's IPC
+        // queue. Coalesce display updates while retaining all generated text.
+        chunkTimer ??= setTimeout(flushChunks, 100)
+      }
+      const ownerDestroyed = (): void => { controller.abort() }
+      e.sender.once('destroyed', ownerDestroyed)
       try {
         // Iterate manually so we can read the generator's *return* value, which
         // carries the assembled native tool calls + finish reason.
         // Keep URL, credentials and provider fixed for the whole request even
         // if settings change while it is streaming or negotiating tool support.
-        const gen = new LmStudioClient(readConfig()).streamChat(params, controller.signal, (delta) => {
+        const config = readConfig()
+        const gen = new LmStudioClient({ ...config, provider: params.provider ?? config.provider }).streamChat(params, controller.signal, (delta) => {
           thinkingStartedAt ??= Date.now()
           thinkingMs = Date.now() - thinkingStartedAt
           thinking += delta
-          if (!e.sender.isDestroyed()) e.sender.send(IPC.llm.chunk, { id, delta: '', thinking })
+          pendingThinking = true
+          scheduleChunks()
         })
         for (;;) {
           const { value, done } = await gen.next()
@@ -256,7 +280,8 @@ export function registerLlmHandlers(): void {
             }
           }
           content += value
-          if (!e.sender.isDestroyed()) e.sender.send(IPC.llm.chunk, { id, delta: value })
+          pendingContent += value
+          scheduleChunks()
         }
       } catch (err) {
         if (err instanceof LmStudioError && err.kind === 'aborted') {
@@ -264,6 +289,8 @@ export function registerLlmHandlers(): void {
         }
         return { ok: false, content, thinking, thinkingMs, error: errorMessage(err) }
       } finally {
+        flushChunks()
+        e.sender.removeListener('destroyed', ownerDestroyed)
         aborters.delete(id)
       }
     }

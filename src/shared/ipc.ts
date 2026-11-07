@@ -66,6 +66,7 @@ export const IPC = {
     tasks: 'workspace:tasks',
     task: 'workspace:task',
     saveTask: 'workspace:saveTask',
+    checkpointTask: 'workspace:checkpointTask',
     deleteTask: 'workspace:deleteTask',
     restoreTask: 'workspace:restoreTask'
   },
@@ -74,6 +75,7 @@ export const IPC = {
     setConfig: 'llm:setConfig',
     listModels: 'llm:listModels',
     checkLmStudio: 'llm:checkLmStudio',
+    contextLength: 'llm:contextLength',
     checkOllama: 'llm:checkOllama',
     chat: 'llm:chat',
     chunk: 'llm:chunk',
@@ -312,6 +314,8 @@ export interface TaskMessage {
   provider?: LlmProvider
   /** True for a `text` message that holds the agent's reasoning/thinking. */
   reasoning?: boolean
+  /** Persisted, inspectable summary used to compact the model's working context. */
+  contextSummary?: boolean
   /** True for a `text` message that holds a Claude plan (ExitPlanMode); `status`
    *  tracks its approval: awaiting → done (accepted) / rejected. */
   plan?: boolean
@@ -1188,8 +1192,10 @@ export const DEFAULT_LLM_CONFIG: LlmConfig = {
 
 export interface ChatParams {
   model?: string
+  provider?: LlmProvider
   messages: LlmMessage[]
   temperature?: number
+  maxTokens?: number
   /** When set, advertised to the model for native function-calling. */
   tools?: ToolDef[]
 }

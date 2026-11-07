@@ -62,6 +62,8 @@ import {
 import { api } from '@/lib/api'
 import { formatAgentDirectory, LIST_DIR_TOOL, LIST_DIR_USAGE } from '@shared/agent-directory'
 import { COMPUTER_PROMPT, COMPUTER_TOOL, type ComputerFrame } from '@shared/computer'
+import { checkpointConversation } from '@shared/task-recovery'
+import { COMPACTION_PROMPT, CONTEXT_SUMMARY_PREFIX, compactionChunks, contextTokens, conversationTokens, planContextCompaction } from '@shared/context-compaction'
 import { diffStat } from '@/lib/diff'
 import { solveZCodeCaptcha } from '@/lib/zcode-captcha'
 import { isLanguageCode, localeForLanguage, tr, type LanguageCode } from '@/language'
@@ -1452,7 +1454,7 @@ interface AppState {
   openTask: (ws: Workspace, taskId: string, includeDeleted?: boolean) => Promise<void>
   restoreTask: (ws: Workspace, taskId: string) => Promise<void>
   deleteTask: (ws: Workspace, taskId: string) => Promise<void>
-  saveTaskRun: (taskId: string, status: TaskSummary['status']) => Promise<void>
+  saveTaskRun: (taskId: string, status: TaskSummary['status']) => Promise<boolean>
   goHome: () => void
   openAnalytics: () => void
   closeAnalytics: () => void
@@ -2512,9 +2514,10 @@ export const useApp = create<AppState>((set, get) => {
   },
 
   async saveTaskRun(taskId, status) {
-    if (deletedRuns.has(taskId)) return
+    if (deletedRuns.has(taskId)) return true
     const run = readRun(taskId)
-    if (!run || !run.workspaceId) return
+    if (!run || !run.workspaceId) return true
+    const saveErrorId = `save-error-${taskId}`
     try {
       const summary = await api.workspace.saveTask({
         id: taskId,
@@ -2522,8 +2525,8 @@ export const useApp = create<AppState>((set, get) => {
         title: run.title,
         status,
         updatedAt: Date.now(),
-        messages: run.messages,
-        convo: run.convo,
+        messages: run.messages.filter((message) => message.id !== saveErrorId),
+        convo: checkpointConversation(run.convo, run.messages, run.streamId),
         // Keep the CLI session handles so reopening this chat resumes its
         // server-side context instead of starting the agent from scratch.
         sessions: {
@@ -2545,8 +2548,18 @@ export const useApp = create<AppState>((set, get) => {
           }
         }
       })
+      if (readRun(taskId)?.messages.some((message) => message.id === saveErrorId)) {
+        writeRun(taskId, (current) => ({ messages: current.messages.filter((message) => message.id !== saveErrorId) }))
+      }
+      return true
     } catch (error) {
       console.error('[tasks] failed to save task:', error)
+      if (!readRun(taskId)?.messages.some((message) => message.id === saveErrorId)) {
+        writeRun(taskId, (current) => ({ messages: [...current.messages, {
+          id: saveErrorId, role: 'assistant', kind: 'text', text: `⚠ ${tr(get().appLanguage, 'chat.checkpointFailed')}`
+        }] }))
+      }
+      return false
     }
   },
 
@@ -3992,6 +4005,20 @@ export const useApp = create<AppState>((set, get) => {
     get().persistWorkspaceLlm()
     await get().saveTaskRun(taskId, 'running')
 
+    // Checkpoint dirty runs throughout generation, including reasoning and
+    // tool cards. Never overlap writes or let an older checkpoint win over
+    // the final save. Background tasks use their own captured taskId.
+    let savedMessages = readRun(taskId)?.messages
+    let savedConvo = readRun(taskId)?.convo
+    let checkpointPending: Promise<void> | null = null
+    const checkpointTimer = window.setInterval(() => {
+      const run = readRun(taskId)
+      if (!run || checkpointPending || (run.messages === savedMessages && run.convo === savedConvo)) return
+      checkpointPending = get().saveTaskRun(taskId, 'running').then((saved) => {
+        if (saved) { savedMessages = run.messages; savedConvo = run.convo }
+      }).finally(() => { checkpointPending = null })
+    }, 1000)
+
     try {
       const agentProvider = provider
       if (computerEnabled) {
@@ -4393,6 +4420,8 @@ export const useApp = create<AppState>((set, get) => {
         return true
       }
 
+      const contextLength = agentProvider === 'lmstudio'
+        ? await api.llm.contextLength(lmModel).catch(() => null) ?? 8192 : 0
       for (let step = 0; step < maxSteps && !aborted(); step += 1) {
         // 1) Stream one model turn into a fresh assistant bubble.
         const replyId = crypto.randomUUID()
@@ -4407,6 +4436,84 @@ export const useApp = create<AppState>((set, get) => {
             'no prose before or after it. Reply in plain prose (no tool_call block) only when the task is fully done.'
           : ''
         const systemPrompt = (skillsBlock ? `${base}\n\n${skillsBlock}` : base) + wpNote + (computerSession ? `\n\n${COMPUTER_PROMPT}` : '')
+        if (agentProvider === 'lmstudio') {
+          const original = readRun(taskId)?.convo ?? []
+          const overhead = contextTokens(systemPrompt + JSON.stringify(TOOLS)) + (computerSession ? 1500 : 256)
+          const plan = planContextCompaction(original, contextLength, overhead)
+          if (plan) {
+            // The original transcript is durable before asking the model to
+            // replace any of its working context. Display history stays intact.
+            await checkpointPending
+            if (!await get().saveTaskRun(taskId, 'running')) {
+              patch(replyId, { text: tr(get().appLanguage, 'chat.checkpointFailed') })
+              finalStatus = 'error'
+              break
+            }
+            const summaryId = crypto.randomUUID()
+            addMsg({ id: summaryId, role: 'assistant', kind: 'text', contextSummary: true,
+              text: tr(get().appLanguage, 'chat.compacting') })
+            let summary = ''
+            let compacted = false
+            try {
+              await api.workspace.checkpointTask(taskId)
+              for (const chunk of compactionChunks(plan.history, plan.chunkTokens)) {
+                if (aborted()) break
+                const requestId = crypto.randomUUID()
+                const thinkingId = crypto.randomUUID()
+                let hasThinking = false
+                let partialSummary = ''
+                writeRun(taskId, { streamId: requestId })
+                const result = await api.llm.chat(requestId, {
+                  provider: 'lmstudio', model: lmModel, temperature: 0.2, maxTokens: plan.maxSummaryTokens,
+                  messages: [
+                    { role: 'system', content: COMPACTION_PROMPT },
+                    { role: 'user', content: `Previous note:\n${summary || '(none)'}\n\nNext transcript segment:\n${chunk}` }
+                  ]
+                }, (delta, thinking) => {
+                  if (thinking) {
+                    if (!hasThinking) {
+                      hasThinking = true
+                      addMsg({ id: thinkingId, role: 'assistant', kind: 'text', reasoning: true, text: thinking })
+                    } else patch(thinkingId, { text: thinking })
+                  }
+                  if (delta) { partialSummary += delta; patch(summaryId, { text: partialSummary }) }
+                })
+                if (result.thinking) {
+                  if (!hasThinking) addMsg({ id: thinkingId, role: 'assistant', kind: 'text', reasoning: true, text: result.thinking })
+                  else patch(thinkingId, { text: result.thinking, reasoningDurationMs: result.thinkingMs })
+                }
+                if (result.aborted || aborted()) break
+                if (!result.ok || !result.content.trim() || result.toolCalls?.length || result.finishReason === 'length') {
+                  throw new Error(result.error || 'The model did not produce a complete context summary.')
+                }
+                summary = result.content.trim()
+                patch(summaryId, { text: summary })
+                await checkpointPending
+                if (!await get().saveTaskRun(taskId, 'running')) throw new Error(tr(get().appLanguage, 'chat.checkpointFailed'))
+              }
+              if (!aborted()) {
+                const next: LlmMessage[] = [{ role: 'user', content: CONTEXT_SUMMARY_PREFIX + summary }, ...plan.recent]
+                if (!summary || conversationTokens(next) >= conversationTokens(original) || conversationTokens(next) > plan.targetTokens) {
+                  throw new Error('The summary is still too large for the loaded model. Increase its context window or shorten the request.')
+                }
+                await checkpointPending
+                writeRun(taskId, { convo: next, streamId: null })
+                if (!await get().saveTaskRun(taskId, 'running')) {
+                  writeRun(taskId, { convo: original })
+                  throw new Error(tr(get().appLanguage, 'chat.checkpointFailed'))
+                }
+                compacted = true
+              }
+            } catch (error) {
+              finalStatus = 'error'
+              patch(summaryId, { text: tr(get().appLanguage, 'chat.compactionFailed') + '\n' + String(error) })
+            } finally {
+              writeRun(taskId, { streamId: replyId })
+            }
+            if (!compacted) { removeMsg(replyId); break }
+          }
+        }
+        if (aborted()) { removeMsg(replyId); break }
         const messages: LlmMessage[] = [
           { role: 'system', content: systemPrompt },
           ...(readRun(taskId)?.convo ?? [])
@@ -4469,6 +4576,7 @@ export const useApp = create<AppState>((set, get) => {
           : await api.llm.chat(
               replyId,
               {
+                provider: agentProvider,
                 model: isUnsloth ? unslothModel : isOpenRouter
                   ? orModel
                   : isOllama
@@ -4499,6 +4607,7 @@ export const useApp = create<AppState>((set, get) => {
         if (result.aborted || aborted()) {
           const partial = readRun(taskId)?.messages.find((message) => message.id === replyId)?.text ?? ''
           if (!partial.trim()) removeMsg(replyId)
+          else pushConvo({ role: 'assistant', content: partial })
           break
         }
         // The connection indicator only reflects the foreground backend.
@@ -4509,6 +4618,7 @@ export const useApp = create<AppState>((set, get) => {
         if (!result.ok) {
           finalStatus = 'error'
           const prev = readRun(taskId)?.messages.find((m) => m.id === replyId)?.text ?? ''
+          if (prev.trim()) pushConvo({ role: 'assistant', content: prev })
           patch(replyId, { text: prev ? `${prev}\n\n⚠ ${result.error}` : `⚠ ${result.error}` })
           break
         }
@@ -4944,18 +5054,20 @@ export const useApp = create<AppState>((set, get) => {
         }
       }
     } finally {
+      window.clearInterval(checkpointTimer)
+      await checkpointPending
       if (computerSession) {
         await api.computer.stop(computerSession).catch(() => {})
         computerSessions.delete(taskId)
       }
       writeRun(taskId, { streaming: false, streamId: null, thinking: false, thinkingStartedAt: null })
-      await get().saveTaskRun(taskId, finalStatus)
+      const saved = await get().saveTaskRun(taskId, finalStatus)
       abortedRuns.delete(taskId)
       runProviders.delete(taskId)
       deletedRuns.delete(taskId)
       // A finished background run no longer needs its snapshot; reopening it
       // loads the freshly-saved history from disk.
-      if (get().activeTaskId !== taskId) {
+      if (saved && get().activeTaskId !== taskId) {
         set((s) => {
           const runs = { ...s.runs }
           delete runs[taskId]

@@ -12,11 +12,13 @@ const config = { ...contract.exports.DEFAULT_LLM_CONFIG, ...JSON.parse(localStor
 const status = { state: 'ready', port: 20128, version: '3.8.48', baseUrl: 'http://127.0.0.1:20128/v1', logsPath: '' }
 const values = JSON.parse(localStorage.getItem('settings-smoke') || '{"appearance.language":"ru"}')
 const save = () => localStorage.setItem('settings-smoke', JSON.stringify(values))
+const savedTasks = JSON.parse(localStorage.getItem('settings-smoke-tasks') || '{}')
 const usage = { ok: true, loggedIn: true, windows: [{ label: 'session limit', percent: 32, severity: 'normal', resetsAt: '2026-09-19T18:00:00Z' }] }
 const missing = new Set(['gemini'])
 const fixture = window.settingsFixture = { signedOut: ['copilot'], checkFailures: [], usageFailures: [], percent: 32, emit: null, finish: null,
   unslothModels: ['unsloth-fixture/model-a', 'unsloth-fixture/model-b'], modelRequests: [], analytics: [],
   computerAvailable: true, computerActions: [], computerStops: [], savedTasks: [] }
+fixture.checkpoints = []
 const workspace = { id: 'settings-test', name: 'Settings test', path: 'E:\\fixture', createdAt: Date.now(), updatedAt: Date.now() }
 const group = (name) => new Proxy({}, { get: (_, method) => {
   if (name === 'computer' && method === 'onStopped') return callback => { Object.defineProperty(fixture, 'computerStopped', { value: callback, writable: true, configurable: true }); return () => { fixture.computerStopped = null } }
@@ -36,6 +38,7 @@ const group = (name) => new Proxy({}, { get: (_, method) => {
       if (method === 'set') { values[args[0]] = args[1]; save(); return }
     }
     if (name === 'llm') {
+      if (method === 'contextLength') return 8192
       if (method === 'config') return config
       if (method === 'setConfig') { Object.assign(config, args[0]); localStorage.setItem('settings-smoke-llm', JSON.stringify(config)); return }
       if (method === 'listModels') {
@@ -58,7 +61,13 @@ const group = (name) => new Proxy({}, { get: (_, method) => {
     }
     if (name === 'workspace') {
       if (method === 'list') return [workspace]
-      if (method === 'saveTask') { fixture.savedTasks.push(args[0]); return args[0] }
+      if (method === 'saveTask') {
+        const task = structuredClone(args[0]); fixture.savedTasks.push(task); savedTasks[task.id] = task;
+        localStorage.setItem('settings-smoke-tasks', JSON.stringify(savedTasks)); return task
+      }
+      if (method === 'checkpointTask') { fixture.checkpoints.push(structuredClone(savedTasks[args[0]])); return }
+      if (method === 'tasks') return Object.values(savedTasks).filter(task => task.workspaceId === args[0]).map(task => ({ ...task, status: task.status === 'running' ? 'idle' : task.status }))
+      if (method === 'task') return savedTasks[args[0]] ? { ...structuredClone(savedTasks[args[0]]), status: 'idle' } : null
       return []
     }
     if (name === 'fs' && method === 'readTree') return []

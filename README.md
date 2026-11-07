@@ -108,7 +108,7 @@ the message.
 - **xterm.js** — integrated local and SSH terminals
 - **allotment** — VS Code-style resizable panels
 - **zustand** — renderer state
-- Persistence behind a `Store` interface (SQLite with an atomic JSON fallback)
+- Persistence behind a `Store` interface (native or built-in SQLite, with legacy JSON migration)
 
 ## Project layout
 
@@ -139,14 +139,22 @@ npm run typecheck   # tsc for main and renderer
 - **Launching the GUI from a terminal that sets `ELECTRON_RUN_AS_NODE=1`** makes
   Electron run as plain Node (no window, `app` is undefined). Unset it to launch:
   `env -u ELECTRON_RUN_AS_NODE npx electron .`
-- **SQLite / persistence:** the spec calls for SQLite. `SqliteStore`
-  (`better-sqlite3`) is the primary backend, but it's a native module that needs the
-  Visual Studio **"Desktop development with C++"** workload (MSVC + Windows SDK).
-  Until that's present, `better-sqlite3` is an `optionalDependency` that silently
-  fails to build and the app falls back to an atomic JSON file behind the same
-  `Store` interface. To activate SQLite: install the C++ workload, then
-  `npm install better-sqlite3` (its `postinstall` rebuilds it for Electron's ABI).
-  No code changes needed — the app logs which backend is active on boot.
+- **SQLite / persistence:** `SqliteStore` uses optional `better-sqlite3` when
+  available and Electron's built-in `node:sqlite` otherwise. C++ build tools are
+  not required for persistence. A newer legacy JSON archive is imported into
+  `ascora-store.db` in the app's user-data directory; the original JSON and
+  `ascora.db` are retained. The imported database is authoritative on later
+  launches. Writes use WAL and full synchronization. Active chats checkpoint
+  changed answers, visible reasoning, tools and context every second; an abrupt
+  shutdown can still lose output generated since the last committed checkpoint.
+- **LM Studio context:** Ascora summarizes older context with the selected model
+  between steps, keeping recent exchanges and the full visible transcript.
+  The trigger uses a conservative token estimate against 70% of the loaded
+  instance's context window (8,192 tokens if discovery is unavailable), accounting
+  for system/tool overhead, or 60 conversation messages. The original context
+  is archived in `task_context_checkpoints` before replacement; each summary is
+  visible in the chat. Cancellation or invalid summaries retain the original.
+  Recovery restores conversation progress, not the model's in-memory KV cache.
 
 ## Excluded from analysis
 

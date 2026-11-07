@@ -2,6 +2,10 @@
 
 const ko: Translation = {
   ...en,
+  'chat.contextSummary': "컨텍스트 요약",
+  'chat.compacting': "컨텍스트 저장 및 압축 중…",
+  'chat.checkpointFailed': "채팅을 저장하지 못했습니다. 디스크 공간을 확인하고 다시 시도하세요.",
+  'chat.compactionFailed': "컨텍스트 압축에 실패했습니다. 원본 컨텍스트는 유지됩니다.",
   'rail.officialChannel': "공식 채널",
   'composer.computer': "컴퓨터",
   'composer.computerActive': "주 화면, 마우스 및 키보드 · 중지:",

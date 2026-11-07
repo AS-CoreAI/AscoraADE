@@ -152,11 +152,10 @@ test('IPC forwards accumulated reasoning and retains it on cancellation/failure'
       } }
     }
     loadTypeScript('src/main/ipc/llm.ts', overrides).registerLlmHandlers()
-    const result = await handlers.get(IPC.llm.chat)({ sender: { isDestroyed: () => false, send: (...args) => sent.push(args) } }, 'test-id', params)
-    assert.deepEqual(sent.slice(0, 2), [
-      [IPC.llm.chunk, { id: 'test-id', delta: '', thinking: 'First ' }],
-      [IPC.llm.chunk, { id: 'test-id', delta: '', thinking: 'First second' }]
-    ])
+    const sender = Object.assign(new (require('node:events').EventEmitter)(), { isDestroyed: () => false, send: (...args) => sent.push(args) })
+    const result = await handlers.get(IPC.llm.chat)({ sender }, 'test-id', params)
+    assert.deepEqual(sent, [[IPC.llm.chunk, { id: 'test-id', delta: 'Partial answer', thinking: 'First second' }]])
+    assert.equal(sender.listenerCount('destroyed'), 0)
     assert.equal(result.thinking, 'First second')
     assert.equal(result.content, 'Partial answer')
     assert.equal(result.ok, ending !== 'connection')

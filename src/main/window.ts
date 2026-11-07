@@ -29,6 +29,8 @@ export function createMainWindow(): BrowserWindow {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
       contextIsolation: true,
+      // Running chats must keep checkpointing when the window is minimized.
+      backgroundThrottling: false,
       nodeIntegration: false
     }
   })

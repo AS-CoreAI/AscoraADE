@@ -21,7 +21,7 @@
     "typecheck:web": "tsc -p tsconfig.web.json --noEmit",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
     "rebuild": "electron-rebuild -f -w better-sqlite3",
-    "rebuild:optional": "electron-rebuild -f -w better-sqlite3 || node -e \"console.warn('[ascora] better-sqlite3 rebuild skipped - using JSON store fallback (install C++ build tools, then run npm run rebuild)')\"",
+    "rebuild:optional": "electron-rebuild -f -w better-sqlite3 || node -e \"console.warn('[ascora] optional better-sqlite3 rebuild skipped - Electron built-in SQLite will be used')\"",
     "omniroute:vendor": "node scripts/omniroute/vendor.mjs",
     "omniroute:ensure": "node scripts/omniroute/vendor.mjs --ensure",
     "omniroute:smoke": "node scripts/omniroute/smoke.mjs",

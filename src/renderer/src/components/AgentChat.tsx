@@ -417,10 +417,10 @@ function formatReasoningDuration(ms: number): string {
   return seconds ? `${minutes}m ${seconds}s` : `${minutes}m`
 }
 
-function ReasoningBlock({ text, durationMs }: { text: string; durationMs?: number }): JSX.Element {
+function ReasoningBlock({ text, durationMs, summary }: { text: string; durationMs?: number; summary?: boolean }): JSX.Element {
   const [open, setOpen] = useState(false)
   const appLanguage = useApp((s) => s.appLanguage)
-  const label = durationMs
+  const label = summary ? tr(appLanguage, 'chat.contextSummary') : durationMs
     ? tr(appLanguage, 'chat.reasonedFor', { duration: formatReasoningDuration(durationMs) })
     : tr(appLanguage, 'chat.thoughtProcess')
   return (
@@ -787,8 +787,8 @@ function Messages({ messages }: { messages: ChatMessage[] }): JSX.Element {
         )
       ) : m.plan ? (
         <PlanCard key={m.id} m={m} />
-      ) : m.reasoning ? (
-        <ReasoningBlock key={m.id} text={m.text} durationMs={m.reasoningDurationMs} />
+      ) : m.reasoning || m.contextSummary ? (
+        <ReasoningBlock key={m.id} text={m.text} durationMs={m.reasoningDurationMs} summary={m.contextSummary} />
       ) : (
         <TextMessage key={m.id} m={m} />
       )

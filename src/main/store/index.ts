@@ -1,16 +1,17 @@
 import { app } from 'electron'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
-import { readFileSync, writeFileSync, renameSync, existsSync } from 'node:fs'
+import { readFileSync, writeFileSync, renameSync, existsSync, statSync } from 'node:fs'
 import type { Workspace, TaskRecord, TaskSummary, UsageEvent } from '@shared/ipc'
+import { recoverInterruptedTask } from '@shared/task-recovery'
 
 /**
  * Local persistence for settings, workspaces and task history (spec: SQLite).
  *
  * Primary implementation is `SqliteStore` (`better-sqlite3`). It's a native
  * module; if it ever fails to load (e.g. it hasn't been rebuilt for the current
- * Electron ABI) we fall back to the file-backed `JsonStore` so the app always
- * launches with persistence intact. Everything goes through the `Store`
+ * Electron ABI) we use Electron's built-in `node:sqlite`. Older runtimes can
+ * still use `JsonStore`. Everything goes through the `Store`
  * interface, so callers don't care which backend is active.
  */
 export interface Store {
@@ -28,6 +29,7 @@ export interface Store {
   listTasks(workspaceId: string, deletedOnly?: boolean): TaskSummary[]
   getTask(taskId: string, includeDeleted?: boolean): TaskRecord | null
   saveTask(task: TaskRecord): TaskSummary
+  checkpointTask(taskId: string): void
   /** Soft-delete: stamps `deletedAt` and returns the updated summary, or null if not found. */
   deleteTask(taskId: string): TaskSummary | null
   restoreTask(taskId: string): TaskSummary | null
@@ -41,6 +43,7 @@ interface DbShape {
   workspaces: Workspace[]
   tasks: TaskRecord[]
   usage: UsageEvent[]
+  checkpoints?: { taskId: string; createdAt: number; convo: TaskRecord['convo'] }[]
 }
 
 const EMPTY: DbShape = { settings: {}, workspaces: [], tasks: [], usage: [] }
@@ -84,9 +87,8 @@ class JsonStore implements Store {
       if (existsSync(this.file)) {
         const parsed = JSON.parse(readFileSync(this.file, 'utf8')) as Partial<DbShape>
         const tasks = Array.isArray(parsed.tasks)
-          ? parsed.tasks.map((task) => ({
+          ? parsed.tasks.map((task) => recoverInterruptedTask({
               ...task,
-              status: task.status === 'running' ? ('idle' as const) : task.status,
               messages: Array.isArray(task.messages) ? task.messages : [],
               convo: Array.isArray(task.convo) ? task.convo : []
             }))
@@ -114,7 +116,7 @@ class JsonStore implements Store {
     }
     if (!this.dirty) return
     const tmp = `${this.file}.tmp`
-    writeFileSync(tmp, JSON.stringify(this.data, null, 2), 'utf8')
+    writeFileSync(tmp, JSON.stringify(this.data, null, 2), { encoding: 'utf8', flush: true })
     renameSync(tmp, this.file)
     this.dirty = false
   }
@@ -228,6 +230,15 @@ class JsonStore implements Store {
     return taskSummary(task)
   }
 
+  checkpointTask(taskId: string): void {
+    const task = this.data.tasks.find((item) => item.id === taskId)
+    if (!task) throw new Error('Cannot checkpoint a missing task')
+    const checkpoints = this.data.checkpoints ??= []
+    checkpoints.push({ taskId, createdAt: Date.now(), convo: structuredClone(task.convo) })
+    this.dirty = true
+    this.flush()
+  }
+
   restoreTask(taskId: string): TaskSummary | null {
     const task = this.data.tasks.find((item) => item.id === taskId)
     if (!task?.deletedAt) return null
@@ -251,16 +262,115 @@ class JsonStore implements Store {
   }
 }
 
-/** SQLite-backed store (spec default). `Database` is injected so the module is
- *  only `require`d when present, keeping the type-check independent of it. */
+interface StoreDatabase {
+  exec(sql: string): unknown
+  prepare(sql: string): {
+    get(...params: (string | number | null)[]): unknown
+    all(...params: (string | number | null)[]): unknown[]
+    run(...params: (string | number | null)[]): { changes: number | bigint }
+  }
+  transaction<T>(fn: () => T): () => T
+  close(): void
+}
+
+class SqliteUnavailableError extends Error {}
+
+function openDatabase(file: string): StoreDatabase {
+  try {
+    const Database = require('better-sqlite3') as typeof import('better-sqlite3')
+    const db = new Database(file)
+    return {
+      exec: (sql) => db.exec(sql),
+      prepare: (sql) => db.prepare<(string | number | null)[]>(sql),
+      transaction: (fn) => db.transaction(fn),
+      close: () => db.close()
+    }
+  } catch {
+    // Electron ships SQLite with Node. A missing optional native addon should
+    // not force the entire chat archive to live in the main process JS heap.
+    let sqlite: typeof import('node:sqlite')
+    try {
+      sqlite = require('node:sqlite') as typeof import('node:sqlite')
+    } catch {
+      throw new SqliteUnavailableError('Neither better-sqlite3 nor node:sqlite is available')
+    }
+    // Open errors (corruption, permissions, etc.) must not select a stale JSON
+    // archive. Only an unavailable driver permits the legacy fallback.
+    const db = new sqlite.DatabaseSync(file)
+    console.log('[store] using built-in node:sqlite')
+    return {
+      exec: (sql) => db.exec(sql),
+      prepare: (sql) => db.prepare(sql),
+      close: () => db.close(),
+      transaction: (fn) => () => {
+        db.exec('BEGIN IMMEDIATE')
+        try {
+          const result = fn()
+          db.exec('COMMIT')
+          return result
+        } catch (error) {
+          db.exec('ROLLBACK')
+          throw error
+        }
+      }
+    }
+  }
+}
+
+/** SQLite-backed store using either supported synchronous driver. */
 class SqliteStore implements Store {
   readonly persistent = true
-  private db: import('better-sqlite3').Database
+  private db: StoreDatabase
 
-  constructor(Database: typeof import('better-sqlite3'), file: string) {
-    this.db = new Database(file)
-    this.db.pragma('journal_mode = WAL')
-    this.migrate()
+  constructor(file: string, jsonFile?: string) {
+    this.db = openDatabase(file)
+    try {
+      this.db.exec('PRAGMA journal_mode = WAL')
+      this.db.exec('PRAGMA synchronous = FULL')
+      // SSH chats use virtual workspace IDs; older JSON archives also retain
+      // chats whose workspace was removed. Keep those records without inventing
+      // local projects. Workspace deletion here is soft deletion, never CASCADE.
+      this.db.exec('PRAGMA foreign_keys = OFF')
+      this.migrate()
+      if (jsonFile) this.importJson(jsonFile)
+    } catch (error) {
+      this.db.close()
+      throw error
+    }
+  }
+
+  private importJson(file: string): void {
+    this.db.exec('CREATE TABLE IF NOT EXISTS store_migrations (name TEXT PRIMARY KEY)')
+    if (this.db.prepare('SELECT name FROM store_migrations WHERE name = ?').get('json-import')) return
+    // Import into a separate database: the legacy SQLite and JSON stores may
+    // contain different workspace IDs for the same paths. Keep both originals.
+    const data = JSON.parse(readFileSync(file, 'utf8')) as DbShape
+    if (!data.settings || typeof data.settings !== 'object' || Array.isArray(data.settings) ||
+        !Array.isArray(data.workspaces) || !Array.isArray(data.tasks)) {
+      throw new Error('Invalid JSON archive; migration cancelled without changing the source')
+    }
+    this.db.transaction(() => {
+      for (const [key, value] of Object.entries(data.settings)) this.setSetting(key, value)
+      const workspaceInsert = this.db.prepare(
+        'INSERT INTO workspaces (id, name, path, last_opened_at, deleted_at) VALUES (?, ?, ?, ?, ?)'
+      )
+      for (const ws of data.workspaces) {
+        workspaceInsert.run(ws.id, ws.name, ws.path, ws.lastOpenedAt, ws.deletedAt ?? null)
+      }
+      const tombstone = this.db.prepare('UPDATE tasks SET deleted_at = ? WHERE id = ?')
+      for (const task of data.tasks) {
+        this.saveTask({ ...task,
+          messages: task.messages ?? [], convo: task.convo ?? [] })
+        if (task.deletedAt) tombstone.run(task.deletedAt, task.id)
+      }
+      for (const event of data.usage ?? []) this.addUsage(event)
+      for (const checkpoint of data.checkpoints ?? []) {
+        this.db.prepare('INSERT INTO task_context_checkpoints (id, task_id, created_at, convo_json) VALUES (?, ?, ?, ?)')
+          .run(randomUUID(), checkpoint.taskId, checkpoint.createdAt, JSON.stringify(checkpoint.convo))
+      }
+      this.db.prepare('INSERT INTO store_migrations (name) VALUES (?)').run('json-import')
+    })()
+    console.log(`[store] imported ${data.tasks.length} chats from JSON; original archive retained`)
   }
 
   private migrate(): void {
@@ -302,6 +412,9 @@ class SqliteStore implements Store {
         estimated          INTEGER NOT NULL DEFAULT 0
       );
       CREATE INDEX IF NOT EXISTS usage_ts ON usage(ts);
+      CREATE TABLE IF NOT EXISTS task_context_checkpoints (
+        id TEXT PRIMARY KEY, task_id TEXT NOT NULL, created_at INTEGER NOT NULL, convo_json TEXT NOT NULL
+      );
     `)
 
     const workspaceColumns = this.db.prepare('PRAGMA table_info(workspaces)').all() as { name: string }[]
@@ -322,7 +435,6 @@ class SqliteStore implements Store {
     if (!taskColumns.some((column) => column.name === 'deleted_at')) {
       this.db.exec('ALTER TABLE tasks ADD COLUMN deleted_at INTEGER')
     }
-    this.db.prepare("UPDATE tasks SET status = 'idle' WHERE status = 'running'").run()
   }
 
   getSetting<T = unknown>(key: string): T | undefined {
@@ -458,7 +570,7 @@ class SqliteStore implements Store {
       id: r.id,
       workspaceId: r.workspace_id,
       title: r.title,
-      status: r.status,
+      status: r.status === 'running' ? 'idle' : r.status,
       updatedAt: r.updated_at,
       ...(r.deleted_at ? { deletedAt: r.deleted_at } : {})
     }))
@@ -484,7 +596,7 @@ class SqliteStore implements Store {
         }
       | undefined
     if (!row) return null
-    return {
+    return recoverInterruptedTask({
       id: row.id,
       workspaceId: row.workspace_id,
       title: row.title,
@@ -494,7 +606,14 @@ class SqliteStore implements Store {
       messages: parseArray(row.messages_json),
       convo: parseArray(row.convo_json),
       sessions: parseObject(row.sessions_json)
-    }
+    })
+  }
+
+  checkpointTask(taskId: string): void {
+    const result = this.db.prepare(
+      'INSERT INTO task_context_checkpoints (id, task_id, created_at, convo_json) SELECT ?, id, ?, convo_json FROM tasks WHERE id = ?'
+    ).run(randomUUID(), Date.now(), taskId)
+    if (Number(result.changes) !== 1) throw new Error('Cannot checkpoint a missing task')
   }
 
   saveTask(task: TaskRecord): TaskSummary {
@@ -634,21 +753,26 @@ let store: Store | null = null
 export function getStore(): Store {
   if (store) return store
   const userData = app.getPath('userData')
+  const jsonFile = join(userData, 'ascora-store.json')
+  const legacyFile = join(userData, 'ascora.db')
+  const importedFile = join(userData, 'ascora-store.db')
+  const modified = (file: string): number => existsSync(file) ? statSync(file).mtimeMs : 0
+  // Once created, the imported database is authoritative. Otherwise select the
+  // most recently written archive, including SQLite's uncheckpointed WAL.
+  const importJson = existsSync(importedFile) || (existsSync(jsonFile) &&
+    modified(jsonFile) >= Math.max(modified(legacyFile), modified(`${legacyFile}-wal`)))
+  const file = importJson ? importedFile : legacyFile
   try {
-    // Lazy require so an unbuilt native binary degrades to the JSON fallback.
-    const Database = require('better-sqlite3') as typeof import('better-sqlite3')
-    const file = join(userData, 'ascora.db')
-    store = new SqliteStore(Database, file)
+    store = new SqliteStore(file, importJson ? jsonFile : undefined)
     console.log(`[store] SQLite ready at ${file}`)
   } catch (err) {
-    const file = join(userData, 'ascora-store.json')
+    if (!(err instanceof SqliteUnavailableError) || existsSync(importedFile)) throw err
     console.warn(
-      '[store] better-sqlite3 unavailable — using JSON store fallback ' +
-        '(install C++ build tools, then `npm run rebuild`):',
-      err instanceof Error ? err.message : err
+      '[store] SQLite drivers unavailable — using legacy JSON store. ' +
+        'Use the supported Electron runtime or run `npm run rebuild`.'
     )
-    store = new JsonStore(file)
-    console.log(`[store] JSON store ready at ${file}`)
+    store = new JsonStore(jsonFile)
+    console.log(`[store] JSON store ready at ${jsonFile}`)
   }
   return store
 }

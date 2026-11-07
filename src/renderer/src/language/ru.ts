@@ -1,6 +1,10 @@
 ﻿import type { Translation } from './en'
 
 const ru: Translation = {
+  'chat.contextSummary': "Сводка контекста",
+  'chat.compacting': "Сохранение и сжатие контекста…",
+  'chat.checkpointFailed': "Не удалось сохранить чат. Проверьте свободное место и повторите попытку.",
+  'chat.compactionFailed': "Не удалось сжать контекст. Исходный контекст сохранён.",
   'rail.officialChannel': "Официальный канал",
   'composer.computer': "Компьютер",
   'composer.computerActive': "Основной экран, мышь и клавиатура · Стоп:",

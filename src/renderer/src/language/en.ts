@@ -1,5 +1,9 @@
 ﻿export const en = {
   'app.language.english': 'English',
+  'chat.contextSummary': "Context summary",
+  'chat.compacting': "Saving and compacting context…",
+  'chat.checkpointFailed': "Could not save the chat. Check disk space and retry.",
+  'chat.compactionFailed': "Context compaction failed. The original context is preserved.",
   'rail.officialChannel': "Official channel",
   'composer.computer': "Computer",
   'composer.computerActive': "Primary screen, mouse and keyboard · Stop:",

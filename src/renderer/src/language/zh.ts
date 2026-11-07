@@ -2,6 +2,10 @@
 
 const zh: Translation = {
   ...en,
+  'chat.contextSummary': "上下文摘要",
+  'chat.compacting': "正在保存并压缩上下文…",
+  'chat.checkpointFailed': "无法保存聊天。请检查磁盘空间后重试。",
+  'chat.compactionFailed': "上下文压缩失败，原始上下文已保留。",
   'rail.officialChannel': "官方频道",
   'composer.computer': "电脑",
   'composer.computerActive': "主屏幕、鼠标和键盘 · 停止：",

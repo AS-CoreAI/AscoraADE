@@ -236,6 +236,7 @@ const api = {
       ipcRenderer.invoke(IPC.workspace.task, taskId, includeDeleted),
     saveTask: (task: TaskRecord): Promise<TaskSummary> =>
       ipcRenderer.invoke(IPC.workspace.saveTask, task),
+    checkpointTask: (taskId: string): Promise<void> => ipcRenderer.invoke(IPC.workspace.checkpointTask, taskId),
     deleteTask: (taskId: string): Promise<TaskSummary | null> =>
       ipcRenderer.invoke(IPC.workspace.deleteTask, taskId),
     restoreTask: (taskId: string): Promise<TaskSummary | null> =>
@@ -251,6 +252,7 @@ const api = {
     checkLmStudio: (): Promise<boolean> => ipcRenderer.invoke(IPC.llm.checkLmStudio),
     /** Same probe for the local Ollama server. */
     checkOllama: (): Promise<boolean> => ipcRenderer.invoke(IPC.llm.checkOllama),
+    contextLength: (model: string): Promise<number | null> => ipcRenderer.invoke(IPC.llm.contextLength, model),
     /** Streams content deltas and, when provided, the accumulated reasoning. */
     chat: (id: string, params: ChatParams, onChunk: (delta: string, thinking?: string) => void): Promise<ChatResult> => {
       const listener = (_e: IpcRendererEvent, payload: ChatChunkPayload): void => {

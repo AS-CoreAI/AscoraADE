@@ -2,6 +2,10 @@
 
 const de: Translation = {
   ...en,
+  'chat.contextSummary': "Kontextzusammenfassung",
+  'chat.compacting': "Kontext wird gespeichert und komprimiert…",
+  'chat.checkpointFailed': "Chat konnte nicht gespeichert werden. Prüfen Sie den Speicherplatz und versuchen Sie es erneut.",
+  'chat.compactionFailed': "Komprimierung fehlgeschlagen. Der ursprüngliche Kontext bleibt erhalten.",
   'rail.officialChannel': "Offizieller Kanal",
   'composer.computer': "Computer",
   'composer.computerActive': "Hauptbildschirm, Maus und Tastatur · Stopp:",

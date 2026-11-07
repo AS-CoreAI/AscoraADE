@@ -2,6 +2,10 @@
 
 const pl: Translation = {
   ...en,
+  'chat.contextSummary': "Podsumowanie kontekstu",
+  'chat.compacting': "Zapisywanie i kompresowanie kontekstu…",
+  'chat.checkpointFailed': "Nie udało się zapisać czatu. Sprawdź wolne miejsce i spróbuj ponownie.",
+  'chat.compactionFailed': "Kompresja nie powiodła się. Oryginalny kontekst został zachowany.",
   'rail.officialChannel': "Oficjalny kanał",
   'composer.computer': "Komputer",
   'composer.computerActive': "Główny ekran, mysz i klawiatura · Stop:",

@@ -1,4 +1,4 @@
-import { app, type WebContents } from 'electron'
+import type { WebContents } from 'electron'
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { existsSync, readdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs'
 import { homedir } from 'node:os'
@@ -560,6 +560,6 @@ export function killRun(id: string): void {
   killTree(run.child)
 }
 
-app.on('before-quit', () => {
+export function stopAllRuns(): void {
   for (const id of [...runs.keys()]) killRun(id)
-})
+}

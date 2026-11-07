@@ -2,6 +2,10 @@
 
 const fr: Translation = {
   ...en,
+  'chat.contextSummary': "Résumé du contexte",
+  'chat.compacting': "Enregistrement et compression du contexte…",
+  'chat.checkpointFailed': "Impossible d’enregistrer la conversation. Vérifiez l’espace disque et réessayez.",
+  'chat.compactionFailed': "Échec de la compression. Le contexte original est conservé.",
   'rail.officialChannel': "Canal officiel",
   'composer.computer': "Ordinateur",
   'composer.computerActive': "Écran principal, souris et clavier · Arrêt :",

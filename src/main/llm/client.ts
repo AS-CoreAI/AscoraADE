@@ -183,6 +183,22 @@ export class LmStudioClient {
     this.config = { ...this.config, ...patch }
   }
 
+  /** The loaded instance's window, not the model's theoretical maximum. */
+  async contextLength(model: string, signal?: AbortSignal): Promise<number | null> {
+    const url = this.baseUrl.replace(/\/v1$/, '') + '/api/v1/models'
+    try {
+      const response = await fetch(url, { signal })
+      if (!response.ok) return null
+      const json = await response.json() as { models?: {
+        key: string; loaded_instances?: { id: string; config?: { context_length?: number } }[]
+      }[] }
+      const info = json.models?.find(item => item.key === model || item.loaded_instances?.some(instance => instance.id === model))
+      const instance = info?.loaded_instances?.find(item => item.id === model) ?? info?.loaded_instances?.[0]
+      const length = instance?.config?.context_length
+      return typeof length === 'number' && Number.isFinite(length) && length >= 1024 ? length : null
+    } catch { return null }
+  }
+
   async computerSupport(model: string, signal?: AbortSignal): Promise<ComputerSupport> {
     if (this.config.provider !== 'lmstudio') return { available: false, reason: 'provider' }
     try {
@@ -301,6 +317,7 @@ export class LmStudioClient {
           ] }
         : message),
       temperature: params.temperature ?? 0.7,
+      ...(params.maxTokens ? { max_tokens: params.maxTokens } : {}),
       ...(params.tools && params.tools.length > 0 ? { tools: params.tools } : {})
     }
     const body = JSON.stringify({

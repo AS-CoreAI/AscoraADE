@@ -710,6 +710,6 @@ export function killRun(id: string): void {
   killTree(run.child)
 }
 
-app.on('before-quit', () => {
+export function stopAllRuns(): void {
   for (const id of [...runs.keys()]) killRun(id)
-})
+}

@@ -2,6 +2,10 @@
 
 const ja: Translation = {
   ...en,
+  'chat.contextSummary': "コンテキストの要約",
+  'chat.compacting': "コンテキストを保存・圧縮中…",
+  'chat.checkpointFailed': "チャットを保存できませんでした。空き容量を確認して再試行してください。",
+  'chat.compactionFailed': "圧縮に失敗しました。元のコンテキストは保持されています。",
   'rail.officialChannel': "公式チャンネル",
   'composer.computer': "コンピューター",
   'composer.computerActive': "メイン画面・マウス・キーボード · 停止:",
