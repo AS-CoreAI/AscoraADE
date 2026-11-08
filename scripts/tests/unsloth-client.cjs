@@ -163,6 +163,7 @@ test('IPC persists normalized Unsloth settings and probes independently of the s
   const handlers = new Map()
   const probes = []
   const overrides = {
+    '../llm/prompt-progress': { watchPromptProgress: async () => () => {} },
     electron: { ipcMain: { handle: (channel, fn) => handlers.set(channel, fn) } },
     '../store': { getStore: () => ({ getSetting: key => settings.get(key), setSetting: (key, value) => settings.set(key, value) }) },
     '../llm/client': { LmStudioError: Error, LmStudioClient: class { constructor(config) { this.config = config } update(patch) { Object.assign(this.config, patch) } async listModels() { probes.push(this.config); return [{ id: 'loaded' }] } } },

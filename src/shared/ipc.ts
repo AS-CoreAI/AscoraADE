@@ -1217,12 +1217,21 @@ export interface ChatParams {
   tools?: ToolDef[]
 }
 
+export interface PromptProgress {
+  phase: 'waiting' | 'processing'
+  /** Real server percentage; absent when the server gives no usable progress. */
+  percent?: number
+  source?: 'lmstudio-log'
+}
+
 /** Streaming token delivered from main → renderer during a chat request. */
 export interface ChatChunkPayload {
   id: string
   delta: string
   /** Full reasoning text captured so far, sent whenever it grows. */
   thinking?: string
+  /** Null clears prefill status once output starts or the request ends. */
+  promptProgress?: PromptProgress | null
 }
 
 /** Token counts for a single turn, when the backend reports them. */

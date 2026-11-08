@@ -843,6 +843,7 @@ function ThinkingIndicator(): JSX.Element | null {
   const thinking = useApp((s) => s.thinking)
   const tokens = useApp((s) => s.thinkingTokens)
   const startedAt = useApp((s) => s.thinkingStartedAt)
+  const promptProgress = useApp((s) => s.promptProgress)
   const provider = useApp((s) => s.provider)
   const messages = useApp((s) => s.messages)
   const appLanguage = useApp((s) => s.appLanguage)
@@ -879,13 +880,22 @@ function ThinkingIndicator(): JSX.Element | null {
       .some((m) => m.provider === 'codex' && (m.kind === 'tool' || m.reasoning))
     if (panelHasCurrentActivity) return null
   }
-  const label = provider === 'claude' && appLanguage === 'en' ? `${verb}…` : tr(appLanguage, 'chat.thinking')
+  const percent = promptProgress?.phase === 'processing' && Number.isFinite(promptProgress.percent)
+    ? promptProgress.percent : undefined
+  const label = promptProgress
+    ? percent !== undefined
+      ? tr(appLanguage, 'chat.promptProcessing', { percent: percent.toLocaleString(appLanguage, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) })
+      : tr(appLanguage, 'chat.promptWaiting')
+    : provider === 'claude' && appLanguage === 'en' ? `${verb}…` : tr(appLanguage, 'chat.thinking')
   return (
-    <div className="thinking" aria-live="polite">
+    <div className={`thinking${promptProgress ? ' prompt-processing' : ''}`} aria-live="polite"
+      title={promptProgress?.source === 'lmstudio-log' ? tr(appLanguage, 'chat.promptProgressSource') : undefined}>
       <span className="thinking-dot" />
       <span className="thinking-label">{label}</span>
+      {percent !== undefined && <progress className="prompt-progress-bar" max={100} value={percent} aria-label={label} />}
       <span className="thinking-meta">
-        {formatTokenCount(tokens)} {tr(appLanguage, 'common.tokens')}{elapsed > 0 ? ` · ${elapsed}s` : ''}
+        {promptProgress ? (elapsed > 0 ? `${elapsed}s` : '')
+          : <>{formatTokenCount(tokens)} {tr(appLanguage, 'common.tokens')}{elapsed > 0 ? ` · ${elapsed}s` : ''}</>}
       </span>
     </div>
   )

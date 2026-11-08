@@ -6853,6 +6853,13 @@ button.codex-activity-row:hover {
   color: var(--text-faint);
   font-variant-numeric: tabular-nums;
 }
+.prompt-processing { flex-wrap: wrap; }
+.prompt-processing .thinking-label { animation: none; }
+.prompt-progress-bar {
+  width: 96px;
+  height: 5px;
+  accent-color: var(--accent);
+}
 @keyframes thinking-blink {
   0%,
   100% {

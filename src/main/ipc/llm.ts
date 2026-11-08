@@ -6,6 +6,7 @@ import {
   normalizeOpenRouterApiKey,
   type ChatParams,
   type ChatResult,
+  type PromptProgress,
   type ClaudeEffort,
   type ClaudePermissionMode,
   type CopilotPermissionMode,
@@ -25,6 +26,7 @@ import {
 } from '@shared/ipc'
 import { getStore } from '../store'
 import { LmStudioClient, LmStudioError } from '../llm/client'
+import { watchPromptProgress } from '../llm/prompt-progress'
 import { normalizeUnslothApiKey, normalizeUnslothBaseUrl } from '@shared/unsloth'
 import { getOmnirouteBaseUrl, startOmniroute } from '../omniroute/runner'
 
@@ -245,20 +247,32 @@ export function registerLlmHandlers(): void {
       let thinkingMs = 0
       let pendingContent = ''
       let pendingThinking = false
+      let pendingProgress: PromptProgress | null | undefined
+      let progressActive = false
+      let stopProgress = (): void => {}
       let chunkTimer: NodeJS.Timeout | undefined
       const flushChunks = (): void => {
         if (chunkTimer) clearTimeout(chunkTimer)
         chunkTimer = undefined
-        if (!e.sender.isDestroyed() && (pendingContent || pendingThinking)) {
-          e.sender.send(IPC.llm.chunk, { id, delta: pendingContent, ...(pendingThinking ? { thinking } : {}) })
+        if (!e.sender.isDestroyed() && (pendingContent || pendingThinking || pendingProgress !== undefined)) {
+          e.sender.send(IPC.llm.chunk, { id, delta: pendingContent, ...(pendingThinking ? { thinking } : {}),
+            ...(pendingProgress !== undefined ? { promptProgress: pendingProgress } : {}) })
         }
         pendingContent = ''
         pendingThinking = false
+        pendingProgress = undefined
       }
       const scheduleChunks = (): void => {
         // Full reasoning snapshots on every token can flood Electron's IPC
         // queue. Coalesce display updates while retaining all generated text.
         chunkTimer ??= setTimeout(flushChunks, 100)
+      }
+      const finishProgress = (): void => {
+        if (!progressActive) return
+        progressActive = false
+        stopProgress()
+        pendingProgress = null
+        scheduleChunks()
       }
       const ownerDestroyed = (): void => { controller.abort() }
       e.sender.once('destroyed', ownerDestroyed)
@@ -268,7 +282,20 @@ export function registerLlmHandlers(): void {
         // Keep URL, credentials and provider fixed for the whole request even
         // if settings change while it is streaming or negotiating tool support.
         const config = readConfig()
-        const gen = new LmStudioClient({ ...config, provider: params.provider ?? config.provider }).streamChat(params, controller.signal, (delta) => {
+        const provider = params.provider ?? config.provider
+        if (provider === 'lmstudio') {
+          progressActive = true
+          pendingProgress = { phase: 'waiting' }
+          scheduleChunks()
+          stopProgress = await watchPromptProgress(config.baseUrl, params.model || config.model, params.messages.length,
+            controller.signal, progress => {
+              if (!progressActive || controller.signal.aborted) return
+              pendingProgress = progress
+              scheduleChunks()
+            })
+        }
+        const gen = new LmStudioClient({ ...config, provider }).streamChat(params, controller.signal, (delta) => {
+          finishProgress()
           thinkingStartedAt ??= Date.now()
           thinkingMs = Date.now() - thinkingStartedAt
           thinking += delta
@@ -288,6 +315,7 @@ export function registerLlmHandlers(): void {
               thinkingMs: value.thinkingMs
             }
           }
+          finishProgress()
           content += value
           pendingContent += value
           scheduleChunks()
@@ -298,6 +326,8 @@ export function registerLlmHandlers(): void {
         }
         return { ok: false, content, thinking, thinkingMs, error: errorMessage(err) }
       } finally {
+        finishProgress()
+        stopProgress()
         flushChunks()
         e.sender.removeListener('destroyed', ownerDestroyed)
         aborters.delete(id)

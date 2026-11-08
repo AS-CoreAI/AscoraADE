@@ -133,6 +133,12 @@ npm run typecheck   # tsc for main and renderer
 
 ## Environment notes
 
+- **Long local prompts:** LM Studio, Ollama and Unsloth generation requests no
+  longer have a response inactivity timeout. Stop still cancels immediately.
+  LM Studio chats show actual prompt-processing percentages when its local
+  server log is available and can be attributed to the selected model. Remote
+  servers, missing logs or overlapping requests show waiting without a guessed
+  percentage. The OpenAI-compatible endpoint and tool history remain unchanged.
 - **Agent tool steps:** the step limit is **off by default** for Ascora's chat
   loop and Blueprint agent steps, for local and hosted backends alike. In
   **Settings → General**, you can enable it and choose a model-turn count

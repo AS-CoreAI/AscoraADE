@@ -31,13 +31,15 @@ interface ToolCallDelta {
 
 const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1'
 
-// Local prefill/reasoning can be silent for longer than Undici's 5-minute
-// defaults. Apply a 30-minute inactivity limit only to generation requests;
-// model discovery keeps its short timeout and Stop still aborts immediately.
+// Local prefill can take arbitrarily long without sending response bytes.
+// Only generation waits indefinitely; discovery/connect errors and Stop still
+// work normally. Hosted routes retain their existing inactivity timeout.
+const localChatDispatcher = new Agent({ headersTimeout: 0, bodyTimeout: 0 })
 const chatDispatcher = new Agent({ headersTimeout: 30 * 60_000, bodyTimeout: 30 * 60_000 })
 
-function chatFetch(url: string, init: ChatRequestInit): Promise<ChatResponse> {
-  return undiciFetch(url, { ...init, dispatcher: chatDispatcher })
+function chatFetch(url: string, init: ChatRequestInit, provider: LlmConfig['provider']): Promise<ChatResponse> {
+  const local = provider === 'lmstudio' || provider === 'ollama' || provider === 'unsloth'
+  return undiciFetch(url, { ...init, dispatcher: local ? localChatDispatcher : chatDispatcher })
 }
 
 /** Some templates put a leading <think> block in content instead of a field. */
@@ -360,7 +362,7 @@ export class LmStudioClient {
         headers: this.headers(),
         body,
         signal
-      })
+      }, this.config.provider)
     } catch (err) {
       throw connectionError(name, url, err, signal)
     }
@@ -376,7 +378,7 @@ export class LmStudioClient {
         res = await chatFetch(url, {
           method: 'POST', headers: this.headers(), signal,
           body: JSON.stringify({ ...basePayload, stream: true, stream_options: { include_usage: true } })
-        })
+        }, this.config.provider)
       } catch (err) { throw connectionError(name, url, err, signal) }
     }
     if (!res.ok) throw await httpError(name, url, res)
@@ -491,7 +493,7 @@ export class LmStudioClient {
           headers: this.headers(),
           body: JSON.stringify({ ...basePayload, stream: false }),
           signal
-        })
+        }, this.config.provider)
         if (fbRes.ok) {
           const fbJson = (await fbRes.json()) as {
             choices?: { message?: { content?: unknown }; finish_reason?: string }[]

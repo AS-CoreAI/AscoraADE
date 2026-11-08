@@ -61,27 +61,40 @@ async function collect(instance, onThinking, signal, onContent) {
   }
 }
 
-test('long prefill and gaps survive the old timeout (time scaled by 10,000)', async (t) => {
-  const agents = []
-  const { LmStudioClient } = loadTypeScript('src/main/llm/client.ts', {
-    undici: { ...undici, Agent: class extends undici.Agent {
-      constructor(options) {
-        // Preserve relative timings: the old 300s becomes 30ms, new 1800s 180ms.
-        super({ ...options, headersTimeout: (options.headersTimeout ?? 300_000) / 10_000,
-          bodyTimeout: (options.bodyTimeout ?? 300_000) / 10_000 })
-        agents.push(this)
+test('local generation survives over 30 minutes of silent headers and body; hosted timeouts remain', async (t) => {
+  // Advance Undici's real parser clock. A sub-second sleep is not enough to
+  // exercise its coarse timeout scheduler, and can make regressions pass.
+  const timers = require('undici/lib/util/timers')
+  for (const provider of ['lmstudio', 'ollama', 'unsloth', 'omniroute']) {
+    for (const bodyStarted of [false, true]) {
+      let response, ready
+      const arrived = new Promise(resolve => { ready = resolve })
+      const url = await server(t, res => {
+        response = res
+        if (bodyStarted) {
+          res.writeHead(200, { 'Content-Type': 'text/event-stream' })
+          res.write(frame({ reasoning_content: 'Preparing' }))
+        } else ready()
+      })
+      const instance = new production.LmStudioClient({ ...DEFAULT_LLM_CONFIG, provider, model: 'fixture',
+        baseUrl: url, ollamaBaseUrl: url, ollamaModel: 'fixture', unslothBaseUrl: url,
+        unslothApiKey: 'fixture-key', unslothModel: 'fixture', omnirouteBaseUrl: url, omnirouteModel: 'fixture' })
+      const pending = collect(instance, () => ready()).then(value => ({ value }), error => ({ error }))
+      await arrived
+      timers.tick(1000) // Arm pending parser timers before advancing their clock.
+      timers.tick(31 * 60_000)
+      await new Promise(resolve => setImmediate(resolve))
+      if (provider !== 'omniroute') response.end(frame({ content: 'Ready' }, 'stop') + done)
+      const result = await pending
+      if (provider === 'omniroute') {
+        assert.equal(result.error?.kind, 'timeout')
+        assert.ok(result.error.message.includes(bodyStarted ? 'UND_ERR_BODY_TIMEOUT' : 'UND_ERR_HEADERS_TIMEOUT'))
+      } else {
+        assert.equal(result.error, undefined, provider + ': ' + result.error?.message)
+        assert.equal(result.value.content, 'Ready')
       }
-    } }
-  })
-  t.after(async () => { await Promise.all(agents.map(agent => agent.destroy())) })
-  const url = await server(t, res => {
-    setTimeout(() => {
-      res.writeHead(200, { 'Content-Type': 'text/event-stream' })
-      res.write(': processing prompt\n\n')
-      setTimeout(() => res.end(frame({ content: 'Ready' }, 'stop') + done), 80)
-    }, 80)
-  })
-  assert.equal((await collect(client(url, LmStudioClient))).content, 'Ready')
+    }
+  }
 })
 
 test('reasoning_content and reasoning arrive before the answer and preserve native tool calls', async (t) => {
@@ -163,6 +176,7 @@ test('IPC forwards accumulated reasoning and retains it on cancellation/failure'
     const sent = []
     const overrides = {
       electron: { ipcMain: { handle: (channel, fn) => handlers.set(channel, fn) } },
+      '../llm/prompt-progress': { watchPromptProgress: async () => () => {} },
       '../store': { getStore: () => ({ getSetting: () => undefined }) },
       '../omniroute/runner': { getOmnirouteBaseUrl: () => '', startOmniroute: async () => {} },
       '../llm/client': { ...production, LmStudioClient: class {
@@ -178,11 +192,61 @@ test('IPC forwards accumulated reasoning and retains it on cancellation/failure'
     loadTypeScript('src/main/ipc/llm.ts', overrides).registerLlmHandlers()
     const sender = Object.assign(new (require('node:events').EventEmitter)(), { isDestroyed: () => false, send: (...args) => sent.push(args) })
     const result = await handlers.get(IPC.llm.chat)({ sender }, 'test-id', params)
-    assert.deepEqual(sent, [[IPC.llm.chunk, { id: 'test-id', delta: 'Partial answer', thinking: 'First second' }]])
+    assert.deepEqual(sent, [[IPC.llm.chunk, { id: 'test-id', delta: 'Partial answer', thinking: 'First second', promptProgress: null }]])
     assert.equal(sender.listenerCount('destroyed'), 0)
     assert.equal(result.thinking, 'First second')
     assert.equal(result.content, 'Partial answer')
     assert.equal(result.ok, ending !== 'connection')
     assert.equal(!!result.aborted, ending === 'aborted')
+  }
+})
+
+test('IPC streams progress before output, clears it on every exit and ignores late log callbacks', async () => {
+  for (const ending of ['success', 'abort', 'destroyed', 'failure']) {
+    const handlers = new Map(), sent = []
+    let release, reportProgress, stopped = 0
+    const gate = new Promise(resolve => { release = resolve })
+    const sender = Object.assign(new (require('node:events').EventEmitter)(), {
+      isDestroyed: () => false, send: (...args) => sent.push(args)
+    })
+    loadTypeScript('src/main/ipc/llm.ts', {
+      electron: { ipcMain: { handle: (channel, fn) => handlers.set(channel, fn) } },
+      '../store': { getStore: () => ({ getSetting: () => undefined }) },
+      '../omniroute/runner': { getOmnirouteBaseUrl: () => '' },
+      '../llm/prompt-progress': { watchPromptProgress: async (_base, _model, _count, _signal, emit) => {
+        reportProgress = emit
+        emit({ phase: 'processing', percent: 41.2, source: 'lmstudio-log' })
+        return () => { stopped++ }
+      } },
+      '../llm/client': { ...production, LmStudioClient: class {
+        async *streamChat(_params, signal, onThinking) {
+          signal.addEventListener('abort', release, { once: true })
+          await gate
+          if (signal.aborted) throw new production.LmStudioError('Cancelled', 'aborted')
+          if (ending === 'failure') throw new production.LmStudioError('Disconnected', 'connection')
+          onThinking('Working')
+          yield 'Done'
+          return { toolCalls: [] }
+        }
+      } }
+    }).registerLlmHandlers()
+    const pending = handlers.get(IPC.llm.chat)({ sender }, 'progress-request', params)
+    const deadline = Date.now() + 2000
+    while (!sent.length && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 10))
+    assert.deepEqual(sent[0], [IPC.llm.chunk, { id: 'progress-request', delta: '',
+      promptProgress: { phase: 'processing', percent: 41.2, source: 'lmstudio-log' } }])
+    if (ending === 'abort') handlers.get(IPC.llm.abort)({}, 'progress-request')
+    else if (ending === 'destroyed') sender.emit('destroyed')
+    else release()
+    const result = await pending
+    assert.equal(result.ok, ending !== 'failure')
+    assert.equal(Boolean(result.aborted), ending === 'abort' || ending === 'destroyed')
+    assert.equal(sent.at(-1)[1].promptProgress, null)
+    assert.ok(stopped > 0)
+    assert.equal(sender.listenerCount('destroyed'), 0)
+    const count = sent.length
+    reportProgress({ phase: 'processing', percent: 99 })
+    await new Promise(resolve => setTimeout(resolve, 120))
+    assert.equal(sent.length, count)
   }
 })

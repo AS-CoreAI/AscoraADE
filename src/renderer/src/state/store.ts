@@ -9,6 +9,7 @@ import type {
   FileContent,
   SshConnection,
   LlmMessage,
+  PromptProgress,
   TaskMessage,
   TaskMessageAttachment,
   TaskSummary,
@@ -1214,6 +1215,7 @@ interface RunState {
   thinking: boolean
   thinkingTokens: number
   thinkingStartedAt: number | null
+  promptProgress: PromptProgress | null
   codexThreadId: string | null
   copilotSessionId: string | null
   claudeSessionId: string | null
@@ -1233,6 +1235,7 @@ type RunFields = Pick<
   | 'thinking'
   | 'thinkingTokens'
   | 'thinkingStartedAt'
+  | 'promptProgress'
   | 'codexThreadId'
   | 'copilotSessionId'
   | 'claudeSessionId'
@@ -1448,6 +1451,7 @@ interface AppState {
   thinkingTokens: number
   /** Epoch ms when the current run started, for the Thinking… elapsed timer. */
   thinkingStartedAt: number | null
+  promptProgress: PromptProgress | null
 
   init: () => Promise<void>
   openFolder: () => Promise<void>
@@ -1671,6 +1675,7 @@ export const useApp = create<AppState>((set, get) => {
     thinking: s.thinking,
     thinkingTokens: s.thinkingTokens,
     thinkingStartedAt: s.thinkingStartedAt,
+    promptProgress: s.promptProgress,
     codexThreadId: s.codexThreadId,
     copilotSessionId: s.copilotSessionId,
     claudeSessionId: s.claudeSessionId,
@@ -1723,7 +1728,8 @@ export const useApp = create<AppState>((set, get) => {
         streamId: null,
         thinking: false,
         thinkingTokens: 0,
-        thinkingStartedAt: null
+        thinkingStartedAt: null,
+        promptProgress: null
       }
     })
   }
@@ -1750,6 +1756,7 @@ export const useApp = create<AppState>((set, get) => {
         thinking: r.thinking,
         thinkingTokens: r.thinkingTokens,
         thinkingStartedAt: r.thinkingStartedAt,
+        promptProgress: r.promptProgress,
         codexThreadId: r.codexThreadId,
         copilotSessionId: r.copilotSessionId,
         claudeSessionId: r.claudeSessionId,
@@ -2016,6 +2023,7 @@ export const useApp = create<AppState>((set, get) => {
   thinking: false,
   thinkingTokens: 0,
   thinkingStartedAt: null,
+  promptProgress: null,
 
   async init() {
     if (!computerStopUnsubscribe) {
@@ -2355,6 +2363,7 @@ export const useApp = create<AppState>((set, get) => {
         thinking: false,
         thinkingTokens: 0,
         thinkingStartedAt: null,
+        promptProgress: null,
         // Restore the CLI session handles so a reopened chat keeps its context;
         // null for older records and non-CLI chats (which resume from convo).
         codexThreadId: task.sessions?.codexThreadId ?? null,
@@ -2411,6 +2420,7 @@ export const useApp = create<AppState>((set, get) => {
             thinking: false,
             thinkingTokens: 0,
             thinkingStartedAt: null,
+            promptProgress: null,
             codexThreadId: null,
             copilotSessionId: null,
             claudeSessionId: null,
@@ -2488,6 +2498,7 @@ export const useApp = create<AppState>((set, get) => {
               thinking: false,
               thinkingTokens: 0,
               thinkingStartedAt: null,
+              promptProgress: null,
               codexThreadId: null,
               copilotSessionId: null,
               claudeSessionId: null,
@@ -3088,6 +3099,7 @@ export const useApp = create<AppState>((set, get) => {
         thinking: false,
         thinkingTokens: 0,
         thinkingStartedAt: null,
+        promptProgress: null,
         codexThreadId: null,
         copilotSessionId: null,
         claudeSessionId: null,
@@ -3120,6 +3132,7 @@ export const useApp = create<AppState>((set, get) => {
       thinking: false,
       thinkingTokens: 0,
       thinkingStartedAt: null,
+      promptProgress: null,
       codexThreadId: null,
       copilotSessionId: null,
       claudeSessionId: null,
@@ -4031,6 +4044,7 @@ export const useApp = create<AppState>((set, get) => {
       thinking: true,
       thinkingTokens: 0,
       thinkingStartedAt: Date.now(),
+      promptProgress: null,
       activeTaskId: taskId,
       activeTaskTitle: title,
       messages: [
@@ -4361,7 +4375,7 @@ export const useApp = create<AppState>((set, get) => {
                       handleEvent
                     )
 
-        writeRun(taskId, { streamId: null, thinking: false })
+        writeRun(taskId, { streamId: null, thinking: false, promptProgress: null })
         if (res.threadId) setSession(res.threadId)
         // A CLI-agent turn just consumed quota; refresh the active usage indicator.
         if (isCodex) void get().refreshCodexUsage()
@@ -4468,7 +4482,7 @@ export const useApp = create<AppState>((set, get) => {
         // 1) Stream one model turn into a fresh assistant bubble.
         const replyId = crypto.randomUUID()
         addMsg({ id: replyId, role: 'assistant', kind: 'text', model: assistantModel, text: '' })
-        writeRun(taskId, { streamId: replyId, thinking: true })
+        writeRun(taskId, { streamId: replyId, thinking: true, promptProgress: agentProvider === 'lmstudio' ? { phase: 'waiting' } : null })
         const base = buildSystemPrompt(sshHost, sshHost ? root : undefined)
         // Web chats have no native function calling — pin the model to the
         // text tool protocol so every tool request arrives as a parseable block.
@@ -4522,7 +4536,9 @@ export const useApp = create<AppState>((set, get) => {
                   compactionRun.requestId = requestId
                   const result = await api.llm.chat(requestId, {
                     ...params, provider: 'lmstudio', model: lmModel, reasoning: lmStudioReasoning, temperature: 0.2
-                  }, (delta, thinking) => {
+                  }, (delta, thinking, promptProgress) => {
+                    if (promptProgress !== undefined) writeRun(taskId, { promptProgress })
+                    if (delta || thinking) writeRun(taskId, { promptProgress: null })
                     if (thinking) {
                       if (!hasThinking) {
                         hasThinking = true
@@ -4642,7 +4658,9 @@ export const useApp = create<AppState>((set, get) => {
             writeRun(taskId, { thinkingTokens: tokensFromChars(streamedChars) })
           }
         }
-        const onChunk = (delta: string, thinking?: string): void => {
+        const onChunk = (delta: string, thinking?: string, promptProgress?: PromptProgress | null): void => {
+          if (promptProgress !== undefined) writeRun(taskId, { promptProgress })
+          if (delta || thinking) writeRun(taskId, { promptProgress: null })
           if (thinking !== undefined) onThinking(thinking)
           if (delta) onDelta(delta)
         }
@@ -4674,7 +4692,7 @@ export const useApp = create<AppState>((set, get) => {
               },
               onChunk
             )
-        writeRun(taskId, { streamId: null, thinking: false })
+        writeRun(taskId, { streamId: null, thinking: false, promptProgress: null })
         // Settle the reasoning block: the ChatResult carries the definitive
         // text (chunks are throttled) and the measured duration for the header.
         {
@@ -5138,7 +5156,7 @@ export const useApp = create<AppState>((set, get) => {
         await api.computer.stop(computerSession).catch(() => {})
         computerSessions.delete(taskId)
       }
-      writeRun(taskId, { streaming: false, streamId: null, thinking: false, thinkingStartedAt: null })
+      writeRun(taskId, { streaming: false, streamId: null, thinking: false, promptProgress: null, thinkingStartedAt: null })
       const saved = await get().saveTaskRun(taskId, finalStatus)
       abortedRuns.delete(taskId)
       runProviders.delete(taskId)
@@ -5200,7 +5218,7 @@ export const useApp = create<AppState>((set, get) => {
       void api.computer.stop(computerSession)
       set({ computerUse: false })
     }
-    writeRun(id, { thinking: false })
+    writeRun(id, { thinking: false, promptProgress: null })
     const streamId = readRun(id)?.streamId
     if (streamId) {
       const p = runProviders.get(id) ?? get().provider
@@ -5235,6 +5253,7 @@ export const useApp = create<AppState>((set, get) => {
       thinking: false,
       thinkingTokens: 0,
       thinkingStartedAt: null,
+      promptProgress: null,
       codexThreadId: null,
       copilotSessionId: null,
       claudeSessionId: null,
