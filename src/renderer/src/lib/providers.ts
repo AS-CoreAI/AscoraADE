@@ -19,4 +19,4 @@ export const PROVIDERS: { id: LlmProvider; name: string }[] = [
 export const CLI_PROVIDERS = ['codex', 'claude', 'copilot', 'gemini', 'grok', 'glm', 'antigravity'] as const
 export type CliProvider = typeof CLI_PROVIDERS[number]
 
-export type SettingsSection = 'appearance' | 'providers' | 'limits' | 'tools'
+export type SettingsSection = 'general' | 'appearance' | 'providers' | 'limits' | 'tools'

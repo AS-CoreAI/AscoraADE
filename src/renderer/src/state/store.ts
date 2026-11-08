@@ -1,4 +1,5 @@
 import type { SettingsSection } from '@/lib/providers'
+import { AGENT_STEP_LIMIT_SETTING, DEFAULT_AGENT_STEP_LIMIT, normalizeAgentStepLimit, type AgentStepLimit } from '@shared/agent-limits'
 import { normalizeUnslothApiKey, normalizeUnslothBaseUrl } from '@shared/unsloth'
 import { create } from 'zustand'
 import type {
@@ -91,9 +92,7 @@ export interface OpenFile {
 export type ToolStatus = NonNullable<TaskMessage['status']>
 export type ChatMessage = TaskMessage
 
-/** How many tool round-trips a single task may take before we stop. */
-const MAX_STEPS = 16
-/** OmniRoute may be resumed this many times after a blank turn or step cap. */
+/** Retry consecutive blank OmniRoute responses; successful tool work has no step cap. */
 const OMNIROUTE_MAX_CONTINUES = 3
 const SSH_WORKSPACE_PREFIX = 'ssh:'
 const MAX_EDITOR_FILE_BYTES = 2 * 1024 * 1024
@@ -1417,6 +1416,8 @@ interface AppState {
   omnirouteStatus: OmnirouteStatus
   settingsOpen: boolean
   settingsSection: SettingsSection
+  agentStepLimit: AgentStepLimit
+  setAgentStepLimit: (patch: Partial<AgentStepLimit>) => void
   settingsProvider: LlmProvider
   settingsReturnView: View
   providerVisibility: Partial<Record<LlmProvider, boolean>>
@@ -1983,6 +1984,12 @@ export const useApp = create<AppState>((set, get) => {
   },
   settingsOpen: false,
   settingsSection: 'appearance',
+  agentStepLimit: DEFAULT_AGENT_STEP_LIMIT,
+  setAgentStepLimit(patch) {
+    const agentStepLimit = normalizeAgentStepLimit({ ...get().agentStepLimit, ...patch })
+    set({ agentStepLimit })
+    void api.settings.set(AGENT_STEP_LIMIT_SETTING, agentStepLimit)
+  },
   settingsProvider: 'codex',
   settingsReturnView: 'home',
   providerVisibility: {},
@@ -2046,7 +2053,8 @@ export const useApp = create<AppState>((set, get) => {
       savedSidebar,
       savedSkills,
       savedSsh,
-      savedProviderVisibility
+      savedProviderVisibility,
+      savedAgentStepLimit
     ] = await Promise.all([
         api.workspace.list(),
         api.llm.config(),
@@ -2059,7 +2067,8 @@ export const useApp = create<AppState>((set, get) => {
         api.settings.get<boolean>('sidebar.collapsed'),
         api.settings.get<Skill[]>('skills'),
         api.settings.get<SshConnection[]>('ssh.connections'),
-        api.settings.get<Partial<Record<LlmProvider, boolean>>>('providers.visibility')
+        api.settings.get<Partial<Record<LlmProvider, boolean>>>('providers.visibility'),
+        api.settings.get<AgentStepLimit>(AGENT_STEP_LIMIT_SETTING)
       ])
     const omnirouteStatus = await omnirouteStatusPromise
     const workspaceOrder = Array.isArray(savedOrder) ? savedOrder : []
@@ -2090,6 +2099,7 @@ export const useApp = create<AppState>((set, get) => {
       taskLlm,
       tasksByWorkspace: Object.fromEntries(taskLists),
       sidebarCollapsed: savedSidebar === true,
+      agentStepLimit: normalizeAgentStepLimit(savedAgentStepLimit),
       // First run (no saved value) seeds the defaults; an empty saved array is
       // respected (the user removed every skill).
       skills: Array.isArray(savedSkills) ? savedSkills : DEFAULT_SKILLS,
@@ -4428,24 +4438,14 @@ export const useApp = create<AppState>((set, get) => {
       const isWProvider = agentProvider === 'wprovider'
       const isOmniroute = agentProvider === 'omniroute'
       let omnirouteContinues = 0
-      const maxSteps = isOmniroute ? MAX_STEPS * (OMNIROUTE_MAX_CONTINUES + 1) : MAX_STEPS
-      const autoContinueOmniroute = async (messageId?: string): Promise<boolean> => {
+      const autoContinueOmniroute = async (messageId: string): Promise<boolean> => {
         if (!isOmniroute || omnirouteContinues >= OMNIROUTE_MAX_CONTINUES || aborted()) return false
         omnirouteContinues += 1
         const text =
           get().appLanguage === 'ru'
             ? `Ответ прервался. Автоматически продолжаю работу (попытка ${omnirouteContinues}/${OMNIROUTE_MAX_CONTINUES})…`
             : `The response paused. Continuing automatically (attempt ${omnirouteContinues}/${OMNIROUTE_MAX_CONTINUES})…`
-        if (messageId) patch(messageId, { text, reasoning: true })
-        else {
-          addMsg({
-            id: crypto.randomUUID(),
-            role: 'assistant',
-            kind: 'text',
-            reasoning: true,
-            text
-          })
-        }
+        patch(messageId, { text, reasoning: true })
         // Keep the service response out of the conversation and resume as if
         // the user had typed Continue. A little jitter avoids an immediate
         // retry against the same temporarily exhausted route.
@@ -4457,7 +4457,14 @@ export const useApp = create<AppState>((set, get) => {
 
       let compactionDeferred = false
       let incompleteTurns = 0
-      for (let step = 0; step < maxSteps && !aborted(); step += 1) {
+      // Continue tool work until a final answer, cancellation or a real failure.
+      for (let step = 0; !aborted(); step += 1) {
+        const stepLimit = get().agentStepLimit
+        if (stepLimit.enabled && step >= stepLimit.maxSteps) {
+          addMsg({ id: crypto.randomUUID(), role: 'assistant', kind: 'text', model: assistantModel,
+            text: tr(get().appLanguage, 'chat.toolStepLimit', { count: stepLimit.maxSteps }) })
+          break
+        }
         // 1) Stream one model turn into a fresh assistant bubble.
         const replyId = crypto.randomUUID()
         addMsg({ id: replyId, role: 'assistant', kind: 'text', model: assistantModel, text: '' })
@@ -4740,7 +4747,7 @@ export const useApp = create<AppState>((set, get) => {
         if (agentProvider === 'lmstudio' && (result.finishReason === 'length' || (!result.content.trim() && !result.toolCalls?.length))) {
           if (result.content.trim()) patch(replyId, { text: result.content })
           else removeMsg(replyId)
-          if (++incompleteTurns > 2 || step + 1 >= maxSteps) {
+          if (++incompleteTurns > 2) {
             finalStatus = 'error'
             addMsg({ id: crypto.randomUUID(), role: 'assistant', kind: 'text', text: tr(get().appLanguage, 'chat.incompleteResponse') })
             break
@@ -4752,6 +4759,7 @@ export const useApp = create<AppState>((set, get) => {
           continue
         }
         incompleteTurns = 0
+        if (isOmniroute && (result.content.trim() || result.toolCalls?.length)) omnirouteContinues = 0
 
         // 2) Resolve tool calls — native first, then the text fallback.
         const native = !!(result.toolCalls && result.toolCalls.length > 0)
@@ -5122,30 +5130,6 @@ export const useApp = create<AppState>((set, get) => {
           }
         }
 
-        // Reaching the per-turn tool budget is recoverable on OmniRoute. Hide
-        // the service notice and transparently start another budget window.
-        if (isOmniroute && (step + 1) % MAX_STEPS === 0) {
-          if (await autoContinueOmniroute()) continue
-          addMsg({
-            id: crypto.randomUUID(),
-            role: 'assistant',
-            kind: 'text',
-            model: assistantModel,
-            text: '_Reached the tool-step limit for this task._'
-          })
-          break
-        }
-      }
-
-      if (!aborted() && (readRun(taskId)?.convo.length ?? 0) > 0) {
-        // Surface a hint if we bailed out at the step cap mid-task.
-        const last = readRun(taskId)?.messages.at(-1)
-        if (last?.kind === 'tool' && !isOmniroute) {
-          addMsg({
-            id: crypto.randomUUID(), role: 'assistant', kind: 'text', model: assistantModel,
-            text: '_Reached the tool-step limit for this task._'
-          })
-        }
       }
     } finally {
       window.clearInterval(checkpointTimer)

@@ -62,7 +62,7 @@ app.whenReady().then(async () => {
   await click('.settings-toggle-row input')
   await clickText('.settings-nav nav > button', 'Лимиты')
   await waitFor(`!!document.querySelector('.settings-limit-card[data-provider="codex"] progress')`)
-  assert.deepEqual(await evaluate(`[...document.querySelectorAll('.settings-nav nav > button')].map(el => el.textContent.trim())`), ['Язык и внешний вид', 'Провайдеры агентов', 'Лимиты', 'Инструменты разработчика'])
+  assert.deepEqual(await evaluate(`[...document.querySelectorAll('.settings-nav nav > button')].map(el => el.textContent.trim())`), ['Общие', 'Язык и внешний вид', 'Провайдеры агентов', 'Лимиты', 'Инструменты разработчика'])
   assert.deepEqual(await evaluate(`[...document.querySelectorAll('.settings-limit-card')].map(el => el.dataset.provider)`), ['codex', 'claude', 'grok', 'glm', 'antigravity'], 'Include hidden authorized providers, exclude missing and signed-out CLIs')
   assert.equal(await evaluate(`document.querySelector('.settings-limit-card[data-provider="codex"] progress').value`), 68)
   assert.equal(await evaluate(`document.querySelector('.settings-limit-card[data-provider="codex"] .usage-item time').dateTime`), '2026-09-19T18:00:00Z')

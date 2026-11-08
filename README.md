@@ -133,6 +133,12 @@ npm run typecheck   # tsc for main and renderer
 
 ## Environment notes
 
+- **Agent tool steps:** the step limit is **off by default** for Ascora's chat
+  loop and Blueprint agent steps, for local and hosted backends alike. In
+  **Settings → General**, you can enable it and choose a model-turn count
+  (initially 16). It applies per chat run / Blueprint agent step, and changes
+  take effect at the next turn boundary. CLI agents manage their own inner loops.
+  Stop controls, action approvals and chat autosaving remain available.
 - **VPN in source builds:** legacy VPN deployments require operator-provided
   runtime configuration. No shared service secret is included in this source.
   See [scripts/vpn/README.md](scripts/vpn/README.md) for setup and security notes.

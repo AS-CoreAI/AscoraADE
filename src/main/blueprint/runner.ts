@@ -1,6 +1,7 @@
 import { BrowserWindow, type WebContents } from 'electron'
 import { randomUUID } from 'node:crypto'
 import { stat } from 'node:fs/promises'
+import { AGENT_STEP_LIMIT_SETTING, normalizeAgentStepLimit } from '@shared/agent-limits'
 import {
   BLUEPRINT_START_NODE_ID,
   IPC,
@@ -49,7 +50,6 @@ const MAX_COMMAND_OUTPUT = 16_000
 const HTTP_STEP_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] as const
 const BODYLESS_HTTP_METHODS = new Set(['GET', 'DELETE'])
 const REQUEST_TIMEOUT_MS = 30_000
-const MAX_AGENT_TURNS = 16
 const MAX_TOOL_AUDIT_ARG = 2_000
 const MAX_TOOL_AUDIT_OUTPUT = 8_000
 
@@ -73,6 +73,7 @@ interface ActiveBlueprintRun {
 }
 
 class BlueprintStoppedError extends Error {}
+class BlueprintStepLimitError extends Error {}
 
 const activeRuns = new Map<string, ActiveBlueprintRun>()
 const scheduleTimers = new Map<string, NodeJS.Timeout>()
@@ -392,10 +393,14 @@ async function runAgentStep(
   history.push({ role: 'user', content: prompt || 'Continue the Blueprint scenario.' })
 
   const sessionKey = `${active.blueprint.id}:${active.run.id}:${conversationKey}`
-  const turnLimit = agentMode ? MAX_AGENT_TURNS : 1
-
-  for (let turn = 0; turn < turnLimit; turn += 1) {
+  // Plain steps return their first answer. Agent steps continue tool work until
+  // a final answer, user cancellation or a provider/tool failure.
+  for (let turn = 0; ; turn += 1) {
     assertRunning(active)
+    const stepLimit = normalizeAgentStepLimit(getStore().getSetting(AGENT_STEP_LIMIT_SETTING))
+    if (agentMode && stepLimit.enabled && turn >= stepLimit.maxSteps) {
+      throw new BlueprintStepLimitError(`${agent.name} reached the configured limit of ${stepLimit.maxSteps} model turns. Change the agent step limit in Settings > General.`)
+    }
     const requestId = `blueprint:${active.run.id}:${stepRun.id}:${turn}`
     active.currentRequestId = requestId
     const result = await chatWProvider(
@@ -451,16 +456,6 @@ async function runAgentStep(
       return output
     }
 
-    if (turn === turnLimit - 1) {
-      const error = `${agent.name} reached the ${MAX_AGENT_TURNS}-turn agent limit before the requested tool could run.`
-      const audit = startToolAudit(stepRun, parsed.call)
-      audit.status = 'failed'
-      audit.finishedAt = Date.now()
-      audit.error = error
-      persistRun(active)
-      throw new Error(error)
-    }
-
     const audit = startToolAudit(stepRun, parsed.call)
     persistRun(active)
     emit(active, 'step-delta', step.id, `[${parsed.call.name}]\n`)
@@ -494,7 +489,6 @@ async function runAgentStep(
     }
   }
 
-  throw new Error(`${agent.name} reached the ${MAX_AGENT_TURNS}-turn agent limit without a final answer.`)
 }
 
 async function cancellableDelay(active: ActiveBlueprintRun, seconds: number): Promise<string> {
@@ -863,7 +857,7 @@ async function executeScheduledAction(
       persistRun(active)
       emit(active, 'step-completed', step.id)
     } catch (error) {
-      if (error instanceof BlueprintStoppedError || active.stopped) throw error
+      if (error instanceof BlueprintStoppedError || error instanceof BlueprintStepLimitError || active.stopped) throw error
       const message = error instanceof Error ? error.message : String(error)
       stepRun.status = 'failed'
       stepRun.error = message
@@ -904,15 +898,16 @@ async function executeBlueprint(active: ActiveBlueprintRun): Promise<void> {
     emit(active, 'run-completed')
   } catch (error) {
     active.run.finishedAt = Date.now()
-    if (error instanceof BlueprintStoppedError || active.stopped) {
+    if (error instanceof BlueprintStoppedError || error instanceof BlueprintStepLimitError || active.stopped) {
+      const stopReason = error instanceof BlueprintStepLimitError ? error.message : 'Stopped by the user.'
       const interruptedStep = active.run.steps.findLast((step) => step.status === 'running')
       if (interruptedStep) {
         interruptedStep.status = 'skipped'
         interruptedStep.finishedAt = Date.now()
-        interruptedStep.error = 'Stopped by the user.'
+        interruptedStep.error = stopReason
       }
       active.run.status = 'stopped'
-      active.run.error = 'Stopped by the user.'
+      active.run.error = stopReason
       persistRun(active)
       emit(active, 'run-stopped')
     } else {

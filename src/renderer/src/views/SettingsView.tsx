@@ -174,6 +174,7 @@ export function SettingsView(): JSX.Element {
       <div className="settings-nav-title"><Icon name="settings" size={19} /><strong>{t('settings.title')}</strong></div>
       <button className="settings-back" onClick={() => s.setSettingsOpen(false)}><Icon name="arrowLeft" size={14} />{t('settings.backToWork')}</button>
       <nav aria-label={t('settings.sections')}>
+        <button data-section="general" className={section === 'general' ? 'active' : ''} aria-current={section === 'general' ? 'page' : undefined} onClick={() => select('general')}><Icon name="settings" size={16} />{t('settings.general')}</button>
         <button data-section="appearance" className={section === 'appearance' ? 'active' : ''} aria-current={section === 'appearance' ? 'page' : undefined} onClick={() => select('appearance')}><Icon name="settings" size={16} />{t('settings.appearance')}</button>
         <button data-section="providers" className={section === 'providers' ? 'active' : ''} aria-current={section === 'providers' ? 'page' : undefined} onClick={() => select('providers')}><Icon name="message" size={16} />{t('settings.agentProviders')}</button>
         {section === 'providers' && <div className="settings-provider-nav">{PROVIDERS.map((provider) => <button key={provider.id} data-provider={provider.id}
@@ -186,6 +187,27 @@ export function SettingsView(): JSX.Element {
       </nav>
     </aside>
     <main className="settings-content" key={section === 'providers' ? s.settingsProvider : section}>
+      {section === 'general' && <>
+        <header className="settings-content-header"><div><div className="settings-eyebrow">ASCORA ADE</div><h1>{t('settings.general')}</h1></div></header>
+        <section className="settings-card">
+          <label className="settings-toggle-row">
+            <span><strong>{t('settings.agentStepLimit')}</strong><small>{t('settings.agentStepLimitHint')}</small></span>
+            <input type="checkbox" className="agent-step-limit-enabled" checked={s.agentStepLimit.enabled}
+              onChange={event => s.setAgentStepLimit({ enabled: event.target.checked })} />
+          </label>
+          <label className="field" style={{ marginTop: 20 }}>
+            <span className="field-label">{t('settings.agentStepCount')}</span>
+            <input type="number" className="text-input agent-step-limit-count" min={1} step={1}
+              defaultValue={s.agentStepLimit.maxSteps} disabled={!s.agentStepLimit.enabled}
+              onBlur={event => {
+                s.setAgentStepLimit({ maxSteps: event.currentTarget.valueAsNumber })
+                event.currentTarget.value = String(useApp.getState().agentStepLimit.maxSteps)
+              }}
+              onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur() }} />
+          </label>
+          <p className="field-hint">{t('settings.agentStepScope')}</p>
+        </section>
+      </>}
       {section === 'appearance' && <>
         <header className="settings-content-header"><div><div className="settings-eyebrow">ASCORA ADE</div><h1>{t('settings.appearance')}</h1><p>{t('settings.appearanceSubtitle')}</p></div></header>
         <section className="settings-card"><h2>{t('app.theme.label')}</h2><div className="settings-theme-options">
