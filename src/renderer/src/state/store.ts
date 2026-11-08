@@ -471,6 +471,8 @@ const computerSessions = new Map<string, string>()
 let computerStopUnsubscribe: (() => void) | undefined
 /** Task ids whose run was asked to stop; the loop checks this to bail out. */
 const abortedRuns = new Set<string>()
+/** Only summary requests: disabling compaction must not abort ordinary replies. */
+const compactionRuns = new Map<string, { cancelled: boolean; requestId?: string }>()
 /** Provider each in-flight run uses, so stopStreaming aborts on the right channel. */
 const runProviders = new Map<string, LlmProvider>()
 /** Tasks deleted mid-run, so their trailing save can't resurrect them. */
@@ -1310,6 +1312,7 @@ interface AppState {
   // LM Studio
   baseUrl: string
   model: string
+  lmStudioAutoCompact: boolean
   lmStudioReasoning: import('@shared/ipc').LmStudioReasoning | ''
   // Ollama
   ollamaBaseUrl: string
@@ -1536,6 +1539,7 @@ interface AppState {
   refreshModels: () => Promise<void>
   setModel: (m: string) => void
   setLmStudioReasoning: (value: import('@shared/ipc').LmStudioReasoning | '') => void
+  setLmStudioAutoCompact: (enabled: boolean) => void
   setBaseUrl: (url: string) => Promise<void>
   setOllamaModel: (m: string) => void
   setOllamaBaseUrl: (url: string) => Promise<void>
@@ -1899,6 +1903,7 @@ export const useApp = create<AppState>((set, get) => {
   baseUrl: DEFAULT_LLM_CONFIG.baseUrl,
   model: '',
   lmStudioReasoning: '',
+  lmStudioAutoCompact: false,
   ollamaBaseUrl: DEFAULT_LLM_CONFIG.ollamaBaseUrl,
   ollamaModel: DEFAULT_LLM_CONFIG.ollamaModel,
   unslothBaseUrl: DEFAULT_LLM_CONFIG.unslothBaseUrl,
@@ -2093,6 +2098,7 @@ export const useApp = create<AppState>((set, get) => {
       baseUrl: cfg.baseUrl,
       model: cfg.model,
       lmStudioReasoning: cfg.lmStudioReasoning ?? '',
+      lmStudioAutoCompact: cfg.lmStudioAutoCompact === true,
       ollamaBaseUrl: cfg.ollamaBaseUrl,
       ollamaModel: cfg.ollamaModel,
       unslothBaseUrl: cfg.unslothBaseUrl,
@@ -3194,6 +3200,17 @@ export const useApp = create<AppState>((set, get) => {
     set({ lmStudioReasoning })
     void api.llm.setConfig({ lmStudioReasoning })
     get().persistWorkspaceLlm()
+  },
+
+  setLmStudioAutoCompact(lmStudioAutoCompact) {
+    set({ lmStudioAutoCompact })
+    void api.llm.setConfig({ lmStudioAutoCompact })
+    if (!lmStudioAutoCompact) {
+      for (const run of compactionRuns.values()) {
+        run.cancelled = true
+        if (run.requestId) void api.llm.abort(run.requestId).catch(() => {})
+      }
+    }
   },
 
   async setBaseUrl(url) {
@@ -4458,7 +4475,7 @@ export const useApp = create<AppState>((set, get) => {
         // Unknown is not 8192; leave generation to the server until it reports a window.
         const contextLength = agentProvider === 'lmstudio'
           ? await api.llm.contextLength(lmModel).catch(() => null) : null
-        if (agentProvider === 'lmstudio' && contextLength) {
+        if (agentProvider === 'lmstudio' && contextLength && get().lmStudioAutoCompact) {
           const original = readRun(taskId)?.convo ?? []
           const overhead = contextTokens(systemPrompt + JSON.stringify(TOOLS)) + (computerSession ? 1500 : 256)
           const canContinueOriginal = conversationTokens(original) + overhead < contextLength * 0.9
@@ -4479,11 +4496,13 @@ export const useApp = create<AppState>((set, get) => {
             let compacted = false
             let checkpointReady = false
             let storageFailed = false
+            const compactionRun: { cancelled: boolean; requestId?: string } = { cancelled: !get().lmStudioAutoCompact }
+            compactionRuns.set(taskId, compactionRun)
             try {
               await api.workspace.checkpointTask(taskId)
               checkpointReady = true
               for (const chunk of compactionChunks(plan.history, plan.chunkTokens)) {
-                if (aborted()) break
+                if (aborted() || compactionRun.cancelled) break
                 const completed = await completeContextSummary([
                   { role: 'system', content: COMPACTION_PROMPT + ` Aim for a final note of at most ${plan.summaryTargetTokens} tokens; this is a note length target, not a reasoning limit.` },
                   { role: 'user', content: `Previous note:\n${summary || '(none)'}\n\nNext transcript segment:\n${chunk}` }
@@ -4493,6 +4512,7 @@ export const useApp = create<AppState>((set, get) => {
                   let hasThinking = false
                   let partialSummary = ''
                   writeRun(taskId, { streamId: requestId })
+                  compactionRun.requestId = requestId
                   const result = await api.llm.chat(requestId, {
                     ...params, provider: 'lmstudio', model: lmModel, reasoning: lmStudioReasoning, temperature: 0.2
                   }, (delta, thinking) => {
@@ -4504,6 +4524,7 @@ export const useApp = create<AppState>((set, get) => {
                     }
                     if (delta) { partialSummary += delta; patch(summaryId, { text: partialSummary }) }
                   })
+                  compactionRun.requestId = undefined
                   if (result.thinking) {
                     if (!hasThinking) addMsg({ id: thinkingId, role: 'assistant', kind: 'text', reasoning: true, text: result.thinking, reasoningDurationMs: result.thinkingMs })
                     else patch(thinkingId, { text: result.thinking, reasoningDurationMs: result.thinkingMs })
@@ -4515,7 +4536,7 @@ export const useApp = create<AppState>((set, get) => {
                     throw new Error(tr(get().appLanguage, 'chat.checkpointFailed'))
                   }
                   return result
-                }, aborted)
+                }, () => aborted() || compactionRun.cancelled)
                 if (completed === null) break
                 summary = completed
                 patch(summaryId, { text: summary })
@@ -4525,19 +4546,21 @@ export const useApp = create<AppState>((set, get) => {
                   throw new Error(tr(get().appLanguage, 'chat.checkpointFailed'))
                 }
               }
-              if (!aborted()) {
+              if (!aborted() && !compactionRun.cancelled) {
                 const next: LlmMessage[] = [{ role: 'user', content: CONTEXT_SUMMARY_PREFIX + summary }, ...plan.recent]
                 if (!summary || conversationTokens(next) >= conversationTokens(original) || conversationTokens(next) > plan.targetTokens) {
                   throw new Error('The summary is still too large for the loaded model. Increase its context window or shorten the request.')
                 }
                 await checkpointPending
-                writeRun(taskId, { convo: next, streamId: null })
-                if (!await get().saveTaskRun(taskId, 'running')) {
-                  storageFailed = true
-                  writeRun(taskId, { convo: original })
-                  throw new Error(tr(get().appLanguage, 'chat.checkpointFailed'))
+                if (!aborted() && !compactionRun.cancelled) {
+                  writeRun(taskId, { convo: next, streamId: null })
+                  if (!await get().saveTaskRun(taskId, 'running')) {
+                    storageFailed = true
+                    writeRun(taskId, { convo: original })
+                    throw new Error(tr(get().appLanguage, 'chat.checkpointFailed'))
+                  }
+                  compacted = true
                 }
-                compacted = true
               }
             } catch (error) {
               compactionDeferred = canContinueOriginal && checkpointReady && !storageFailed
@@ -4545,7 +4568,13 @@ export const useApp = create<AppState>((set, get) => {
               const draft = readRun(taskId)?.messages.find(message => message.id === summaryId)?.text ?? ''
               patch(summaryId, { text: draft + '\n\n' + tr(get().appLanguage, compactionDeferred ? 'chat.compactionDeferred' : 'chat.compactionFailed') + '\n' + String(error) })
             } finally {
+              compactionRuns.delete(taskId)
               writeRun(taskId, { streamId: replyId })
+            }
+            if (compactionRun.cancelled && checkpointReady && !storageFailed && !aborted()) {
+              compactionDeferred = true
+              const draft = readRun(taskId)?.messages.find(message => message.id === summaryId)?.text ?? ''
+              patch(summaryId, { text: draft + '\n\n' + tr(get().appLanguage, 'chat.compactionDisabled') })
             }
             if (!compacted && (!compactionDeferred || aborted())) { removeMsg(replyId); break }
             // The answer follows the compaction activity in the visible timeline.
@@ -4565,7 +4594,7 @@ export const useApp = create<AppState>((set, get) => {
           contextTokens(JSON.stringify(computerSession ? [...TOOLS, COMPUTER_TOOL] : TOOLS)) + (computerFrame ? 1500 : 0)) : undefined
         if (outputBudget !== undefined && outputBudget < 128) {
           finalStatus = 'error'
-          patch(replyId, { text: tr(get().appLanguage, 'chat.compactionFailed') })
+          patch(replyId, { text: tr(get().appLanguage, 'chat.contextFull') })
           break
         }
         const onDelta = (delta: string): void => {

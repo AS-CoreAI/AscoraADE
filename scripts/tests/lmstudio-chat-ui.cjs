@@ -46,6 +46,25 @@ const reload = async () => {
   await ready
   await waitFor(`!!document.querySelector('.ws-item')`)
 }
+const clickText = async (selector, value) => {
+  const expr = `Array.from(document.querySelectorAll(${JSON.stringify(selector)})).find(el => el.textContent.trim() === ${JSON.stringify(value)})`
+  await waitFor(`!!(${expr})`)
+  await evaluate(`(${expr}).click()`)
+}
+const setAutoCompact = async (enabled, capture = false) => {
+  await click('[title="Настройки языка и внешнего вида"]')
+  await clickText('.settings-nav nav > button', 'Провайдеры агентов')
+  await clickText('.settings-provider-nav button', 'LM Studio')
+  await waitFor(`!!document.querySelector('.lmstudio-auto-compact')`)
+  if (await evaluate(`document.querySelector('.lmstudio-auto-compact').checked`) !== enabled) await click('.lmstudio-auto-compact')
+  assert.equal(await evaluate(`window.ascora.llm.config().then(c => c.lmStudioAutoCompact)`), enabled)
+  if (capture) {
+    await evaluate(`document.querySelector('.lmstudio-auto-compact').scrollIntoView({block:'center'}); new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))`)
+    writeFileSync(join(output, 'compaction-setting-off.png'), (await win.webContents.capturePage()).toPNG())
+  }
+  await click('.settings-back')
+  await waitFor(`!!document.querySelector('.composer-input')`)
+}
 app.whenReady().then(async () => {
   win = new BrowserWindow({ width: 1200, height: 900, show: false,
     webPreferences: { preload: join(__dirname, 'settings-preload.cjs'), contextIsolation: false,
@@ -55,6 +74,8 @@ app.whenReady().then(async () => {
   await win.loadFile(resolve(__dirname, '../../out/renderer/index.html'))
   await click('.ws-item')
   await waitFor(`!!document.querySelector('.composer-input')`)
+  assert.equal(await evaluate(`window.ascora.llm.config().then(c => c.lmStudioAutoCompact)`), false)
+  await setAutoCompact(false, true)
   await waitFor(`document.querySelector('.lmstudio-reasoning')?.disabled === false`)
   assert.deepEqual(await evaluate(`Array.from(document.querySelector('.lmstudio-reasoning').options).map(o => o.value)`), ['', 'off', 'low', 'medium', 'xhigh'])
   await evaluate(`{ const select = document.querySelector('.lmstudio-reasoning'); select.value = 'low'; select.dispatchEvent(new Event('change', { bubbles: true })); }`)
@@ -114,20 +135,39 @@ app.whenReady().then(async () => {
   await evaluate(`document.querySelectorAll('.reasoning-head').forEach(button => button.click())`)
   await waitFor(`document.querySelector('.chat-full-scroll')?.textContent.includes('Размышление до сбоя.')`)
 
-  async function seedCompaction(id, contextLength) {
+  async function seedCompaction(id, contextLength, expectCompaction = true) {
     await evaluate(`window.ascora.workspace.saveTask({ id: ${JSON.stringify(id)}, workspaceId: 'settings-test',
       title: ${JSON.stringify(id)}, status: 'idle', updatedAt: Date.now(),
       messages: [{ id: 'original', role: 'user', kind: 'text', text: 'Original goal stays visible' }],
       convo: Array.from({ length: 24 }, (_, i) => ({ role: i % 2 ? 'assistant' : 'user', content: 'Step ' + i + ': ' + 'verified progress '.repeat(100) }))
     })`)
     await reload()
+    await evaluate(`document.querySelector('.task-show-more')?.click()`)
     await waitFor(`Array.from(document.querySelectorAll('.task-item')).some(el => el.textContent.includes(${JSON.stringify(id)}))`)
     await evaluate(`Array.from(document.querySelectorAll('.task-item')).find(el => el.textContent.includes(${JSON.stringify(id)})).click()`)
     await waitFor(`!!document.querySelector('.composer-input')`)
     if (contextLength) await evaluate(`window.settingsFixture.contextLength = ${contextLength}; window.dispatchEvent(new Event('focus'));`)
     await send('Continue from saved progress')
-    await waitFor(`window.settingsFixture.chatParams?.messages[0].content.startsWith('Write a compact continuation note')`)
+    if (expectCompaction) await waitFor(`window.settingsFixture.chatParams?.messages[0].content.startsWith('Write a compact continuation note')`)
+    else await waitFor(`window.settingsFixture.chatParams?.messages.at(-1)?.content === 'Continue from saved progress'`)
   }
+
+  const { loadTypeScript } = require('./llm-fixture.cjs')
+  const { contextTokens, conversationTokens } = loadTypeScript('src/shared/context-compaction.ts')
+  const source = Array.from({ length: 24 }, (_, i) => ({ role: i % 2 ? 'assistant' : 'user', content: 'Step ' + i + ': ' + 'verified progress '.repeat(100) }))
+  const used = conversationTokens([...source, { role: 'user', content: 'Continue from saved progress' }]) + contextTokens(firstRequest.messages[0].content + JSON.stringify(firstRequest.tools)) + 256
+  const fittingWindow = Math.ceil(used / 0.8)
+  // This restored history is above the compaction threshold, but the default is off.
+  await seedCompaction('compaction-default-off', fittingWindow, false)
+  assert.equal(await evaluate(`window.settingsFixture.checkpoints.length`), 0)
+  assert.equal(await evaluate(`window.ascora.llm.config().then(c => c.lmStudioAutoCompact)`), false)
+  assert.ok(await evaluate(`window.settingsFixture.chatParams.messages.length >= 26`))
+  assert.ok(!await evaluate(`window.settingsFixture.chatParams.messages[0].content.startsWith('Write a compact continuation note')`))
+  await evaluate(`window.settingsFixture.chatDelta('Answer without compaction', 'Reasoning still saved while compaction is off')`)
+  await waitFor(`window.settingsFixture.savedTasks.at(-1)?.messages.some(m => m.reasoning && m.text.includes('compaction is off'))`)
+  await evaluate(`window.settingsFixture.chatFinish({ ok: true, content: 'Answer without compaction' })`)
+  await waitFor(`window.settingsFixture.savedTasks.at(-1)?.status === 'idle'`)
+  await setAutoCompact(true)
 
   await seedCompaction('compaction-success')
   assert.equal(await evaluate(`window.settingsFixture.checkpoints.length`), 1)
@@ -187,11 +227,7 @@ app.whenReady().then(async () => {
   await waitFor(`window.settingsFixture.savedTasks.at(-1)?.status === 'idle'`)
 
   // A summary failure at ~80% usage must retain the original and resume work.
-  const { loadTypeScript } = require('./llm-fixture.cjs')
-  const { contextTokens, conversationTokens } = loadTypeScript('src/shared/context-compaction.ts')
-  const source = Array.from({ length: 24 }, (_, i) => ({ role: i % 2 ? 'assistant' : 'user', content: 'Step ' + i + ': ' + 'verified progress '.repeat(100) }))
-  const used = conversationTokens([...source, { role: 'user', content: 'Continue from saved progress' }]) + contextTokens(firstRequest.messages[0].content + JSON.stringify(firstRequest.tools)) + 256
-  await seedCompaction('compaction-deferred', Math.ceil(used / 0.8))
+  await seedCompaction('compaction-deferred', fittingWindow)
   const failingId = await evaluate('window.settingsFixture.chatId')
   await evaluate(`window.settingsFixture.chatFinish({ ok: false, content: '', error: 'Summary server failure' })`)
   await waitFor(`window.settingsFixture.chatId !== ${JSON.stringify(failingId)}`)
@@ -202,7 +238,24 @@ app.whenReady().then(async () => {
   await evaluate(`document.querySelectorAll('.reasoning-head').forEach(button => button.click())`)
   assert.ok(await evaluate(`document.querySelector('.chat-full-scroll').textContent.includes('Продолжаю с сохранённым')`))
   writeFileSync(join(output, 'reasoning-control-context.png'), (await win.webContents.capturePage()).toPNG())
+
+  // Disable during the second segment: never replace the source with a partial summary.
+  await seedCompaction('compaction-disabled-during-summary', fittingWindow)
+  const firstSegmentId = await evaluate('window.settingsFixture.chatId')
+  await evaluate(`window.settingsFixture.chatFinish({ ok: true, content: 'Only the first segment was summarized', finishReason: 'stop' })`)
+  await waitFor(`window.settingsFixture.chatId !== ${JSON.stringify(firstSegmentId)}`)
+  assert.ok(await evaluate(`window.settingsFixture.chatParams.messages[0].content.startsWith('Write a compact continuation note')`))
+  const cancelledSummaryId = await evaluate('window.settingsFixture.chatId')
+  await setAutoCompact(false)
+  await waitFor(`window.settingsFixture.chatId !== ${JSON.stringify(cancelledSummaryId)}`)
+  assert.equal(await evaluate('window.settingsFixture.abortId'), cancelledSummaryId)
+  assert.ok(await evaluate(`window.settingsFixture.chatParams.messages.length >= 26`))
+  assert.ok(!await evaluate(`window.settingsFixture.chatParams.messages.some(m => m.content.startsWith('[Saved context summary]'))`))
+  await evaluate(`window.settingsFixture.chatFinish({ ok: true, content: 'Continued after disabling compaction' })`)
+  await waitFor(`window.settingsFixture.savedTasks.at(-1)?.status === 'idle'`)
+  await reload()
+  assert.equal(await evaluate(`window.ascora.llm.config().then(c => c.lmStudioAutoCompact)`), false, 'Global opt-out survives restart')
   assert.deepEqual(errors, [])
-  console.log('LM Studio chat UI OK: persisted reasoning control, live checkpoints/recovery, million-token and unknown windows, incomplete response continuation, compaction retry/defer/cancel, archived source')
+  console.log('LM Studio chat UI OK: compaction defaults off, global checkbox persists, disabling cancels only summaries and preserves full source, autosave/recovery, context/reasoning controls, compaction retry/defer/cancel')
   app.exit(0)
 }).catch(error => { console.error(error, errors); app.exit(1) })

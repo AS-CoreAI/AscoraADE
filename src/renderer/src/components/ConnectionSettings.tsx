@@ -176,6 +176,8 @@ function LmStudioPanel(): JSX.Element {
   const setBaseUrl = useApp((s) => s.setBaseUrl)
   const model = useApp((s) => s.model)
   const setModel = useApp((s) => s.setModel)
+  const autoCompact = useApp((s) => s.lmStudioAutoCompact)
+  const setAutoCompact = useApp((s) => s.setLmStudioAutoCompact)
 
   const [url, setUrl] = useState(baseUrl)
   const [testing, setTesting] = useState(false)
@@ -230,6 +232,14 @@ function LmStudioPanel(): JSX.Element {
       </label>
 
       <LmStudioControls settings />
+      <div className="field">
+        <label className="field-row" style={{ alignItems: 'center' }}>
+          <input type="checkbox" className="lmstudio-auto-compact" checked={autoCompact}
+            onChange={(event) => setAutoCompact(event.target.checked)} />
+          <span className="field-label">{t('settings.lmStudioAutoCompact')}</span>
+        </label>
+        <span className="field-hint">{t('settings.lmStudioAutoCompactHint')}</span>
+      </div>
       <div className={`conn-line ${connection}`}>
         {connection === 'connected' && `✓ ${t('settings.connectedModels', { count: models.length })}`}
         {connection === 'connecting' && t('settings.connecting')}

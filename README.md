@@ -147,7 +147,12 @@ npm run typecheck   # tsc for main and renderer
   launches. Writes use WAL and full synchronization. Active chats checkpoint
   changed answers, visible reasoning, tools and context every second; an abrupt
   shutdown can still lose output generated since the last committed checkpoint.
-- **LM Studio context:** Ascora summarizes older context with the selected model
+- **LM Studio context:** automatic compaction is **off by default**, including
+  existing chats. Enable it with **Settings → Agent Providers → LM Studio →
+  Automatically compact context**. This is a global preference; changing chats
+  does not re-enable it. Disabling it cancels an active summary request and
+  preserves the original context. Regular chat checkpoints keep saving either way.
+  When enabled, Ascora summarizes older context with the selected model
   between steps, keeping recent exchanges and the full visible transcript.
   The trigger uses a conservative token estimate against 70% of the loaded
   instance's context window, accounting for system/tool overhead. The window is

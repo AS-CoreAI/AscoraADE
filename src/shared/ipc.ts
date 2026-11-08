@@ -1079,6 +1079,8 @@ export interface LlmConfig {
   model: string
   /** Per-chat reasoning selection; empty uses the model's server default. */
   lmStudioReasoning: LmStudioReasoning | ''
+  /** Global opt-in: applies to existing chats as well as new ones. */
+  lmStudioAutoCompact: boolean
   /** OpenAI-compatible base for Ollama, usually http://localhost:11434/v1. */
   ollamaBaseUrl: string
   /** Default Ollama model id used when selected. */
@@ -1164,6 +1166,7 @@ export const DEFAULT_LLM_CONFIG: LlmConfig = {
   baseUrl: 'http://localhost:1234/v1',
   model: '',
   lmStudioReasoning: '',
+  lmStudioAutoCompact: false,
   ollamaBaseUrl: 'http://localhost:11434/v1',
   ollamaModel: '',
   unslothBaseUrl: 'http://127.0.0.1:8888/v1',
