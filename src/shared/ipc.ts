@@ -1795,7 +1795,7 @@ export interface DeveloperToolsInstallResult {
   error?: string
 }
 
-// ---------- Agent tools (sandboxed to the active workspace root) ----------
+// ---------- Agent tools (relative paths use the active workspace root) ----------
 
 export interface AgentDirEntry {
   name: string
@@ -1804,7 +1804,7 @@ export interface AgentDirEntry {
 
 export interface AgentListResult {
   ok: boolean
-  /** Repo-relative path that was listed. */
+  /** Workspace-relative path, or an absolute path for an external directory. */
   path?: string
   entries?: AgentDirEntry[]
   error?: string
@@ -1841,7 +1841,7 @@ export interface AgentEditResult {
 
 /** A single line that matched an `agent.search` query. */
 export interface AgentSearchMatch {
-  /** Repo-relative path using forward slashes. */
+  /** Workspace-relative or external absolute path, using forward slashes. */
   path: string
   /** 1-based line number of the match. */
   line: number
@@ -1858,11 +1858,11 @@ export interface AgentSearchMatch {
  * behavior: a literal, case-insensitive substring scan of the whole workspace.
  */
 export interface AgentSearchOptions {
-  /** Restrict the scan to this workspace-relative subdirectory. */
+  /** Workspace-relative or absolute directory to scan. */
   path?: string
   /** Interpret `query` as a JavaScript regular expression instead of a literal. */
   regex?: boolean
-  /** Only search files whose repo-relative path matches this glob (e.g. `**\/*.ts`). */
+  /** Match paths relative to the workspace, or to `path` for external scans (e.g. `**\/*.ts`). */
   glob?: string
   /** Include this many lines of context before and after each match (0 = none). */
   context?: number

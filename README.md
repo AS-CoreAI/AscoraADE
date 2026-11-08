@@ -133,6 +133,12 @@ npm run typecheck   # tsc for main and renderer
 
 ## Environment notes
 
+- **Files outside the project:** Settings → General → Work with files outside
+  the project is enabled by default. It allows the built-in local chat and
+  Blueprint file tools to list, read, search, create and edit explicit absolute
+  external paths. Disable it to restrict subsequent file operations to the
+  project; the preference survives restarts. This does not sandbox shell
+  commands, SSH or external CLI agents.
 - **Long local prompts:** LM Studio, Ollama and Unsloth generation requests no
   longer have a response inactivity timeout. Stop still cancels immediately.
   LM Studio chats show actual prompt-processing percentages when its local

@@ -1,5 +1,6 @@
 import type { SettingsSection } from '@/lib/providers'
 import { AGENT_STEP_LIMIT_SETTING, DEFAULT_AGENT_STEP_LIMIT, normalizeAgentStepLimit, type AgentStepLimit } from '@shared/agent-limits'
+import { EXTERNAL_FILES_SETTING, externalFilesAllowed, agentFileAccessPrompt } from '@shared/agent-file-access'
 import { normalizeUnslothApiKey, normalizeUnslothBaseUrl } from '@shared/unsloth'
 import { create } from 'zustand'
 import type {
@@ -261,7 +262,7 @@ const TOOLS: ToolDef[] = [
       parameters: {
         type: 'object',
         properties: {
-          path: { type: 'string', description: 'Workspace-relative file path.' },
+          path: { type: 'string', description: 'Workspace-relative file path, or an absolute path to an external file.' },
           start_line: { type: 'integer', description: 'Optional first line to read (1-based).' },
           end_line: { type: 'integer', description: 'Optional last line to read (1-based, inclusive).' }
         },
@@ -274,7 +275,7 @@ const TOOLS: ToolDef[] = [
     function: {
       name: 'search_files',
       description:
-        'Search the workspace and return matching file:line locations (ripgrep-style). ' +
+        'Search the workspace or an absolute external directory and return matching file:line locations (ripgrep-style). ' +
         'By default the query is a case-insensitive literal substring; set regex to treat it ' +
         'as a regular expression, glob to limit which files are scanned, and context to include ' +
         'surrounding lines. Use this to find code instead of reading files one by one.',
@@ -282,7 +283,7 @@ const TOOLS: ToolDef[] = [
         type: 'object',
         properties: {
           query: { type: 'string', description: 'Text or regular expression to search for.' },
-          path: { type: 'string', description: 'Optional subdirectory to scope the search to.' },
+          path: { type: 'string', description: 'Optional workspace-relative or absolute directory to search.' },
           regex: {
             type: 'boolean',
             description: 'Interpret query as a regular expression instead of a literal. Default false.'
@@ -314,7 +315,7 @@ const TOOLS: ToolDef[] = [
       parameters: {
         type: 'object',
         properties: {
-          path: { type: 'string', description: 'Workspace-relative file path.' },
+          path: { type: 'string', description: 'Workspace-relative file path, or an absolute path when external file access is enabled.' },
           content: { type: 'string', description: 'The complete new file content.' }
         },
         required: ['path', 'content']
@@ -332,7 +333,7 @@ const TOOLS: ToolDef[] = [
       parameters: {
         type: 'object',
         properties: {
-          path: { type: 'string', description: 'Workspace-relative file path.' },
+          path: { type: 'string', description: 'Workspace-relative file path, or an absolute path when external file access is enabled.' },
           old_string: { type: 'string', description: 'Exact text to find (with enough context to be unique).' },
           new_string: { type: 'string', description: 'Text to replace it with.' },
           replace_all: {
@@ -406,7 +407,7 @@ const TOOLS: ToolDef[] = [
 ]
 
 /** Build the system prompt for the local (LM Studio) agent loop. */
-function buildSystemPrompt(sshHost?: string, sshRoot?: string): string {
+function buildSystemPrompt(sshHost?: string, sshRoot?: string, allowExternalFiles = true): string {
   const onWin = api.system.platform === 'win32'
   // Over SSH the command runs in the remote shell (a POSIX shell on the typical
   // Linux host), not the local one — steer the model to Unix commands.
@@ -436,7 +437,9 @@ function buildSystemPrompt(sshHost?: string, sshRoot?: string): string {
     '- web_search(query): search the web for a ranked list of results',
     '- web_fetch(url, [max_chars]): fetch a URL and read its text (HTML stripped)',
     '',
-    'All paths are relative to the project root. Work step by step: call one tool at a time,',
+    'Relative paths use the project root.',
+    ...(!sshHost ? [agentFileAccessPrompt(allowExternalFiles)] : []),
+    'Work step by step: call one tool at a time,',
     'wait for its result, then decide the next step. Prefer search_files to locate code and',
     'edit_file for surgical changes; reach for write_file only for new files or full rewrites.',
     'Always read a snippet before editing it so old_string matches exactly.',
@@ -1420,6 +1423,8 @@ interface AppState {
   settingsOpen: boolean
   settingsSection: SettingsSection
   agentStepLimit: AgentStepLimit
+  allowExternalFiles: boolean
+  setAllowExternalFiles: (enabled: boolean) => void
   setAgentStepLimit: (patch: Partial<AgentStepLimit>) => void
   settingsProvider: LlmProvider
   settingsReturnView: View
@@ -1992,6 +1997,11 @@ export const useApp = create<AppState>((set, get) => {
   settingsOpen: false,
   settingsSection: 'appearance',
   agentStepLimit: DEFAULT_AGENT_STEP_LIMIT,
+  allowExternalFiles: true,
+  setAllowExternalFiles(enabled) {
+    set({ allowExternalFiles: enabled })
+    void api.settings.set(EXTERNAL_FILES_SETTING, enabled)
+  },
   setAgentStepLimit(patch) {
     const agentStepLimit = normalizeAgentStepLimit({ ...get().agentStepLimit, ...patch })
     set({ agentStepLimit })
@@ -2062,7 +2072,8 @@ export const useApp = create<AppState>((set, get) => {
       savedSkills,
       savedSsh,
       savedProviderVisibility,
-      savedAgentStepLimit
+      savedAgentStepLimit,
+      savedExternalFiles
     ] = await Promise.all([
         api.workspace.list(),
         api.llm.config(),
@@ -2076,7 +2087,8 @@ export const useApp = create<AppState>((set, get) => {
         api.settings.get<Skill[]>('skills'),
         api.settings.get<SshConnection[]>('ssh.connections'),
         api.settings.get<Partial<Record<LlmProvider, boolean>>>('providers.visibility'),
-        api.settings.get<AgentStepLimit>(AGENT_STEP_LIMIT_SETTING)
+        api.settings.get<AgentStepLimit>(AGENT_STEP_LIMIT_SETTING),
+        api.settings.get<boolean>(EXTERNAL_FILES_SETTING)
       ])
     const omnirouteStatus = await omnirouteStatusPromise
     const workspaceOrder = Array.isArray(savedOrder) ? savedOrder : []
@@ -2108,6 +2120,7 @@ export const useApp = create<AppState>((set, get) => {
       tasksByWorkspace: Object.fromEntries(taskLists),
       sidebarCollapsed: savedSidebar === true,
       agentStepLimit: normalizeAgentStepLimit(savedAgentStepLimit),
+      allowExternalFiles: externalFilesAllowed(savedExternalFiles),
       // First run (no saved value) seeds the defaults; an empty saved array is
       // respected (the user removed every skill).
       skills: Array.isArray(savedSkills) ? savedSkills : DEFAULT_SKILLS,
@@ -4483,7 +4496,7 @@ export const useApp = create<AppState>((set, get) => {
         const replyId = crypto.randomUUID()
         addMsg({ id: replyId, role: 'assistant', kind: 'text', model: assistantModel, text: '' })
         writeRun(taskId, { streamId: replyId, thinking: true, promptProgress: agentProvider === 'lmstudio' ? { phase: 'waiting' } : null })
-        const base = buildSystemPrompt(sshHost, sshHost ? root : undefined)
+        const base = buildSystemPrompt(sshHost, sshHost ? root : undefined, get().allowExternalFiles)
         // Web chats have no native function calling — pin the model to the
         // text tool protocol so every tool request arrives as a parseable block.
         const wpNote = isWProvider

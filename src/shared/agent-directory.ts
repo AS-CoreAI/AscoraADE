@@ -4,17 +4,17 @@ const DEFAULT_LIMIT = 100
 const MAX_LIMIT = 200
 const MAX_ENTRY_CHARS = 12_000
 
-export const LIST_DIR_USAGE = '- list_dir(path, [offset], [limit], [filter]): list a directory in bounded pages; filter is a case-insensitive filename substring ("." is the project root)'
+export const LIST_DIR_USAGE = '- list_dir(path, [offset], [limit], [filter]): list a directory in bounded pages; filter is a case-insensitive filename substring ("." is the project root; absolute paths can inspect other folders)'
 
 export const LIST_DIR_TOOL: ToolDef = {
   type: 'function',
   function: {
     name: 'list_dir',
-    description: 'List files and folders in a workspace directory. Large directories are paginated; use filter to find relevant names without reading every page.',
+    description: 'List files and folders. When external file access is enabled, an absolute path can inspect a directory outside the workspace. Large directories are paginated; use filter to find relevant names without reading every page.',
     parameters: {
       type: 'object',
       properties: {
-        path: { type: 'string', description: 'Workspace-relative dir; "." for root.' },
+        path: { type: 'string', description: 'Workspace-relative directory, or an absolute directory path; "." for project root.' },
         offset: { type: 'integer', minimum: 0, description: 'Zero-based offset from the previous result; default 0.' },
         limit: { type: 'integer', minimum: 1, maximum: MAX_LIMIT, description: `Maximum entries per page; default ${DEFAULT_LIMIT}. Output also has a character limit.` },
         filter: { type: 'string', description: 'Optional case-insensitive substring of the filename, e.g. ".log" or "config".' }

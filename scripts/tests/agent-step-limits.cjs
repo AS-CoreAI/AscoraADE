@@ -2,6 +2,7 @@ const test = require('node:test')
 const assert = require('node:assert/strict')
 const { loadTypeScript } = require('./llm-fixture.cjs')
 const { AGENT_STEP_LIMIT_SETTING, normalizeAgentStepLimit } = loadTypeScript('src/shared/agent-limits.ts')
+const { EXTERNAL_FILES_SETTING } = loadTypeScript('src/shared/agent-file-access.ts')
 const graph = loadTypeScript('src/main/blueprint/graph.ts')
 const toolFunctions = loadTypeScript('src/main/blueprint/tools.ts', { '../ipc/agent': {}, '../ipc/web': {} })
 
@@ -12,9 +13,10 @@ test('missing settings disable the limit; enabled limits require a positive inte
   for (const value of [0, -1, NaN, Infinity, 2.5]) assert.equal(normalizeAgentStepLimit({ maxSteps: value }).maxSteps, 16)
 })
 
-async function blueprintFixture({ limit, turns = 70, plain = false, onTool, onChat } = {}) {
+async function blueprintFixture({ limit, turns = 70, plain = false, workspace = false, onTool, onChat } = {}) {
   const settings = new Map(limit ? [[AGENT_STEP_LIMIT_SETTING, limit]] : [])
-  const saved = { getSetting: key => structuredClone(settings.get(key)), setSetting: (key, value) => settings.set(key, structuredClone(value)), listWorkspaces: () => [] }
+  const saved = { getSetting: key => structuredClone(settings.get(key)), setSetting: (key, value) => settings.set(key, structuredClone(value)),
+    listWorkspaces: () => workspace ? [{ id: 'fixture-space', name: 'Fixture', path: __dirname }] : [] }
   const requests = [], calls = [], events = []
   let finished
   const done = new Promise(resolve => { finished = resolve })
@@ -38,6 +40,7 @@ async function blueprintFixture({ limit, turns = 70, plain = false, onTool, onCh
     }
   })
   runner.saveBlueprint({ id: 'fixture', name: 'Fixture', agentMode: !plain,
+    ...(workspace ? { workspaceId: 'fixture-space' } : {}),
     agents: [{ id: 'agent', name: 'Agent', role: 'Tester', service: 'qwen', enabled: true, instructions: '' }],
     steps: [{ id: 'step', name: 'Work', type: 'agent', agentId: 'agent', prompt: '{{input}}' }],
     schedule: { enabled: false, intervalMinutes: 60 } })
@@ -76,6 +79,15 @@ test('Blueprint picks up disabling the limit at the next turn boundary', async (
     onTool: ({ settings, count }) => { if (count === 3) settings.set(AGENT_STEP_LIMIT_SETTING, { enabled: false, maxSteps: 4 }) } })
   assert.equal(result.run.status, 'completed', result.run.error)
   assert.equal(result.calls.length, 70)
+})
+
+test('Blueprint refreshes file access instructions when the global preference changes', async () => {
+  const result = await blueprintFixture({ turns: 2, workspace: true,
+    onTool: ({ settings, count }) => settings.set(EXTERNAL_FILES_SETTING, count !== 1) })
+  assert.equal(result.run.status, 'completed', result.run.error)
+  assert.match(result.requests[0].messages[0].content, /External file access is enabled/)
+  assert.match(result.requests[1].messages[0].content, /External file access is disabled/)
+  assert.match(result.requests[2].messages[0].content, /External file access is enabled/)
 })
 
 test('Stop still cancels a long Blueprint run and retains finished tool results', async () => {

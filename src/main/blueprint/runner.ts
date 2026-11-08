@@ -2,6 +2,7 @@ import { BrowserWindow, type WebContents } from 'electron'
 import { randomUUID } from 'node:crypto'
 import { stat } from 'node:fs/promises'
 import { AGENT_STEP_LIMIT_SETTING, normalizeAgentStepLimit } from '@shared/agent-limits'
+import { EXTERNAL_FILES_SETTING, externalFilesAllowed } from '@shared/agent-file-access'
 import {
   BLUEPRINT_START_NODE_ID,
   IPC,
@@ -370,19 +371,15 @@ async function runAgentStep(
     }
   }
   const conversationKey = `${agent.id}:${agentMode ? 'agent' : 'plain'}`
-  const history = active.agentMessages.get(conversationKey) ?? [
-    {
-      role: 'system',
-      content: [
+  const systemPrompt = (): string => [
         `You are ${agent.name}, the ${agent.role}, working inside an Ascora Blueprint team.`,
         'Collaborate through the shared results supplied by the orchestrator. Produce a concrete result that another team member can continue from.',
         agent.instructions.trim(),
-        agentMode ? blueprintAgentModePrompt(workspace) : ''
+        agentMode ? blueprintAgentModePrompt(workspace, externalFilesAllowed(getStore().getSetting(EXTERNAL_FILES_SETTING))) : ''
       ]
         .filter(Boolean)
         .join('\n\n')
-    }
-  ]
+  const history = active.agentMessages.get(conversationKey) ?? [{ role: 'system', content: systemPrompt() }]
   active.agentMessages.set(conversationKey, history)
 
   const requested = interpolate(step.prompt?.trim() || '{{input}}', active, step.id)
@@ -397,6 +394,7 @@ async function runAgentStep(
   // a final answer, user cancellation or a provider/tool failure.
   for (let turn = 0; ; turn += 1) {
     assertRunning(active)
+    if (agentMode) history[0].content = systemPrompt()
     const stepLimit = normalizeAgentStepLimit(getStore().getSetting(AGENT_STEP_LIMIT_SETTING))
     if (agentMode && stepLimit.enabled && turn >= stepLimit.maxSteps) {
       throw new BlueprintStepLimitError(`${agent.name} reached the configured limit of ${stepLimit.maxSteps} model turns. Change the agent step limit in Settings > General.`)

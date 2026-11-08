@@ -19,12 +19,14 @@ import {
   type AgentWriteResult
 } from '@shared/ipc'
 import { wrapWProviderTypescript } from '@shared/wprovider-tools'
+import { EXTERNAL_FILES_SETTING, externalFilesAllowed } from '@shared/agent-file-access'
+import { getStore } from '../store'
 
 /**
- * Tool primitives the agent loop calls (see store.ts). Every path is resolved
- * relative to the workspace `root` and confined to it — the model never gets to
- * touch files outside the open folder. `run_command` is a one-shot exec (no PTY)
- * with a timeout; non-zero exits are reported, not thrown.
+ * Tool primitives the agent loop calls (see store.ts). Relative file paths use
+ * the workspace root. A global preference controls absolute external paths
+ * for all five file tools. `run_command` is a one-shot
+ * exec (no PTY), not a filesystem sandbox; non-zero exits are reported.
  */
 
 const MAX_READ_BYTES = 1024 * 1024 // 1 MB — keep tool output within token budgets
@@ -100,19 +102,32 @@ function makeLineMatcher(query: string, regex: boolean, caseSensitive: boolean):
   return { test: (line) => line.toLowerCase().includes(needle) }
 }
 
-/** Resolve `rel` under `root`, refusing escapes (`..`, absolute, NUL). */
+function isOutside(root: string, absolute: string): boolean {
+  const within = relative(root, absolute).replace(/\\/g, '/')
+  return within === '..' || within.startsWith('../') || isAbsolute(within)
+}
+
+/** Resolve a workspace-scoped path, refusing parent escapes and NUL. */
 function resolveInside(root: string, rel: string): string {
   if (rel == null || rel.includes('\0')) throw new AgentError('Invalid path.')
-  const cleaned = rel.trim().replace(/^[/\\]+/, '') // treat leading slash as root-relative
+  const cleaned = rel.trim()
   const absolute = resolve(root, cleaned || '.')
-  const within = relative(root, absolute)
-  if (within.startsWith('..') || isAbsolute(within)) {
+  if (isOutside(root, absolute)) {
     throw new AgentError('Path is outside the workspace.')
   }
   return absolute
 }
 
+/** Consult the persisted preference on every operation, including Blueprint calls. */
+function resolveToolPath(root: string, path: string): string {
+  if (typeof path !== 'string' || path.includes('\0')) throw new AgentError('Invalid path.')
+  const value = path.trim()
+  return isAbsolute(value) && externalFilesAllowed(getStore().getSetting(EXTERNAL_FILES_SETTING))
+    ? resolve(root, value) : resolveInside(root, value)
+}
+
 function toRel(root: string, absolute: string): string {
+  if (isOutside(root, absolute)) return absolute.replace(/\\/g, '/')
   const rel = relative(root, absolute).replace(/\\/g, '/')
   return rel === '' ? '.' : rel
 }
@@ -123,7 +138,7 @@ function errResult(err: unknown): { error: string } {
 
 async function listDir(root: string, rel: string): Promise<AgentListResult> {
   try {
-    const dir = resolveInside(root, rel || '.')
+    const dir = resolveToolPath(root, rel || '.')
     const dirents = await readdir(dir, { withFileTypes: true })
     const entries: AgentDirEntry[] = dirents
       .filter((d) => !(d.isDirectory() && EXCLUDED_DIRS.has(d.name)))
@@ -144,7 +159,7 @@ async function readFileTool(
   range?: AgentReadRange
 ): Promise<AgentReadResult> {
   try {
-    const file = resolveInside(root, rel)
+    const file = resolveToolPath(root, rel)
     const info = await stat(file)
     if (info.isDirectory()) throw new AgentError('Path is a directory, not a file.')
     const sliced = !!range && (range.startLine != null || range.endLine != null)
@@ -199,7 +214,7 @@ async function editFileTool(
   replaceAll: boolean
 ): Promise<AgentEditResult> {
   try {
-    const file = resolveInside(root, rel)
+    const file = resolveToolPath(root, rel)
     if (!rel || toRel(root, file) === '.') throw new AgentError('A file path is required.')
     if (typeof oldString !== 'string' || oldString === '') {
       throw new AgentError('old_string is required and cannot be empty.')
@@ -240,6 +255,7 @@ async function editFileTool(
 
 interface SearchCtx {
   root: string
+  scopeRoot: string
   matcher: LineMatcher
   inScope: (relPath: string) => boolean
   context: number
@@ -270,7 +286,7 @@ async function walkSearch(ctx: SearchCtx, dir: string): Promise<boolean> {
     if (!d.isFile()) continue
     const full = join(dir, d.name)
     const rel = toRel(ctx.root, full)
-    if (!ctx.inScope(rel)) continue
+    if (!ctx.inScope(relative(ctx.scopeRoot, full).replace(/\\/g, '/'))) continue
     let buf: Buffer
     try {
       const info = await stat(full)
@@ -325,9 +341,9 @@ async function searchFiles(
     } catch (err) {
       throw new AgentError(`Invalid glob: ${err instanceof Error ? err.message : String(err)}`)
     }
-    const base = resolveInside(root, opts.path || '.')
+    const base = resolveToolPath(root, opts.path || '.')
     const context = Math.min(SEARCH_MAX_CONTEXT, Math.max(0, Math.floor(opts.context ?? 0)))
-    const ctx: SearchCtx = { root, matcher, inScope, context, matches: [], signal }
+    const ctx: SearchCtx = { root, scopeRoot: isOutside(root, base) ? base : root, matcher, inScope, context, matches: [], signal }
     const truncated = await walkSearch(ctx, base)
     return { ok: true, query, matches: ctx.matches, truncated }
   } catch (err) {
@@ -337,7 +353,7 @@ async function searchFiles(
 
 async function writeFileTool(root: string, rel: string, content: string): Promise<AgentWriteResult> {
   try {
-    const file = resolveInside(root, rel)
+    const file = resolveToolPath(root, rel)
     if (!rel || toRel(root, file) === '.') throw new AgentError('A file path is required.')
     let created = false
     try {
@@ -530,7 +546,7 @@ async function runTypescript(root: string, code: string, signal?: AbortSignal): 
   }
 }
 
-// Blueprints run in the main process, so expose the same confined primitives
+// Blueprints run in the main process, so expose the same file/tool primitives
 // that the renderer-backed agent loop reaches through IPC. Keeping one
 // implementation prevents the two WProvider modes from drifting apart.
 export {

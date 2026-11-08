@@ -1,5 +1,6 @@
 import type { AgentSearchMatch, AgentSearchOptions, Workspace } from '@shared/ipc'
 import { formatAgentDirectory, LIST_DIR_USAGE } from '@shared/agent-directory'
+import { agentFileAccessPrompt } from '@shared/agent-file-access'
 import {
   hasWProviderToolCallIntent,
   parseWProviderTextToolCall,
@@ -37,7 +38,7 @@ function asBoolean(value: unknown): boolean {
 }
 
 /** Instructions appended to a Blueprint participant's existing team prompt. */
-export function blueprintAgentModePrompt(workspace?: Workspace): string {
+export function blueprintAgentModePrompt(workspace?: Workspace, allowExternalFiles = true): string {
   const shellNote =
     process.platform === 'win32'
       ? 'Commands run in Windows PowerShell. Use PowerShell/Windows-friendly commands; && and || are translated when PowerShell 7 is unavailable.'
@@ -62,7 +63,8 @@ export function blueprintAgentModePrompt(workspace?: Workspace): string {
     '',
     ...(workspace
       ? [
-          `The selected local project is "${workspace.name}". All file paths are relative to its root.`,
+          `The selected local project is "${workspace.name}". Relative file paths use its root.`,
+          agentFileAccessPrompt(allowExternalFiles),
           'Read relevant content before changing it. File changes and commands run automatically.',
           shellNote
         ]

@@ -191,6 +191,14 @@ export function SettingsView(): JSX.Element {
         <header className="settings-content-header"><div><div className="settings-eyebrow">ASCORA ADE</div><h1>{t('settings.general')}</h1></div></header>
         <section className="settings-card">
           <label className="settings-toggle-row">
+            <span><strong>{t('settings.externalFiles')}</strong><small>{t('settings.externalFilesHint')}</small></span>
+            <input type="checkbox" className="agent-external-files" checked={s.allowExternalFiles}
+              onChange={event => s.setAllowExternalFiles(event.target.checked)} />
+          </label>
+          <p className="field-hint">{t('settings.externalFilesScope')}</p>
+        </section>
+        <section className="settings-card">
+          <label className="settings-toggle-row">
             <span><strong>{t('settings.agentStepLimit')}</strong><small>{t('settings.agentStepLimitHint')}</small></span>
             <input type="checkbox" className="agent-step-limit-enabled" checked={s.agentStepLimit.enabled}
               onChange={event => s.setAgentStepLimit({ enabled: event.target.checked })} />
