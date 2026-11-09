@@ -53,6 +53,7 @@ import {
   WPROVIDER_SERVICES,
   WPROVIDER_SERVICE_INFO,
   isSshCapableProvider,
+  normalizeGigachatAuthKey,
   normalizeOpenRouterApiKey
 } from '@shared/ipc'
 import {
@@ -871,6 +872,7 @@ function modelLabel(s: {
   ollamaModel: string
   unslothModel: string
   openRouterModel: string
+  gigachatModel: string
   codexModel: string
   copilotModel: string
   claudeModel: string
@@ -890,6 +892,8 @@ function modelLabel(s: {
       return s.unslothModel || 'Unsloth'
     case 'openrouter':
       return s.openRouterModel || 'openrouter/free'
+    case 'gigachat':
+      return s.gigachatModel || 'GigaChat-2'
     case 'codex':
       return s.codexModel || 'Codex'
     case 'copilot':
@@ -1083,6 +1087,8 @@ interface WorkspaceLlm {
   wproviderService: WProviderService
   /** Optional for compatibility with workspace/task snapshots from pre-1.3.0. */
   omnirouteModel?: string
+  /** Optional for compatibility with workspace/task snapshots from pre-GigaChat. */
+  gigachatModel?: string
 }
 
 /** Snapshot the active backend selection for persisting against a workspace. */
@@ -1113,6 +1119,7 @@ function snapshotLlm(s: {
   glmMode: GlmMode
   wproviderService: WProviderService
   omnirouteModel: string
+  gigachatModel: string
 }): WorkspaceLlm {
   return {
     lmStudioReasoning: s.lmStudioReasoning,
@@ -1140,7 +1147,8 @@ function snapshotLlm(s: {
     grokReasoning: s.grokReasoning,
     glmMode: s.glmMode,
     wproviderService: s.wproviderService,
-    omnirouteModel: s.omnirouteModel
+    omnirouteModel: s.omnirouteModel,
+    gigachatModel: s.gigachatModel
   }
 }
 
@@ -1338,6 +1346,11 @@ interface AppState {
   openRouterEnabled: boolean
   openRouterApiKey: string
   openRouterModel: string
+  // GigaChat (Sber)
+  gigachatClientId: string
+  gigachatScope: string
+  gigachatAuthKey: string
+  gigachatModel: string
   // Codex CLI
   codexPath: string
   codexModel: string
@@ -1559,6 +1572,11 @@ interface AppState {
   setOpenRouterEnabled: (enabled: boolean) => Promise<void>
   setOpenRouterApiKey: (apiKey: string) => Promise<void>
   setOpenRouterModel: (m: string) => void
+  setGigachatClientId: (id: string) => void
+  setGigachatScope: (scope: string) => void
+  setGigachatAuthKey: (key: string) => void
+  setGigachatModel: (m: string) => void
+  setGigachatConnection: (clientId: string, scope: string, authKey: string) => Promise<void>
   setCodexPath: (path: string) => Promise<void>
   setCodexModel: (m: string) => void
   setCodexSandbox: (s: CodexSandbox) => void
@@ -1798,6 +1816,7 @@ export const useApp = create<AppState>((set, get) => {
         ollamaModel: saved.ollamaModel ?? DEFAULT_LLM_CONFIG.ollamaModel,
         unslothModel: saved.unslothModel ?? DEFAULT_LLM_CONFIG.unslothModel,
         openRouterModel: saved.openRouterModel ?? DEFAULT_LLM_CONFIG.openRouterModel,
+        gigachatModel: saved.gigachatModel ?? DEFAULT_LLM_CONFIG.gigachatModel,
         codexModel: saved.codexModel,
         codexSandbox: saved.codexSandbox,
         codexReasoning: saved.codexReasoning,
@@ -1835,6 +1854,7 @@ export const useApp = create<AppState>((set, get) => {
       ollamaModel: get().ollamaModel,
       unslothModel: get().unslothModel,
       openRouterModel: get().openRouterModel,
+      gigachatModel: get().gigachatModel,
       codexModel: get().codexModel,
       codexSandbox: get().codexSandbox,
       codexReasoning: get().codexReasoning,
@@ -1929,6 +1949,10 @@ export const useApp = create<AppState>((set, get) => {
   openRouterEnabled: DEFAULT_LLM_CONFIG.openRouterEnabled,
   openRouterApiKey: DEFAULT_LLM_CONFIG.openRouterApiKey,
   openRouterModel: DEFAULT_LLM_CONFIG.openRouterModel,
+  gigachatClientId: DEFAULT_LLM_CONFIG.gigachatClientId,
+  gigachatScope: DEFAULT_LLM_CONFIG.gigachatScope,
+  gigachatAuthKey: DEFAULT_LLM_CONFIG.gigachatAuthKey,
+  gigachatModel: DEFAULT_LLM_CONFIG.gigachatModel,
   codexPath: DEFAULT_LLM_CONFIG.codexPath,
   codexModel: DEFAULT_LLM_CONFIG.codexModel,
   codexSandbox: DEFAULT_LLM_CONFIG.codexSandbox,
@@ -2138,6 +2162,10 @@ export const useApp = create<AppState>((set, get) => {
       openRouterEnabled: cfg.openRouterEnabled,
       openRouterApiKey: cfg.openRouterApiKey,
       openRouterModel: cfg.openRouterModel,
+      gigachatClientId: cfg.gigachatClientId ?? DEFAULT_LLM_CONFIG.gigachatClientId,
+      gigachatScope: cfg.gigachatScope ?? DEFAULT_LLM_CONFIG.gigachatScope,
+      gigachatAuthKey: cfg.gigachatAuthKey ?? DEFAULT_LLM_CONFIG.gigachatAuthKey,
+      gigachatModel: cfg.gigachatModel ?? DEFAULT_LLM_CONFIG.gigachatModel,
       codexPath: cfg.codexPath,
       codexModel: cfg.codexModel,
       codexSandbox: cfg.codexSandbox,
@@ -3165,7 +3193,7 @@ export const useApp = create<AppState>((set, get) => {
 
   async refreshModels() {
     const provider = get().provider
-    if (!['lmstudio', 'ollama', 'unsloth', 'openrouter', 'omniroute'].includes(provider)) return
+    if (!['lmstudio', 'ollama', 'unsloth', 'openrouter', 'omniroute', 'gigachat'].includes(provider)) return
     const request = ++modelRefreshRequest
     set({ connection: 'connecting', connectionError: undefined, models: [] })
     const res = await api.llm.listModels(provider).catch((error: unknown) => ({ ok: false as const, error: String(error), models: [] }))
@@ -3174,6 +3202,7 @@ export const useApp = create<AppState>((set, get) => {
     const isOllama = provider === 'ollama'
     const isUnsloth = provider === 'unsloth'
     const isOmniroute = provider === 'omniroute'
+    const isGigachat = provider === 'gigachat'
     if (res.ok) {
       const models = (res.models ?? []).map((m) => m.id)
       const configuredModel = isUnsloth ? get().unslothModel : isOpenRouter
@@ -3182,7 +3211,9 @@ export const useApp = create<AppState>((set, get) => {
           ? get().ollamaModel
           : isOmniroute
             ? get().omnirouteModel
-            : get().model
+            : isGigachat
+              ? get().gigachatModel
+              : get().model
       const selected =
         (configuredModel && models.includes(configuredModel) ? configuredModel : '') ||
         (isOmniroute ? models.find((model) => model === 'auto') : '') ||
@@ -3196,6 +3227,8 @@ export const useApp = create<AppState>((set, get) => {
             ? { models, connection: 'connected', ollamaModel: selected, ollamaReachable: true }
             : isOmniroute
               ? { models, connection: 'connected', omnirouteModel: selected }
+              : isGigachat
+                ? { models, connection: 'connected', gigachatModel: selected }
               : { models, connection: 'connected', model: selected, lmStudioReachable: true,
                   lmStudioReasoning: selected === configuredModel ? get().lmStudioReasoning : '' }
       )
@@ -3207,6 +3240,8 @@ export const useApp = create<AppState>((set, get) => {
               ? { ollamaModel: selected }
               : isOmniroute
                 ? { omnirouteModel: selected }
+                : isGigachat
+                  ? { gigachatModel: selected }
                 : { model: selected, lmStudioReasoning: get().lmStudioReasoning }
         )
         get().persistWorkspaceLlm()
@@ -3326,6 +3361,40 @@ export const useApp = create<AppState>((set, get) => {
     set({ openRouterModel })
     void api.llm.setConfig({ openRouterModel })
     get().persistWorkspaceLlm()
+  },
+
+  setGigachatClientId(gigachatClientId) {
+    set({ gigachatClientId })
+    void api.llm.setConfig({ gigachatClientId })
+  },
+
+  setGigachatScope(gigachatScope) {
+    set({ gigachatScope })
+    void api.llm.setConfig({ gigachatScope })
+  },
+
+  async setGigachatAuthKey(authKey) {
+    const gigachatAuthKey = normalizeGigachatAuthKey(authKey)
+    set({ gigachatAuthKey })
+    await api.llm.setConfig({ gigachatAuthKey })
+    if (get().provider === 'gigachat') await get().refreshModels()
+  },
+
+  setGigachatModel(gigachatModel) {
+    set({ gigachatModel })
+    void api.llm.setConfig({ gigachatModel })
+    get().persistWorkspaceLlm()
+  },
+
+  async setGigachatConnection(clientId, scope, authKey) {
+    const patch = {
+      gigachatClientId: clientId.trim(),
+      gigachatScope: scope.trim(),
+      gigachatAuthKey: normalizeGigachatAuthKey(authKey)
+    }
+    await api.llm.setConfig(patch)
+    set(patch)
+    // The settings form refreshes this provider independently of the chat.
   },
 
   async setCodexPath(path) {
@@ -4005,6 +4074,7 @@ export const useApp = create<AppState>((set, get) => {
     const ollamaModel = get().ollamaModel
     const unslothModel = get().unslothModel
     const orModel = get().openRouterModel
+    const gigachatModel = get().gigachatModel
     const codexModel = get().codexModel
     const codexSandbox = get().codexSandbox
     const codexReasoning = get().codexReasoning
@@ -4464,6 +4534,7 @@ export const useApp = create<AppState>((set, get) => {
       const isUnsloth = agentProvider === 'unsloth'
       const isWProvider = agentProvider === 'wprovider'
       const isOmniroute = agentProvider === 'omniroute'
+      const isGigachat = agentProvider === 'gigachat'
       let omnirouteContinues = 0
       const autoContinueOmniroute = async (messageId: string): Promise<boolean> => {
         if (!isOmniroute || omnirouteContinues >= OMNIROUTE_MAX_CONTINUES || aborted()) return false
@@ -4699,7 +4770,9 @@ export const useApp = create<AppState>((set, get) => {
                     ? ollamaModel
                     : isOmniroute
                       ? omnirouteModel
-                      : lmModel,
+                      : isGigachat
+                        ? gigachatModel
+                        : lmModel,
                 messages,
                 tools: computerSession ? [...TOOLS, COMPUTER_TOOL] : TOOLS
               },
@@ -4757,7 +4830,9 @@ export const useApp = create<AppState>((set, get) => {
                   ? 'ollama'
                   : isOmniroute
                     ? 'omniroute'
-                    : 'lmstudio',
+                    : isGigachat
+                      ? 'gigachat'
+                      : 'lmstudio',
             model: isUnsloth ? unslothModel || 'Unsloth' : isWProvider
               ? `${wproviderService}-web`
               : isOpenRouter
@@ -4766,7 +4841,9 @@ export const useApp = create<AppState>((set, get) => {
                   ? ollamaModel || 'ollama'
                   : isOmniroute
                     ? omnirouteModel || 'auto'
-                    : lmModel || 'local-model',
+                    : isGigachat
+                      ? gigachatModel || 'GigaChat-2'
+                      : lmModel || 'local-model',
             inputTokens: usage.inputTokens,
             outputTokens: usage.outputTokens,
             userMessages: step === 0 ? 1 : 0,
@@ -4818,11 +4895,11 @@ export const useApp = create<AppState>((set, get) => {
           if (parsed) {
             calls = [parsed.call]
             displayText = result.content.replace(parsed.block, '').trim()
-          } else if (isWProvider && hasWProviderToolCallIntent(result.content)) {
-            // Web models sometimes invoke a site-native/unsupported tool (for
-            // example a provider-only artifact tool) or emit truncated JSON. Do not
-            // persist that potentially enormous payload as the final answer;
-            // send a compact protocol correction and let the next turn retry.
+          } else if ((isWProvider || isGigachat) && hasWProviderToolCallIntent(result.content)) {
+            // Web models and GigaChat sometimes invoke a site-native/unsupported
+            // tool (for example a provider-only artifact tool) or emit truncated
+            // JSON. Do not persist that potentially enormous payload as the final
+            // answer; send a compact protocol correction and let the next turn retry.
             invalidTextToolCall = true
             displayText = ''
           }

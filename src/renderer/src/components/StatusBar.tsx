@@ -107,6 +107,7 @@ export function StatusBar(): JSX.Element {
   const wproviderChecking = useApp((s) => s.wproviderChecking)
   const omnirouteModel = useApp((s) => s.omnirouteModel)
   const omnirouteStatus = useApp((s) => s.omnirouteStatus)
+  const gigachatModel = useApp((s) => s.gigachatModel)
   const openFiles = useApp((s) => s.openFiles)
   const activeFile = useApp((s) => s.activeFile)
   const setSettingsOpen = useApp((s) => s.setSettingsOpen)
@@ -148,6 +149,7 @@ export function StatusBar(): JSX.Element {
   const isOpenRouter = provider === 'openrouter'
   const isOllama = provider === 'ollama'
   const isOmniroute = provider === 'omniroute'
+  const isGigachat = provider === 'gigachat'
   const connectionStatusLabel = (state: string): string => {
     if (state === 'connecting') return t('status.connecting')
     if (state === 'connected') return t('status.connected')
@@ -308,6 +310,11 @@ export function StatusBar(): JSX.Element {
           : `OpenRouter: ${connectionStatusLabel(connection)}`
     } else if (provider === 'unsloth') {
       label = `Unsloth: ${connectionStatusLabel(connection)}${models.length ? ` · ${modelCount(models.length)}` : ''}`
+    } else if (isGigachat) {
+      label =
+        connection === 'connected' && models.length > 0
+          ? `GigaChat: ${t('status.connected')} - ${modelCount(models.length)}`
+          : `GigaChat: ${connectionStatusLabel(connection)}`
     } else if (isOllama) {
       label =
         connection === 'connected' && models.length > 0
@@ -336,6 +343,8 @@ export function StatusBar(): JSX.Element {
           ? openRouterModel || 'openrouter/free'
         : isOllama
           ? ollamaModel || 'ollama'
+        : isGigachat
+          ? gigachatModel || 'GigaChat-2'
         : model || t('status.noModel')
 
   const accessLabel = isCodex

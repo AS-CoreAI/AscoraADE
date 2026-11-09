@@ -97,7 +97,7 @@ function ProviderPage({ provider }: { provider: LlmProvider }): JSX.Element {
     <header className="settings-content-header">
       <div><div className="settings-eyebrow">{t('settings.providersEyebrow')}</div><h1>{name}</h1>
         <p>{t('settings.providerSubtitle')}</p></div>
-      <button className="btn" disabled={s.provider === provider || (!!s.activeSsh && !isSshCapableProvider(provider)) || (provider === 'unsloth' && !s.unslothApiKey.trim()) || (provider === 'openrouter' && (!s.openRouterEnabled || !s.openRouterApiKey.trim()))}
+      <button className="btn" disabled={s.provider === provider || (!!s.activeSsh && !isSshCapableProvider(provider)) || (provider === 'unsloth' && !s.unslothApiKey.trim()) || (provider === 'openrouter' && (!s.openRouterEnabled || !s.openRouterApiKey.trim())) || (provider === 'gigachat' && !s.gigachatAuthKey.trim())}
         onClick={() => void s.setProvider(provider).catch((error) => setMessage(String(error)))}>
         {s.provider === provider ? t('settings.activeProvider') : t('settings.useInChat')}
       </button>

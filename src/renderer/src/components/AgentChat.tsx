@@ -1116,6 +1116,7 @@ function GitBranchBadge(): JSX.Element | null {
   const ollamaModel = useApp((s) => s.ollamaModel)
   const unslothModel = useApp((s) => s.unslothModel)
   const openRouterModel = useApp((s) => s.openRouterModel)
+  const gigachatModel = useApp((s) => s.gigachatModel)
   const appLanguage = useApp((s) => s.appLanguage)
   const t = (key: TranslationKey, values?: Record<string, string | number>): string =>
     tr(appLanguage, key, values)
@@ -1259,7 +1260,7 @@ function GitBranchBadge(): JSX.Element | null {
       const result = await api.llm.chat(
         crypto.randomUUID(),
         {
-          model: provider === 'unsloth' ? unslothModel : provider === 'openrouter' ? openRouterModel : provider === 'ollama' ? ollamaModel : model,
+          model: provider === 'unsloth' ? unslothModel : provider === 'openrouter' ? openRouterModel : provider === 'gigachat' ? gigachatModel : provider === 'ollama' ? ollamaModel : model,
           temperature: 0.2,
           messages: [
             {

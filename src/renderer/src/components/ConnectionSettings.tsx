@@ -36,6 +36,8 @@ import {
   GROK_PERMISSION_MODES,
   GROK_REASONING_LEVELS,
   GLM_MODES,
+  GIGACHAT_MODELS,
+  GIGACHAT_SCOPES,
   normalizeOpenRouterApiKey,
   type CodexReasoning,
   type CodexSandbox,
@@ -134,6 +136,7 @@ function useCliAuth(
 function useProviderModels(provider: LlmProvider) {
   const configKey = useApp((s) => provider === 'openrouter' ? `${s.openRouterEnabled}:${s.openRouterApiKey}`
     : provider === 'unsloth' ? `${s.unslothBaseUrl}:${s.unslothApiKey}`
+    : provider === 'gigachat' ? `${s.gigachatClientId}:${s.gigachatScope}:${s.gigachatAuthKey}`
     : provider === 'lmstudio' ? s.baseUrl : provider === 'ollama' ? s.ollamaBaseUrl : s.omnirouteStatus.state)
   const request = useRef(0)
   const [models, setModels] = useState<string[]>([])
@@ -141,7 +144,7 @@ function useProviderModels(provider: LlmProvider) {
   const [connectionError, setConnectionError] = useState<string>()
   const refreshModels = async (): Promise<void> => {
     const id = ++request.current
-    if (provider === 'unsloth' && !useApp.getState().unslothApiKey) {
+    if ((provider === 'unsloth' && !useApp.getState().unslothApiKey) || (provider === 'gigachat' && !useApp.getState().gigachatAuthKey)) {
       setModels([])
       setConnection('unknown')
       setConnectionError(undefined)
@@ -389,6 +392,90 @@ function UnslothPanel(): JSX.Element {
       <span className="field-hint">{t('settings.unslothModelsHint')}</span>
     </label>
     <button className="btn" style={{ alignSelf: 'flex-start' }} disabled={!apiKey || saving || connection === 'connecting'} onClick={() => void refreshModels()}>{t('settings.refreshModels')}</button>
+  </div>
+}
+
+function GigaChatPanel(): JSX.Element {
+  const t = useT()
+  const clientId = useApp((s) => s.gigachatClientId)
+  const scope = useApp((s) => s.gigachatScope)
+  const authKey = useApp((s) => s.gigachatAuthKey)
+  const model = useApp((s) => s.gigachatModel)
+  const setModel = useApp((s) => s.setGigachatModel)
+  const setConnection = useApp((s) => s.setGigachatConnection)
+  const { models, connection, connectionError, refreshModels } = useProviderModels('gigachat')
+  const [clientIdInput, setClientIdInput] = useState(clientId)
+  const [scopeInput, setScopeInput] = useState(scope)
+  const [keyInput, setKeyInput] = useState(authKey)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  const options = models.length ? models : [...GIGACHAT_MODELS]
+
+  useEffect(() => {
+    if (connection === 'connected' && !models.includes(model)) setModel(models[0] ?? '')
+  }, [models, connection, model, setModel])
+
+  const save = async (): Promise<void> => {
+    setSaving(true)
+    setError('')
+    try {
+      const changed = clientIdInput !== clientId || scopeInput !== scope || keyInput !== authKey
+      await setConnection(clientIdInput, scopeInput, keyInput)
+      setClientIdInput(useApp.getState().gigachatClientId)
+      setScopeInput(useApp.getState().gigachatScope)
+      setKeyInput(useApp.getState().gigachatAuthKey)
+      // Changed saved settings trigger the hook's refresh automatically.
+      if (!changed) await refreshModels()
+    } catch (err) { setError(err instanceof Error ? err.message : String(err)) }
+    finally { setSaving(false) }
+  }
+
+  return <div className="gigachat-settings provider-settings-form">
+    <p className="field-hint">{t('settings.gigachatHint')}</p>
+    <label className="field">
+      <span className="field-label">{t('settings.gigachatClientId')}</span>
+      <input className="text-input" value={clientIdInput} autoComplete="off" spellCheck={false}
+        placeholder="00000000-0000-0000-0000-000000000000" onChange={(event) => setClientIdInput(event.target.value)}
+        onKeyDown={(event) => { if (event.key === 'Enter' && !saving) void save() }} />
+    </label>
+    <label className="field">
+      <span className="field-label">{t('settings.gigachatScope')}</span>
+      <input className="text-input" value={scopeInput} list="gigachat-scopes" spellCheck={false}
+        placeholder={DEFAULT_LLM_CONFIG.gigachatScope} onChange={(event) => setScopeInput(event.target.value)}
+        onKeyDown={(event) => { if (event.key === 'Enter' && !saving) void save() }} />
+      <datalist id="gigachat-scopes">{GIGACHAT_SCOPES.map((value) => <option key={value} value={value} />)}</datalist>
+      <span className="field-hint">{t('settings.gigachatScopeHint')}</span>
+    </label>
+    <label className="field">
+      <span className="field-label">{t('settings.gigachatAuthKey')}</span>
+      <input className="text-input" type="password" value={keyInput} autoComplete="off" spellCheck={false}
+        placeholder="Basic …" onChange={(event) => setKeyInput(event.target.value)}
+        onKeyDown={(event) => { if (event.key === 'Enter' && !saving) void save() }} />
+      <span className="field-hint">{t('settings.gigachatAuthKeyHint')}</span>
+    </label>
+    <div className="field-row">
+      <button className="btn" disabled={saving || connection === 'connecting'} onClick={() => void save()}>
+        {saving || connection === 'connecting' ? t('common.testing') : t('settings.saveAndTest')}
+      </button>
+      <button className="btn" onClick={() => void api.live.openExternal('https://developers.sber.ru/studio/workspaces/')}>{t('settings.gigachatGuide')}</button>
+    </div>
+    {error && <p className="settings-error" role="alert">{error}</p>}
+    <div className={`conn-line ${connection}`} role="status">
+      {connection === 'connected' && `✓ GigaChat: ${t('settings.connectedModels', { count: models.length })}`}
+      {connection === 'connecting' && t('settings.connecting')}
+      {connection === 'error' && `GigaChat: ${connectionError ?? t('settings.connectionFailed')}`}
+      {connection === 'unknown' && t('settings.gigachatKeyRequired')}
+    </div>
+    <label className="field">
+      <span className="field-label">{t('common.model')}</span>
+      <select className="text-input" value={options.includes(model) ? model : options[0]}
+        disabled={!options.length} onChange={(event) => setModel(event.target.value)}>
+        {options.map((id) => <option key={id} value={id}>{id}</option>)}
+      </select>
+      <span className="field-hint">{t('settings.gigachatModelsHint')}</span>
+    </label>
+    <button className="btn" style={{ alignSelf: 'flex-start' }} disabled={!authKey || saving || connection === 'connecting'} onClick={() => void refreshModels()}>{t('settings.refreshModels')}</button>
   </div>
 }
 
@@ -1804,6 +1891,7 @@ export function ConnectionSettings({ provider }: { provider: LlmProvider }): JSX
         : provider === 'antigravity' ? <AntigravityPanel />
         : provider === 'wprovider' ? <WProviderPanel />
         : provider === 'omniroute' ? <OmniRoutePanel />
+        : provider === 'gigachat' ? <GigaChatPanel />
         : provider === 'openrouter' ? <OpenRouterPanel /> : <LmStudioPanel />}
     </div>
   )

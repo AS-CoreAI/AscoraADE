@@ -250,3 +250,78 @@ test('IPC streams progress before output, clears it on every exit and ignores la
     assert.equal(sent.length, count)
   }
 })
+
+test('GigaChat speaks the functions/function_call protocol and parses function_call deltas', async () => {
+  const requests = []
+  const fetchStub = async (url, init) => {
+    requests.push({ url: String(url), body: typeof init.body === 'string' && init.body.startsWith('{') ? JSON.parse(init.body) : null })
+    if (String(url).includes('/oauth')) {
+      return new Response(JSON.stringify({ access_token: 'token', expires_at: Date.now() + 3600_000 }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } })
+    }
+    return new Response(
+      frame({ function_call: { name: 'list_dir', arguments: { path: '.' } } }, 'function_call') + done,
+      { status: 200, headers: { 'Content-Type': 'text/event-stream' } })
+  }
+  const { LmStudioClient } = loadTypeScript('src/main/llm/client.ts', { undici: { ...undici, fetch: fetchStub } })
+  const instance = new LmStudioClient({ ...DEFAULT_LLM_CONFIG, provider: 'gigachat', gigachatAuthKey: 'auth-key', gigachatModel: 'GigaChat-2-Pro' })
+  const tools = [{ type: 'function', function: { name: 'list_dir', description: 'List a directory', parameters: { type: 'object', properties: {} } } }]
+  const messages = [
+    { role: 'user', content: 'Look around' },
+    { role: 'assistant', content: '', tool_calls: [{ id: 'call_1', type: 'function', function: { name: 'list_dir', arguments: '{"path":"."}' } }] },
+    { role: 'tool', tool_call_id: 'call_1', content: 'a.txt' }
+  ]
+  const stream = instance.streamChat({ messages, tools })
+  let result
+  for (;;) {
+    const next = await stream.next()
+    if (next.done) { result = next.value; break }
+  }
+  const chat = requests.find(r => r.url.endsWith('/chat/completions'))
+  assert.deepEqual(chat.body.functions, [{ name: 'list_dir', description: 'List a directory', parameters: { type: 'object', properties: {} } }])
+  assert.equal(chat.body.function_call, 'auto')
+  assert.equal(chat.body.tools, undefined)
+  assert.equal(chat.body.stream, true)
+  assert.equal(chat.body.stream_options, undefined)
+  assert.deepEqual(chat.body.messages, [
+    { role: 'user', content: 'Look around' },
+    { role: 'assistant', content: '', function_call: { name: 'list_dir', arguments: { path: '.' } } },
+    { role: 'function', name: 'list_dir', content: 'a.txt' }
+  ])
+  assert.deepEqual(result.toolCalls, [{ id: '', name: 'list_dir', arguments: '{"path":"."}' }])
+  assert.equal(result.finishReason, 'function_call')
+})
+
+test('GigaChat retries without functions when the model rejects them', async () => {
+  let chatTries = 0
+  const payloads = []
+  const fetchStub = async (url, init) => {
+    if (String(url).includes('/oauth')) {
+      return new Response(JSON.stringify({ access_token: 'token', expires_at: Date.now() + 3600_000 }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } })
+    }
+    payloads.push(JSON.parse(init.body))
+    chatTries++
+    if (chatTries === 1) {
+      return new Response(JSON.stringify({ status: 422, message: 'Invalid params: requested model does not support functions' }),
+        { status: 422, headers: { 'Content-Type': 'application/json' } })
+    }
+    return new Response(frame({ content: 'Работаю без функций' }, 'stop') + done,
+      { status: 200, headers: { 'Content-Type': 'text/event-stream' } })
+  }
+  const { LmStudioClient } = loadTypeScript('src/main/llm/client.ts', { undici: { ...undici, fetch: fetchStub } })
+  const instance = new LmStudioClient({ ...DEFAULT_LLM_CONFIG, provider: 'gigachat', gigachatAuthKey: 'auth-key', gigachatModel: 'GigaChat-2' })
+  const tools = [{ type: 'function', function: { name: 'list_dir', description: 'List a directory', parameters: { type: 'object', properties: {} } } }]
+  const stream = instance.streamChat({ messages: [{ role: 'user', content: 'hi' }], tools })
+  let content = ''
+  for (;;) {
+    const next = await stream.next()
+    if (next.done) break
+    content += next.value
+  }
+  assert.equal(content, 'Работаю без функций')
+  assert.equal(chatTries, 2)
+  assert.ok(payloads[0].functions)
+  assert.equal(payloads[1].functions, undefined)
+  assert.equal(payloads[1].function_call, undefined)
+})

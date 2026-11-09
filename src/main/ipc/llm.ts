@@ -3,6 +3,7 @@ import {
   IPC,
   DEFAULT_LLM_CONFIG,
   WPROVIDER_SERVICES,
+  normalizeGigachatAuthKey,
   normalizeOpenRouterApiKey,
   type ChatParams,
   type ChatResult,
@@ -64,6 +65,13 @@ export function readConfig(): LlmConfig {
     openRouterApiKey,
     openRouterModel:
       store.getSetting<string>('openrouter.model') ?? DEFAULT_LLM_CONFIG.openRouterModel,
+    gigachatClientId:
+      store.getSetting<string>('gigachat.clientId') ?? DEFAULT_LLM_CONFIG.gigachatClientId,
+    gigachatScope: store.getSetting<string>('gigachat.scope') ?? DEFAULT_LLM_CONFIG.gigachatScope,
+    gigachatAuthKey: normalizeGigachatAuthKey(
+      store.getSetting<string>('gigachat.authKey') ?? DEFAULT_LLM_CONFIG.gigachatAuthKey
+    ),
+    gigachatModel: store.getSetting<string>('gigachat.model') ?? DEFAULT_LLM_CONFIG.gigachatModel,
     codexPath: store.getSetting<string>('codex.path') ?? DEFAULT_LLM_CONFIG.codexPath,
     codexModel: store.getSetting<string>('codex.model') ?? DEFAULT_LLM_CONFIG.codexModel,
     codexSandbox: store.getSetting<CodexSandbox>('codex.sandbox') ?? DEFAULT_LLM_CONFIG.codexSandbox,
@@ -161,6 +169,18 @@ export function registerLlmHandlers(): void {
     if (typeof patch.openRouterModel === 'string') {
       store.setSetting('openrouter.model', patch.openRouterModel.trim())
     }
+    if (typeof patch.gigachatClientId === 'string') {
+      store.setSetting('gigachat.clientId', patch.gigachatClientId.trim())
+    }
+    if (typeof patch.gigachatScope === 'string') {
+      store.setSetting('gigachat.scope', patch.gigachatScope.trim())
+    }
+    if (typeof patch.gigachatAuthKey === 'string') {
+      store.setSetting('gigachat.authKey', normalizeGigachatAuthKey(patch.gigachatAuthKey))
+    }
+    if (typeof patch.gigachatModel === 'string') {
+      store.setSetting('gigachat.model', patch.gigachatModel.trim())
+    }
     if (typeof patch.codexPath === 'string') store.setSetting('codex.path', patch.codexPath.trim())
     if (typeof patch.codexModel === 'string') store.setSetting('codex.model', patch.codexModel.trim())
     if (typeof patch.codexSandbox === 'string') store.setSetting('codex.sandbox', patch.codexSandbox)
@@ -197,7 +217,7 @@ export function registerLlmHandlers(): void {
 
   ipcMain.handle(IPC.llm.listModels, async (_event, provider?: LlmProvider): Promise<ListModelsResult> => {
     try {
-      if (provider && !['lmstudio', 'ollama', 'unsloth', 'openrouter', 'omniroute'].includes(provider)) throw new Error('Unsupported model provider')
+      if (provider && !['lmstudio', 'ollama', 'unsloth', 'openrouter', 'omniroute', 'gigachat'].includes(provider)) throw new Error('Unsupported model provider')
       const probe = provider ? new LmStudioClient({ ...readConfig(), provider }) : getClient()
       const models = await probe.listModels(AbortSignal.timeout(15_000))
       return { ok: true, models }

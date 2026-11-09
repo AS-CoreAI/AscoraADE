@@ -1,16 +1,22 @@
 import {
+  GIGACHAT_BASE_URL,
+  GIGACHAT_OAUTH_URL,
+  normalizeGigachatAuthKey,
   normalizeOpenRouterApiKey,
   type ChatParams,
   type LlmConfig,
+  type LlmMessage,
   type LlmModel,
   type LmStudioModelInfo,
   type LmStudioReasoning,
   type ToolCall,
+  type ToolDef,
   type TokenUsage
 } from '@shared/ipc'
 import { normalizeUnslothApiKey, normalizeUnslothBaseUrl } from '@shared/unsloth'
 import { Agent, fetch as undiciFetch, type RequestInit as ChatRequestInit, type Response as ChatResponse } from 'undici'
 import type { ComputerSupport } from '@shared/computer'
+import { randomUUID } from 'node:crypto'
 
 /** What `streamChat` resolves to once the stream ends (its generator return). */
 export interface StreamReturn {
@@ -37,9 +43,77 @@ const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1'
 const localChatDispatcher = new Agent({ headersTimeout: 0, bodyTimeout: 0 })
 const chatDispatcher = new Agent({ headersTimeout: 30 * 60_000, bodyTimeout: 30 * 60_000 })
 
+// GigaChat (Sber) serves both its OAuth endpoint and its OpenAI-compatible API
+// behind the Russian Trusted Root CA, which is not part of Node's default trust
+// store. Verification is relaxed for these two Sber hosts only.
+const gigachatDispatcher = new Agent({
+  connect: { rejectUnauthorized: false },
+  headersTimeout: 30 * 60_000,
+  bodyTimeout: 30 * 60_000
+})
+
+function gigachatFetch(url: string, init: ChatRequestInit): Promise<ChatResponse> {
+  return undiciFetch(url, { ...init, dispatcher: gigachatDispatcher })
+}
+
+/** Cached GigaChat OAuth access token, keyed by the credentials it was minted for. */
+let gigachatTokenCache: { key: string; token: string; expiresAt: number } | null = null
+
 function chatFetch(url: string, init: ChatRequestInit, provider: LlmConfig['provider']): Promise<ChatResponse> {
+  if (provider === 'gigachat') return gigachatFetch(url, init)
   const local = provider === 'lmstudio' || provider === 'ollama' || provider === 'unsloth'
   return undiciFetch(url, { ...init, dispatcher: local ? localChatDispatcher : chatDispatcher })
+}
+
+/** Parse an OpenAI-style JSON tool-call argument string into an object (or {}). */
+function parseArguments(value: string): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(value)
+    return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : {}
+  } catch {
+    return {}
+  }
+}
+
+/** GigaChat's /v1 API predates OpenAI's tool protocol: it takes `functions` and
+ *  answers with `message.function_call` (arguments as an object). Translate the
+ *  shared OpenAI-shaped tool defs into that contract. */
+function gigachatFunctions(tools: ToolDef[]): Record<string, unknown>[] {
+  return tools.map((tool) => ({
+    name: tool.function.name,
+    description: tool.function.description,
+    parameters: tool.function.parameters
+  }))
+}
+
+/** Translate the shared OpenAI-shaped history into GigaChat's message shape:
+ *  an assistant tool call becomes `function_call`, and a `tool` result becomes a
+ *  `function` message named after the call it answers. */
+function gigachatMessages(messages: LlmMessage[]): Record<string, unknown>[] {
+  const namesById = new Map<string, string>()
+  for (const message of messages) {
+    for (const call of message.tool_calls ?? []) {
+      if (call.id) namesById.set(call.id, call.function.name)
+    }
+  }
+  return messages.map((message) => {
+    if (message.role === 'assistant' && message.tool_calls?.length) {
+      const call = message.tool_calls[0]
+      return {
+        role: 'assistant',
+        content: message.content,
+        function_call: { name: call.function.name, arguments: parseArguments(call.function.arguments) }
+      }
+    }
+    if (message.role === 'tool') {
+      return {
+        role: 'function',
+        name: namesById.get(message.tool_call_id ?? '') ?? '',
+        content: message.content
+      }
+    }
+    return { role: message.role, content: message.content }
+  })
 }
 
 /** Some templates put a leading <think> block in content instead of a field. */
@@ -123,6 +197,7 @@ function isAbort(err: unknown): boolean {
 
 function providerName(config: LlmConfig): string {
   if (config.provider === 'unsloth') return 'Unsloth'
+  if (config.provider === 'gigachat') return 'GigaChat'
   return config.provider === 'openrouter'
     ? 'OpenRouter'
     : config.provider === 'ollama'
@@ -239,6 +314,7 @@ export class LmStudioClient {
 
   get baseUrl(): string {
     if (this.config.provider === 'unsloth') return normalizeUnslothBaseUrl(this.config.unslothBaseUrl)
+    if (this.config.provider === 'gigachat') return GIGACHAT_BASE_URL
     if (this.config.provider === 'openrouter') return OPENROUTER_BASE_URL
     if (this.config.provider === 'ollama') return stripTrailingSlash(this.config.ollamaBaseUrl)
     if (this.config.provider === 'omniroute') return stripTrailingSlash(this.config.omnirouteBaseUrl)
@@ -249,10 +325,13 @@ export class LmStudioClient {
     return providerName(this.config)
   }
 
-  private headers(): Record<string, string> {
+  private headers(token?: string): Record<string, string> {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' }
     if (this.config.provider === 'unsloth') {
       headers.Authorization = `Bearer ${normalizeUnslothApiKey(this.config.unslothApiKey)}`
+    }
+    if (this.config.provider === 'gigachat' && token) {
+      headers.Authorization = `Bearer ${token}`
     }
     if (this.config.provider === 'openrouter') {
       const apiKey = normalizeOpenRouterApiKey(this.config.openRouterApiKey)
@@ -267,10 +346,48 @@ export class LmStudioClient {
     if (this.config.provider === 'unsloth' && !normalizeUnslothApiKey(this.config.unslothApiKey)) {
       throw new LmStudioError('Unsloth requires an API key. Create one in Unsloth Settings → API and save it in the Unsloth connection settings.', 'connection')
     }
+    if (this.config.provider === 'gigachat' && !normalizeGigachatAuthKey(this.config.gigachatAuthKey)) {
+      throw new LmStudioError('GigaChat requires an authorization key. Copy the "Authorization key" from the GigaChat developer cabinet and save it in the GigaChat connection settings.', 'connection')
+    }
     if (this.config.provider !== 'openrouter') return
     if (!this.config.openRouterEnabled || !normalizeOpenRouterApiKey(this.config.openRouterApiKey)) {
       throw new LmStudioError('OpenRouter is not enabled or its API key is empty.', 'connection')
     }
+  }
+
+  /** Mint (or reuse) a GigaChat OAuth access token using the Basic-auth flow. */
+  private async ensureGigachatToken(signal?: AbortSignal): Promise<string> {
+    const authKey = normalizeGigachatAuthKey(this.config.gigachatAuthKey)
+    const scope = this.config.gigachatScope.trim() || 'GIGACHAT_API_PERS'
+    const key = `${authKey}|${scope}`
+    const cached = gigachatTokenCache
+    if (cached && cached.key === key && cached.expiresAt - Date.now() > 30_000) return cached.token
+    let res: ChatResponse
+    try {
+      res = await gigachatFetch(GIGACHAT_OAUTH_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Accept: 'application/json',
+          RqUID: randomUUID(),
+          Authorization: `Basic ${authKey}`
+        },
+        body: new URLSearchParams({ scope }).toString(),
+        signal
+      })
+    } catch (err) {
+      throw connectionError('GigaChat', GIGACHAT_OAUTH_URL, err, signal)
+    }
+    if (!res.ok) throw await httpError('GigaChat', GIGACHAT_OAUTH_URL, res)
+    const json = (await res.json().catch(() => ({}))) as { access_token?: string; expires_at?: number }
+    if (!json.access_token) {
+      throw new LmStudioError('GigaChat did not return an access token. Check the authorization key and scope, then try again.', 'parse')
+    }
+    const expiresAt = typeof json.expires_at === 'number' && json.expires_at > Date.now()
+      ? json.expires_at
+      : Date.now() + 25 * 60_000
+    gigachatTokenCache = { key, token: json.access_token, expiresAt }
+    return json.access_token
   }
 
   private requireOmniroute(): void {
@@ -288,6 +405,7 @@ export class LmStudioClient {
       if (!this.config.unslothModel) throw new LmStudioError('Load a model in Unsloth, then refresh the model list in connection settings.', 'connection')
       return this.config.unslothModel
     }
+    if (this.config.provider === 'gigachat') return this.config.gigachatModel || 'GigaChat-2'
     if (this.config.provider === 'openrouter') return this.config.openRouterModel || 'openrouter/free'
     if (this.config.provider === 'ollama') return this.config.ollamaModel
     if (this.config.provider === 'omniroute') return this.config.omnirouteModel || 'auto'
@@ -300,9 +418,12 @@ export class LmStudioClient {
     this.requireOmniroute()
     const name = this.providerName
     const url = `${this.baseUrl}/models`
-    let res: Response
+    const token = this.config.provider === 'gigachat' ? await this.ensureGigachatToken(signal) : undefined
+    let res: Response | ChatResponse
     try {
-      res = await fetch(url, { headers: this.headers(), signal })
+      res = this.config.provider === 'gigachat'
+        ? await gigachatFetch(url, { headers: this.headers(token), signal })
+        : await fetch(url, { headers: this.headers(), signal })
     } catch (err) {
       throw connectionError(name, url, err)
     }
@@ -332,34 +453,45 @@ export class LmStudioClient {
     const name = this.providerName
     const url = `${this.baseUrl}/chat/completions`
     const reasoning = params.reasoning ?? this.config.lmStudioReasoning
+    const isGigachat = this.config.provider === 'gigachat'
+    const withTools = !!params.tools && params.tools.length > 0
+    const token = isGigachat ? await this.ensureGigachatToken(signal) : undefined
     const basePayload: Record<string, unknown> = {
       model: this.model(params),
-      messages: params.messages.map(({ images, ...message }) => images?.length
-        ? { ...message, content: [
-            { type: 'text', text: message.content },
-            ...images.map(url => ({ type: 'image_url', image_url: { url } }))
-          ] }
-        : message),
+      messages: isGigachat
+        ? gigachatMessages(params.messages)
+        : params.messages.map(({ images, ...message }) => images?.length
+          ? { ...message, content: [
+              { type: 'text', text: message.content },
+              ...images.map(url => ({ type: 'image_url', image_url: { url } }))
+            ] }
+          : message),
       temperature: params.temperature ?? 0.7,
       ...(params.maxTokens ? { max_tokens: params.maxTokens } : {}),
       // LM Studio's native model metadata says off/on; its OpenAI endpoint
       // accepts none/high for toggle models, and the named levels otherwise.
       ...(this.config.provider === 'lmstudio' && reasoning
         ? { reasoning_effort: reasoning === 'off' ? 'none' : reasoning === 'on' ? 'high' : reasoning } : {}),
-      ...(params.tools && params.tools.length > 0 ? { tools: params.tools } : {})
+      // GigaChat predates OpenAI's tool protocol and takes `functions` +
+      // `function_call`; every other backend uses the `tools` array.
+      ...(withTools
+        ? isGigachat
+          ? { functions: gigachatFunctions(params.tools ?? []), function_call: 'auto' }
+          : { tools: params.tools }
+        : {})
     }
     const body = JSON.stringify({
       ...basePayload,
       stream: true,
       // Ask OpenAI-compatible servers to append a final usage frame.
-      ...(this.config.provider === 'openrouter' ? {} : { stream_options: { include_usage: true } })
+      ...(this.config.provider === 'openrouter' || this.config.provider === 'gigachat' ? {} : { stream_options: { include_usage: true } })
     })
 
     let res: ChatResponse
     try {
       res = await chatFetch(url, {
         method: 'POST',
-        headers: this.headers(),
+        headers: this.headers(token),
         body,
         signal
       }, this.config.provider)
@@ -376,12 +508,30 @@ export class LmStudioClient {
       delete basePayload.tools
       try {
         res = await chatFetch(url, {
-          method: 'POST', headers: this.headers(), signal,
+          method: 'POST', headers: this.headers(token), signal,
           body: JSON.stringify({ ...basePayload, stream: true, stream_options: { include_usage: true } })
         }, this.config.provider)
       } catch (err) { throw connectionError(name, url, err, signal) }
     }
+    // Some GigaChat models (and older accounts) reject a request that carries
+    // `functions` with a validation error. Retry once without them, before any
+    // generation, so plain chat keeps working; the text-tool protocol still
+    // lets the agent request tools.
+    if (isGigachat && withTools && (res.status === 400 || res.status === 422) &&
+        !params.messages.some((message) => message.role === 'tool' || message.tool_calls?.length)) {
+      const error = await httpError(name, url, res)
+      if (!/function/i.test(error.message)) throw error
+      delete basePayload.functions
+      delete basePayload.function_call
+      try {
+        res = await chatFetch(url, {
+          method: 'POST', headers: this.headers(token), signal,
+          body: JSON.stringify({ ...basePayload, stream: true })
+        }, this.config.provider)
+      } catch (err) { throw connectionError(name, url, err, signal) }
+    }
     if (!res.ok) throw await httpError(name, url, res)
+
     if (!res.body) throw new LmStudioError(`${name} returned an empty response body`, 'parse')
 
     const reader = res.body.getReader()
@@ -452,6 +602,18 @@ export class LmStudioClient {
                 toolAcc.set(idx, entry)
               }
             }
+            // GigaChat streams its tool decision as `delta.function_call`, with
+            // arguments delivered as a whole object (not incremental string
+            // fragments like OpenAI), so replace rather than append for those.
+            const fnCall = choice?.delta?.function_call
+            if (fnCall && typeof fnCall === 'object') {
+              const raw = fnCall as { name?: unknown; arguments?: unknown }
+              const entry = toolAcc.get(0) ?? { id: '', name: '', arguments: '' }
+              if (typeof raw.name === 'string' && raw.name) entry.name = raw.name
+              if (typeof raw.arguments === 'string') entry.arguments += raw.arguments
+              else if (raw.arguments !== undefined) entry.arguments = JSON.stringify(raw.arguments)
+              toolAcc.set(0, entry)
+            }
 
             if (typeof choice?.finish_reason === 'string') finishReason = choice.finish_reason
 
@@ -490,7 +652,7 @@ export class LmStudioClient {
       try {
         const fbRes = await chatFetch(url, {
           method: 'POST',
-          headers: this.headers(),
+          headers: this.headers(token),
           body: JSON.stringify({ ...basePayload, stream: false }),
           signal
         }, this.config.provider)

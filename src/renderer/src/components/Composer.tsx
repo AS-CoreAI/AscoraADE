@@ -24,6 +24,7 @@ import {
   GROK_PERMISSION_MODES,
   GROK_REASONING_LEVELS,
   GLM_MODES,
+  GIGACHAT_MODELS,
   type LlmProvider,
   type CodexReasoning,
   type CodexSandbox,
@@ -323,6 +324,9 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
   const wproviderLoggingIn = useApp((s) => s.wproviderLoggingIn)
   const omnirouteModel = useApp((s) => s.omnirouteModel)
   const setOmnirouteModel = useApp((s) => s.setOmnirouteModel)
+  const gigachatModel = useApp((s) => s.gigachatModel)
+  const setGigachatModel = useApp((s) => s.setGigachatModel)
+  const gigachatAuthKey = useApp((s) => s.gigachatAuthKey)
   const omnirouteStatus = useApp((s) => s.omnirouteStatus)
   const openOmniroutePage = useApp((s) => s.openOmniroutePage)
   const mode = useApp((s) => s.mode)
@@ -392,6 +396,7 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
     { value: 'unsloth', label: 'Unsloth', disabled: blockedBySsh('unsloth'), tooltip: sshBlockedTitle('unsloth') },
     { value: 'openrouter', label: 'OpenRouter', disabled: blockedBySsh('openrouter'), tooltip: sshBlockedTitle('openrouter') },
     { value: 'omniroute', label: 'OmniRoute' },
+    { value: 'gigachat', label: 'GigaChat (Sber)' },
     {
       value: 'codex',
       label: 'Codex',
@@ -437,13 +442,15 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
     { value: 'wprovider', label: 'Ascora WProvider' }
   ]
   const selectedLocalModel =
-    provider === 'unsloth' ? unslothModel : provider === 'ollama' ? ollamaModel : provider === 'omniroute' ? omnirouteModel : model
+    provider === 'unsloth' ? unslothModel : provider === 'ollama' ? ollamaModel : provider === 'omniroute' ? omnirouteModel : provider === 'gigachat' ? gigachatModel : model
   const modelOptions =
     provider === 'openrouter'
       ? openRouterModelOptions(models, openRouterModel)
-      : models.length > 0
-        ? models
-        : [selectedLocalModel || (provider === 'unsloth' ? '' : provider === 'ollama' ? 'ollama' : 'local-model')]
+      : provider === 'gigachat'
+        ? (models.length > 0 ? models : [...GIGACHAT_MODELS])
+        : models.length > 0
+          ? models
+          : [selectedLocalModel || (provider === 'unsloth' ? '' : provider === 'ollama' ? 'ollama' : 'local-model')]
   const readOnly = !!activeTaskId && archivedTaskId === activeTaskId
   const canSend =
     (text.trim().length > 0 || attachments.length > 0) &&
@@ -451,6 +458,7 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
     !streaming &&
     !attaching &&
     !(provider === 'omniroute' && omnirouteStatus.state !== 'ready') &&
+    !(provider === 'gigachat' && !gigachatAuthKey) &&
     !readOnly
   const canAttach = !!active && !activeSsh && !attaching && !readOnly
 
@@ -1072,6 +1080,19 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
             value={openRouterModel || modelOptions[0]}
             onChange={(e) => setOpenRouterModel(e.target.value)}
             title={t('composer.modelOpenRouter')}
+          >
+            {modelOptions.map((m) => (
+              <option key={m} value={m}>
+                {m}
+              </option>
+            ))}
+          </select>
+        ) : provider === 'gigachat' ? (
+          <select
+            className="composer-select"
+            value={gigachatModel || modelOptions[0]}
+            onChange={(e) => setGigachatModel(e.target.value)}
+            title={t('composer.modelGigachat')}
           >
             {modelOptions.map((m) => (
               <option key={m} value={m}>

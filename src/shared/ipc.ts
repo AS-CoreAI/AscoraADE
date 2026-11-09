@@ -383,6 +383,7 @@ export type LlmProvider =
   | 'antigravity'
   | 'wprovider'
   | 'omniroute'
+  | 'gigachat'
 
 export const SSH_CAPABLE_LLM_PROVIDERS: readonly LlmProvider[] = ['lmstudio', 'wprovider', 'omniroute', 'antigravity']
 
@@ -756,6 +757,33 @@ export function antigravityReasoningLevels(model: AntigravityModel): Antigravity
 }
 
 export const ANTIGRAVITY_MODELS: AntigravityModel[] = ['flash_lite', 'flash', 'flash_36', 'pro', 'claude_sonnet', 'claude_opus', 'gpt_oss']
+
+// ---------- GigaChat (Sber) ----------
+// GigaChat authenticates every request with a short-lived OAuth access token.
+// The token is obtained with HTTP Basic auth (the "authorization key" issued in
+// the developer cabinet) against the Sber OAuth endpoint, then sent as a Bearer
+// token to the OpenAI-compatible GigaChat API.
+
+/** OAuth token endpoint (note the :9443 port). */
+export const GIGACHAT_OAUTH_URL = 'https://ngw.devices.sberbank.ru:9443/api/v2/oauth'
+/** OpenAI-compatible API base. */
+export const GIGACHAT_BASE_URL = 'https://api.giga.chat/v1'
+
+/** Selectable OAuth scopes (personal / business / corporate). */
+export const GIGACHAT_SCOPES = ['GIGACHAT_API_PERS', 'GIGACHAT_API_B2B', 'GIGACHAT_API_CORP']
+
+/** Suggested model ids; the live list still comes from the API. */
+export const GIGACHAT_MODELS = ['GigaChat-2', 'GigaChat-2-Pro', 'GigaChat-2-Max', 'GigaChat-3-Ultra']
+
+/** Strip wrappers like `Authorization: Basic …` / `Basic …` pasted into the key field. */
+export function normalizeGigachatAuthKey(value: string): string {
+  let key = stripWrappingQuotes(value.trim())
+  const header = key.match(/authorization\s*:\s*(?:basic\s+)?([^\s"'`]+)/i)
+  if (header) return stripWrappingQuotes(header[1])
+  const basic = key.match(/^basic\s+(.+)$/i)
+  if (basic) key = basic[1].trim()
+  return stripWrappingQuotes(key)
+}
 
 // ---------- Ascora WProvider (drives a provider's web chat in a hidden browser) ----------
 // WProvider emulates an API on top of a chat website: the user signs in to the
@@ -1151,6 +1179,14 @@ export interface LlmConfig {
   antigravityReasoning: AntigravityReasoning
   /** Which web chat Ascora WProvider drives (hidden-browser backend). */
   wproviderService: WProviderService
+  /** GigaChat (Sber) OAuth client id, as issued in the developer cabinet. */
+  gigachatClientId: string
+  /** GigaChat OAuth scope, e.g. GIGACHAT_API_PERS / GIGACHAT_API_B2B. */
+  gigachatScope: string
+  /** GigaChat authorization key (base64 of client_id:client_secret) used for Basic auth. */
+  gigachatAuthKey: string
+  /** Default GigaChat model id used when selected. */
+  gigachatModel: string
   /** Default model id routed through the bundled OmniRoute gateway. */
   omnirouteModel: string
   /**
@@ -1201,6 +1237,10 @@ export const DEFAULT_LLM_CONFIG: LlmConfig = {
   antigravityModel: 'flash',
   antigravityReasoning: 'medium',
   wproviderService: 'qwen',
+  gigachatClientId: '',
+  gigachatScope: 'GIGACHAT_API_PERS',
+  gigachatAuthKey: '',
+  gigachatModel: 'GigaChat-2',
   omnirouteModel: '',
   omnirouteBaseUrl: ''
 }
