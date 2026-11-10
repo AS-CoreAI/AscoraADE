@@ -286,7 +286,7 @@ test('GigaChat speaks the functions/function_call protocol and parses function_c
   assert.deepEqual(chat.body.messages, [
     { role: 'user', content: 'Look around' },
     { role: 'assistant', content: '', function_call: { name: 'list_dir', arguments: { path: '.' } } },
-    { role: 'function', name: 'list_dir', content: 'a.txt' }
+    { role: 'function', name: 'list_dir', content: '{"output":"a.txt"}' }
   ])
   assert.deepEqual(result.toolCalls, [{ id: '', name: 'list_dir', arguments: '{"path":"."}' }])
   assert.equal(result.finishReason, 'function_call')

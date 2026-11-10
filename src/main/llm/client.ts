@@ -106,10 +106,14 @@ function gigachatMessages(messages: LlmMessage[]): Record<string, unknown>[] {
       }
     }
     if (message.role === 'tool') {
+      // GigaChat validates a function result as JSON and rejects raw text with
+      // `422 INVALID_PARAMS: ... json string ..., error: JSON parse error`.
+      // OpenAI's protocol carries the result as a plain string, so wrap it in a
+      // JSON object before handing it back.
       return {
         role: 'function',
         name: namesById.get(message.tool_call_id ?? '') ?? '',
-        content: message.content
+        content: JSON.stringify({ output: message.content })
       }
     }
     return { role: message.role, content: message.content }
