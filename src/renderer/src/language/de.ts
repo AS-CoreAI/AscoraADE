@@ -2,6 +2,11 @@
 
 const de: Translation = {
   ...en,
+  'composer.temperature': "Temperatur",
+  'composer.temperatureAuto': "Temperatur: Auto",
+  'composer.temperatureManual': "Temperatur: Manuell",
+  'settings.antlingTemperatureHint': "Auto verwendet den Standard von Ant Ling. Manuell: 0–1; niedrigere Werte ergeben vorhersehbarere Antworten.",
+  'chat.antlingContentFilter': "Ant Ling hat die Antwort gefiltert (content_filter). Dies ist kein Verbindungsfehler. Wenden Sie sich bei blockierten gewöhnlichen Anfragen an den Ant Ling-Support.",
   'settings.antlingModelsHint': "Modelle aus der Ant Ling-Dokumentation. Der API-Zugriff wird beim Senden einer Nachricht geprüft.",
   'chat.contextSummary': "Kontextzusammenfassung",
   'chat.compacting': "Kontext wird gespeichert und komprimiert…",

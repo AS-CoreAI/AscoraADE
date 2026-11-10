@@ -70,6 +70,10 @@ export function readConfig(): LlmConfig {
     ),
     antlingModel:
       store.getSetting<string>('antling.model')?.trim() || DEFAULT_LLM_CONFIG.antlingModel,
+    antlingReasoning:
+      store.getSetting<LlmConfig['antlingReasoning']>('antling.reasoning') ?? DEFAULT_LLM_CONFIG.antlingReasoning,
+    antlingTemperature:
+      store.getSetting<LlmConfig['antlingTemperature']>('antling.temperature') ?? DEFAULT_LLM_CONFIG.antlingTemperature,
     gigachatClientId:
       store.getSetting<string>('gigachat.clientId') ?? DEFAULT_LLM_CONFIG.gigachatClientId,
     gigachatScope: store.getSetting<string>('gigachat.scope') ?? DEFAULT_LLM_CONFIG.gigachatScope,
@@ -181,6 +185,13 @@ export function registerLlmHandlers(): void {
     }
     if (typeof patch.antlingModel === 'string') {
       store.setSetting('antling.model', patch.antlingModel.trim() || DEFAULT_LLM_CONFIG.antlingModel)
+    }
+    if (typeof patch.antlingReasoning === 'string' && ['', 'off', 'on'].includes(patch.antlingReasoning)) {
+      store.setSetting('antling.reasoning', patch.antlingReasoning)
+    }
+    if (patch.antlingTemperature === null || (typeof patch.antlingTemperature === 'number' &&
+        Number.isFinite(patch.antlingTemperature) && patch.antlingTemperature >= 0 && patch.antlingTemperature <= 1)) {
+      store.setSetting('antling.temperature', patch.antlingTemperature)
     }
     if (typeof patch.gigachatClientId === 'string') {
       store.setSetting('gigachat.clientId', patch.gigachatClientId.trim())
@@ -343,8 +354,10 @@ export function registerLlmHandlers(): void {
         for (;;) {
           const { value, done } = await gen.next()
           if (done) {
+            const contentFiltered = provider === 'antling' && value.finishReason === 'content_filter'
             return {
-              ok: true,
+              ok: !contentFiltered,
+              ...(contentFiltered ? { error: 'Ant Ling blocked this response with its content filter (content_filter). Contact Ant Ling support if an ordinary request is blocked.' } : {}),
               content,
               toolCalls: value.toolCalls,
               finishReason: value.finishReason,

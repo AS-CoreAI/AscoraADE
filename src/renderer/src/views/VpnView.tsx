@@ -66,6 +66,7 @@ export function VpnView(): JSX.Element {
   const [authEmail, setAuthEmail] = useState('')
   const [authPassword, setAuthPassword] = useState('')
   const [authBusy, setAuthBusy] = useState(false)
+  const [authError, setAuthError] = useState<string | null>(null)
   const [traffic, setTraffic] = useState<VpnTrafficStats | null>(null)
   const [paymentOpen, setPaymentOpen] = useState(false)
 
@@ -182,7 +183,7 @@ export function VpnView(): JSX.Element {
   }
 
   const toggleVpn = async (): Promise<void> => {
-    if (!status || busy) return
+    if (!status || busy || authBusy) return
     setActionError(null)
     try {
       const next = connected
@@ -201,6 +202,7 @@ export function VpnView(): JSX.Element {
     event.preventDefault()
     if (authBusy || !authEmail.trim() || !authPassword) return
     setAuthBusy(true)
+    setAuthError(null)
     setActionError(null)
     try {
       const result = authMode === 'login'
@@ -208,7 +210,7 @@ export function VpnView(): JSX.Element {
         : await api.vpn.register({ email: authEmail, password: authPassword })
       setStatus(result.status)
       if (!result.ok) {
-        setActionError(result.error ?? t('vpn.error'))
+        setAuthError(result.error ?? t('vpn.error'))
       } else {
         setAuthOpen(false)
         setAuthPassword('')
@@ -218,7 +220,7 @@ export function VpnView(): JSX.Element {
         if (trafficResult.ok) setTraffic(trafficResult.traffic)
       }
     } catch (error) {
-      setActionError(error instanceof Error ? error.message : String(error))
+      setAuthError(error instanceof Error ? error.message : String(error))
     } finally {
       setAuthBusy(false)
     }
@@ -282,7 +284,7 @@ export function VpnView(): JSX.Element {
               type="checkbox"
               role="switch"
               checked={connected}
-              disabled={!status || busy}
+              disabled={!status || busy || authBusy}
               aria-label={connected ? t('vpn.disconnect') : t('vpn.connect')}
               onChange={() => void toggleVpn()}
             />
@@ -422,13 +424,14 @@ export function VpnView(): JSX.Element {
                   <button className="btn" type="button" disabled={authBusy || busy} onClick={() => void logout()}>{t('vpn.signOut')}</button>
                 </div>
               ) : authOpen ? (
-                <form className="vpn-auth-form" onSubmit={(event) => void submitAuth(event)}>
+                <form className="vpn-auth-form" aria-busy={authBusy} onSubmit={(event) => void submitAuth(event)}>
                   <input className="text-input" type="email" autoComplete="username" placeholder={t('vpn.email')} value={authEmail} disabled={authBusy} onChange={(event) => setAuthEmail(event.target.value)} />
                   <input className="text-input" type="password" autoComplete={authMode === 'login' ? 'current-password' : 'new-password'} minLength={authMode === 'register' ? 8 : undefined} placeholder={t('vpn.password')} value={authPassword} disabled={authBusy} onChange={(event) => setAuthPassword(event.target.value)} />
                   <div className="vpn-auth-actions">
-                    <button className="btn primary" type="submit" disabled={authBusy || !authEmail.trim() || !authPassword}>{authMode === 'login' ? t('vpn.signIn') : t('vpn.register')}</button>
-                    <button className="vpn-auth-mode" type="button" disabled={authBusy} onClick={() => { setAuthMode((mode) => mode === 'login' ? 'register' : 'login'); setAuthPassword('') }}>{authMode === 'login' ? t('vpn.switchToRegister') : t('vpn.switchToSignIn')}</button>
+                    <button className="btn primary" type="submit" disabled={authBusy || !authEmail.trim() || !authPassword}>{authBusy ? t('common.checking') : authMode === 'login' ? t('vpn.signIn') : t('vpn.register')}</button>
+                    <button className="vpn-auth-mode" type="button" disabled={authBusy} onClick={() => { setAuthMode((mode) => mode === 'login' ? 'register' : 'login'); setAuthPassword(''); setAuthError(null) }}>{authMode === 'login' ? t('vpn.switchToRegister') : t('vpn.switchToSignIn')}</button>
                   </div>
+                  {authError && <div className="vpn-notice error" role="alert">{friendlyError(authError, t)}</div>}
                 </form>
               ) : (
                 <>

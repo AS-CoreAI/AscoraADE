@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type JSX } from 'react'
 import { Icon } from './Icon'
 import { LmStudioControls } from './LmStudioControls'
 import { GigachatControls } from './GigachatControls'
+import { AntLingControls } from './AntLingControls'
 import { api } from '@/lib/api'
 import {
   CODEX_MODEL_PRESETS,
@@ -1898,6 +1899,7 @@ function AntLingPanel(): JSX.Element {
         </select>
         <span className="field-hint">{t('settings.antlingModelsHint')}</span>
       </label>
+      <AntLingControls settings />
 
       <div className={`conn-line ${connection}`}>
         {connection === 'connected' && `Ant Ling ${t('settings.connectedModels', { count: models.length })}`}

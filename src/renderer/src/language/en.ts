@@ -1,5 +1,10 @@
 ﻿export const en = {
   'app.language.english': 'English',
+  'composer.temperature': "Temperature",
+  'composer.temperatureAuto': "Temperature: Auto",
+  'composer.temperatureManual': "Temperature: Manual",
+  'settings.antlingTemperatureHint': "Auto uses the Ant Ling default. Manual range: 0–1; lower values make answers more predictable.",
+  'chat.antlingContentFilter': "Ant Ling blocked the response with its content filter (content_filter). This is a provider response, not a connection error. If an ordinary request is blocked, contact Ant Ling support.",
   'settings.antlingModelsHint': "Models from Ant Ling documentation. API access is verified when you send a message.",
   'chat.contextSummary': "Context summary",
   'chat.compacting': "Saving and compacting context…",

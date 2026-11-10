@@ -2,6 +2,11 @@
 
 const ko: Translation = {
   ...en,
+  'composer.temperature': "온도",
+  'composer.temperatureAuto': "온도: 자동",
+  'composer.temperatureManual': "온도: 수동",
+  'settings.antlingTemperatureHint': "자동은 Ant Ling 기본값을 사용합니다. 수동 범위: 0–1. 값이 낮을수록 답변이 더 예측 가능합니다.",
+  'chat.antlingContentFilter': "Ant Ling 필터가 답변을 차단했습니다(content_filter). 연결 오류가 아닙니다. 일반적인 요청이 차단되면 Ant Ling 지원팀에 문의하세요.",
   'settings.antlingModelsHint': "Ant Ling 문서의 모델입니다. 메시지를 보내면 API 접근 권한을 확인합니다.",
   'chat.contextSummary': "컨텍스트 요약",
   'chat.compacting': "컨텍스트 저장 및 압축 중…",

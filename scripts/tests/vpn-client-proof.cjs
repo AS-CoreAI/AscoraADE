@@ -3,7 +3,9 @@ const test = require('node:test')
 const assert = require('node:assert/strict')
 const { createHmac } = require('node:crypto')
 const { loadTypeScript } = require('./llm-fixture.cjs')
-const { createClientProofHeaders } = loadTypeScript('src/main/vpn/client-proof.ts')
+const { createClientProofHeaders, readClientProofSecret, requiresClientProof } = loadTypeScript('src/main/vpn/client-proof.ts')
+const fs = require('node:fs/promises')
+const path = require('node:path')
 
 test('VPN proof refuses empty deployment credentials and has no built-in fallback', () => {
   for (const secret of ['', ' ', '\n\t']) {
@@ -37,4 +39,24 @@ test('VPN proof remains compatible with the server protocol without disclosing t
     createClientProofHeaders(machineId, body + ' ', secret, now),
     createClientProofHeaders(machineId, body, secret, now + 1000)
   ]) assert.notEqual(changed['X-Client-Proof'], expected)
+})
+
+test('Only tunnel and traffic routes require the legacy proof', () => {
+  for (const route of ['/api/client/connect', '/api/client/disconnect', '/api/client/traffic']) assert.equal(requiresClientProof(route), true)
+  for (const route of ['/api/auth/login', '/api/auth/register', '/api/auth/refresh', '/api/auth/logout', '/api/client/me', '/api/client/servers', '/api/client/device/register', '/api/portal/payments']) assert.equal(requiresClientProof(route), false)
+})
+
+test('Private release credentials load outside source, allow rotation and reject missing/invalid resources', async t => {
+  const root = path.resolve(__dirname, '../../.build')
+  await fs.mkdir(root, { recursive: true })
+  const dir = await fs.mkdtemp(path.join(root, 'vpn-proof-'))
+  t.after(async () => { assert.equal(path.dirname(dir), root); await fs.rm(dir, { recursive: true, force: true }) })
+  const file = path.join(dir, 'client-auth.json')
+  await assert.rejects(readClientProofSecret(file, ''), /authorization is missing/)
+  assert.equal(await readClientProofSecret(file, ' runtime-fixture '), 'runtime-fixture')
+  await fs.writeFile(file, JSON.stringify({ clientSecret: ' release-fixture ' }))
+  assert.equal(await readClientProofSecret(file, ''), 'release-fixture')
+  assert.equal(await readClientProofSecret(file, 'rotated-fixture'), 'rotated-fixture')
+  await fs.writeFile(file, 'invalid')
+  await assert.rejects(readClientProofSecret(file, ''), /resource is invalid/)
 })

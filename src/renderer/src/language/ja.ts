@@ -2,6 +2,11 @@
 
 const ja: Translation = {
   ...en,
+  'composer.temperature': "温度",
+  'composer.temperatureAuto': "温度：自動",
+  'composer.temperatureManual': "温度：手動",
+  'settings.antlingTemperatureHint': "自動では Ant Ling の既定値を使用します。手動の範囲は 0〜1。低い値ほど回答が安定します。",
+  'chat.antlingContentFilter': "Ant Ling のフィルターが回答をブロックしました（content_filter）。接続エラーではありません。通常の質問がブロックされる場合は Ant Ling サポートへお問い合わせください。",
   'settings.antlingModelsHint': "Ant Lingのドキュメントに記載されたモデルです。メッセージ送信時にAPIへのアクセスを確認します。",
   'chat.contextSummary': "コンテキストの要約",
   'chat.compacting': "コンテキストを保存・圧縮中…",

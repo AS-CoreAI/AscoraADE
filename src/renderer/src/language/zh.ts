@@ -2,6 +2,11 @@
 
 const zh: Translation = {
   ...en,
+  'composer.temperature': "温度",
+  'composer.temperatureAuto': "温度：自动",
+  'composer.temperatureManual': "温度：手动",
+  'settings.antlingTemperatureHint': "自动使用 Ant Ling 默认值。手动范围：0–1；值越低，回答越稳定。",
+  'chat.antlingContentFilter': "Ant Ling 的内容过滤器阻止了回答（content_filter）。这并非连接错误。如果普通请求被阻止，请联系 Ant Ling 支持。",
   'settings.antlingModelsHint': "模型来自 Ant Ling 文档。发送消息时会验证 API 访问权限。",
   'chat.contextSummary': "上下文摘要",
   'chat.compacting': "正在保存并压缩上下文…",

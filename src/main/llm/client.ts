@@ -485,6 +485,8 @@ export class LmStudioClient {
     const gigachatReasoning = params.reasoning ?? this.config.gigachatReasoning
     const isGigachat = this.config.provider === 'gigachat'
     const isAntLing = this.config.provider === 'antling'
+    const antlingReasoning = params.reasoning ?? this.config.antlingReasoning
+    const antlingTemperature = params.temperature !== undefined ? params.temperature : this.config.antlingTemperature
     const withTools = !!params.tools && params.tools.length > 0
     const token = isGigachat ? await this.ensureGigachatToken(signal) : undefined
     const basePayload: Record<string, unknown> = {
@@ -497,9 +499,17 @@ export class LmStudioClient {
               ...images.map(url => ({ type: 'image_url', image_url: { url } }))
             ] }
           : message),
-      temperature: isAntLing ? Math.max(0, Math.min(1, params.temperature ?? 0.7)) : params.temperature ?? 0.7,
+      // Ant Ling documents [0, 1], unlike many compatible APIs' [0, 2].
+      ...(isAntLing
+        ? typeof antlingTemperature === 'number' && Number.isFinite(antlingTemperature)
+          ? { temperature: Math.max(0, Math.min(1, antlingTemperature)) } : {}
+        : { temperature: params.temperature ?? 0.7 }),
       ...(params.maxTokens ? { [isAntLing ? 'max_completion_tokens' : 'max_tokens']: params.maxTokens } : {}),
-      ...(isAntLing && params.reasoning ? { thinking: { type: params.reasoning === 'off' ? 'disabled' : 'enabled' } } : {}),
+      // Omitting thinking keeps the provider's enabled default. Explicit off
+      // must travel as disabled; effort names are not valid thinking.type values.
+      ...(isAntLing && antlingReasoning
+        ? { thinking: { type: antlingReasoning === 'off' ? 'disabled' : 'enabled' } }
+        : {}),
       // LM Studio's native model metadata says off/on; its OpenAI endpoint
       // accepts none/high for toggle models, and the named levels otherwise.
       ...(this.config.provider === 'lmstudio' && reasoning
@@ -690,8 +700,9 @@ export class LmStudioClient {
     const tail = thinkingParser.push('', true)
     addThinking(tail.thinking)
     if (tail.content) { yielded = true; yield tail.content }
-    if (isAntLing && !yielded && !thinking && toolAcc.size === 0) {
-      throw new LmStudioError('Ant Ling returned no chat content or tool calls. Check the selected model and API access, then try again.', 'parse')
+    if (isAntLing && finishReason !== 'content_filter' && !yielded && assembled().toolCalls.length === 0) {
+      const detail = thinking ? ' Reasoning was received, but no final answer.' : ''
+      throw new LmStudioError(`Ant Ling returned no chat content or tool calls.${detail} Check the selected model and output limit, then try again.`, 'parse')
     }
 
     // OmniRoute routes some web/free providers that ignore `stream: true` and

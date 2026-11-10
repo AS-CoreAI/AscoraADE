@@ -4,6 +4,11 @@ import en, { type Translation } from './en'
 // Ukrainian wording. New translations belong in this file only.
 const uk: Translation = {
   ...en,
+  'composer.temperature': "Температура",
+  'composer.temperatureAuto': "Температура: авто",
+  'composer.temperatureManual': "Температура: вручну",
+  'settings.antlingTemperatureHint': "Авто використовує значення Ant Ling за замовчуванням. Вручну: 0–1; нижче — передбачуваніші відповіді.",
+  'chat.antlingContentFilter': "Ant Ling заблокував відповідь фільтром (content_filter). Це не помилка з’єднання. Якщо блокується звичайний запит, зверніться до підтримки Ant Ling.",
   'settings.antlingModelsHint': "Моделі з документації Ant Ling. Доступ до API перевіряється під час надсилання повідомлення.",
   'chat.contextSummary': "Підсумок контексту",
   'chat.compacting': "Збереження та стиснення контексту…",

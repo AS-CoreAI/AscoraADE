@@ -5,6 +5,7 @@ import { ProviderSelect, type ProviderSelectOption } from './ProviderSelect'
 import { OmniModelPicker } from './OmniModelPicker'
 import { LmStudioControls } from './LmStudioControls'
 import { GigachatControls } from './GigachatControls'
+import { AntLingControls } from './AntLingControls'
 import { useApp, type AgentMode, type AppLanguage } from '@/state/store'
 import { api } from '@/lib/api'
 import { tr, type TranslationKey } from '@/language'
@@ -841,6 +842,7 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
         <div className="composer-model-controls">
         {provider === 'lmstudio' && <LmStudioControls disabled={streaming || readOnly} />}
         {provider === 'gigachat' && <GigachatControls disabled={streaming || readOnly} />}
+        {provider === 'antling' && <AntLingControls disabled={streaming || readOnly} />}
         <ProviderSelect
           value={provider}
           options={providerOptions.filter((option) => providerVisibility[option.value] !== false)}

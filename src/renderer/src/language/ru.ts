@@ -1,6 +1,11 @@
 ﻿import type { Translation } from './en'
 
 const ru: Translation = {
+  'composer.temperature': "Температура",
+  'composer.temperatureAuto': "Температура: авто",
+  'composer.temperatureManual': "Температура: вручную",
+  'settings.antlingTemperatureHint': "Авто использует значение Ant Ling по умолчанию. Вручную: 0–1; ниже — более предсказуемые ответы.",
+  'chat.antlingContentFilter': "Ant Ling заблокировал ответ своим фильтром (content_filter). Это ответ провайдера, а не ошибка подключения. Если блокируется обычный запрос, обратитесь в поддержку Ant Ling.",
   'settings.antlingModelsHint': "Модели из документации Ant Ling. Доступ к API проверяется при отправке сообщения.",
   'chat.contextSummary': "Сводка контекста",
   'chat.compacting': "Сохранение и сжатие контекста…",

@@ -9,7 +9,7 @@ import { createConnection } from 'node:net'
 import path from 'node:path'
 import { IPC, type VpnAccountTier, type VpnAuthRequest, type VpnAuthResult, type VpnConfigureRequest, type VpnConnectRequest, type VpnDependencyStatus, type VpnPaymentCheckout, type VpnPaymentCreateResult, type VpnPaymentPlanCode, type VpnPaymentSyncResult, type VpnProtocol, type VpnServer, type VpnServersResult, type VpnSettings, type VpnStatus, type VpnTrafficResult, type VpnTrafficStats } from '../../shared/ipc'
 import { getPublicIpStatus } from '../network/public-ip'
-import { createClientProofHeaders } from './client-proof'
+import { createClientProofHeaders, readClientProofSecret, requiresClientProof } from './client-proof'
 
 const DEFAULT_API_URL = 'https://wandrounikvpn.asted.cloud'
 const REQUEST_TIMEOUT_MS = 15_000
@@ -274,8 +274,12 @@ async function getMachineId(): Promise<string> {
 }
 
 async function clientProofHeaders(body: string): Promise<Record<string, string>> {
+  const credentialFile = app.isPackaged
+    ? path.join(process.resourcesPath, 'vpn', 'client-auth.json')
+    : path.join(app.getAppPath(), '.build', 'vpn-client-auth.json')
+  const secret = await readClientProofSecret(credentialFile)
   const machineId = await getMachineId()
-  return createClientProofHeaders(machineId, body)
+  return createClientProofHeaders(machineId, body, secret)
 }
 
 function normalizeApiBaseUrl(value: string): string {
@@ -605,7 +609,9 @@ async function apiRequest(pathname: string, init?: RequestInit, authenticate = t
   if (authenticate && tokens?.accessToken) headers.Authorization = `Bearer ${tokens.accessToken}`
   // Legacy HMAC compatibility; server-side authorization and quotas remain
   // necessary because a client-provided key and machine ID are not attestation.
-  Object.assign(headers, await clientProofHeaders(typeof init?.body === 'string' ? init.body : ''))
+  if (requiresClientProof(pathname)) {
+    Object.assign(headers, await clientProofHeaders(typeof init?.body === 'string' ? init.body : ''))
+  }
   let response: Response
   try {
     response = await fetch(`${settings.apiBaseUrl}${pathname}`, {

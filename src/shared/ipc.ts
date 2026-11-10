@@ -1143,6 +1143,10 @@ export interface LlmConfig {
   antlingApiKey: string
   /** Default Ant Ling model id used when selected. */
   antlingModel: string
+  /** Ant Ling thinking toggle; empty keeps the provider default (enabled). */
+  antlingReasoning: 'off' | 'on' | ''
+  /** null lets Ant Ling choose its default; manual range is [0, 1]. */
+  antlingTemperature: number | null
   /** Path to the `codex` binary; empty → auto-detect (PATH / bundled extension). */
   codexPath: string
   /** Model passed to `codex exec -m`; empty → Codex's own default. */
@@ -1234,6 +1238,8 @@ export const DEFAULT_LLM_CONFIG: LlmConfig = {
   openRouterModel: 'openrouter/free',
   antlingApiKey: '',
   antlingModel: ANT_LING_MODELS[0],
+  antlingReasoning: '',
+  antlingTemperature: null,
   codexPath: '',
   codexModel: '',
   codexSandbox: 'workspace-write',
@@ -1273,9 +1279,10 @@ export interface ChatParams {
   model?: string
   provider?: LlmProvider
   messages: LlmMessage[]
-  temperature?: number
+  /** null explicitly selects the provider default (Ant Ling). */
+  temperature?: number | null
   maxTokens?: number
-  /** Empty uses the server default; omitted uses the saved LM Studio selection. */
+  /** Empty uses the server default; omitted uses the saved provider selection. */
   reasoning?: LmStudioReasoning | ''
   /** When set, advertised to the model for native function-calling. */
   tools?: ToolDef[]

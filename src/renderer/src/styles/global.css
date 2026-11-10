@@ -3059,6 +3059,10 @@ button {
 .composer-select:hover {
   color: var(--text);
 }
+.antling-temperature-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.antling-temperature-slider { display: inline-flex; align-items: center; gap: 6px; }
+.antling-temperature-slider input { width: 90px; accent-color: var(--accent); }
+.antling-temperature-slider output { min-width: 32px; font-size: 12px; font-variant-numeric: tabular-nums; color: var(--text-muted); }
 .composer-select option {
   background: var(--bg-elevated);
   color: var(--text);

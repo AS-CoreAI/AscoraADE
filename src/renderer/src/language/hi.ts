@@ -2,6 +2,11 @@
 
 const hi: Translation = {
   ...en,
+  'composer.temperature': "तापमान",
+  'composer.temperatureAuto': "तापमान: ऑटो",
+  'composer.temperatureManual': "तापमान: मैन्युअल",
+  'settings.antlingTemperatureHint': "ऑटो Ant Ling का डिफ़ॉल्ट मान इस्तेमाल करता है। मैन्युअल सीमा: 0–1; कम मान से जवाब अधिक अनुमानित होते हैं।",
+  'chat.antlingContentFilter': "Ant Ling ने फ़िल्टर से जवाब रोक दिया (content_filter)। यह कनेक्शन की त्रुटि नहीं है। सामान्य अनुरोध रुकने पर Ant Ling सहायता से संपर्क करें।",
   'settings.antlingModelsHint': "Ant Ling दस्तावेज़ के मॉडल। संदेश भेजते समय API एक्सेस की जाँच की जाती है।",
   'chat.contextSummary': "संदर्भ का सारांश",
   'chat.compacting': "संदर्भ सहेजा और संक्षिप्त किया जा रहा है…",

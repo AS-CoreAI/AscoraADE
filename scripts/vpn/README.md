@@ -16,15 +16,23 @@ Git, a release archive, a bug report, or a test fixture.
 
 ## Legacy client proof
 
-For a VPN deployment that still requires the legacy client HMAC protocol,
-its operator must supply `WANDROUNIK_CLIENT_SECRET` to the main process at
-runtime. It is not a Vite renderer variable, is not loaded from a committed
-file, and has no built-in fallback. A source build without this configuration
-reports that VPN client authorization is not configured; the rest of the IDE
-does not require it. Do not disable a production server's verification merely
-to make an unconfigured client connect.
+The server requires the legacy HMAC only for `/api/client/connect`,
+`/api/client/disconnect`, and `/api/client/traffic`. Login, registration,
+token refresh, profile and server discovery must work without this credential.
 
-A static secret distributed to desktop clients can be extracted by users.
+Operators can supply `WANDROUNIK_CLIENT_SECRET` at runtime, or run
+`npm run vpn:auth` with that variable (or `WANDROUNIK_CLIENT_AUTH_FILE` pointing
+to a private JSON file containing `clientSecret`) before packaging. This stages
+`.build/vpn-client-auth.json`, which is ignored by Git and loaded by development
+builds. Windows installers include it at `resources/vpn/client-auth.json`.
+`dist:win` validates this resource before building, so a release cannot silently
+ship without VPN client authorization. The runtime environment variable takes
+precedence, allowing operators to rotate the credential. Never put its value in
+source code, Vite renderer variables, logs or test fixtures. Do not disable the
+server's proof verification to make an unconfigured client connect.
+
+A release resource is not a secret vault: a static credential distributed to
+desktop clients can be extracted by users, just as in the legacy desktop client.
 It cannot establish that a request came from an official, unmodified binary.
 Server authorization, subscription checks, quotas, and abuse controls must
 not depend solely on this proof or on a client-supplied machine identifier.

@@ -16,7 +16,7 @@ function fixture(handler, config = {}) {
       return handler(request)
     } }
   })
-  return { requests, client: new LmStudioClient({ ...DEFAULT_LLM_CONFIG, provider: 'antling',
+  return { requests, LmStudioClient, client: new LmStudioClient({ ...DEFAULT_LLM_CONFIG, provider: 'antling',
     antlingApiKey: `Authorization: Bearer ${key}`, ...config }) }
 }
 
@@ -96,6 +96,44 @@ test('Ant Ling assembles fragmented UTF-8, reasoning, native tool calls and fina
   assert.deepEqual(result.usage, { inputTokens: 31, outputTokens: 12 })
 })
 
+test('Ant Ling saves independent reasoning and temperature controls, with explicit auto and off overrides', async () => {
+  const { client, requests } = fixture(() => new Response(frame({ choices: [{ delta: { content: 'OK' }, finish_reason: 'stop' }] })), {
+    antlingReasoning: 'on', antlingTemperature: 0.35, lmStudioReasoning: 'high'
+  })
+  await collect(client)
+  assert.deepEqual(requests.at(-1).body.thinking, { type: 'enabled' })
+  assert.equal(requests.at(-1).body.temperature, 0.35)
+  await collect(client, { messages: [], reasoning: 'off', temperature: 0 })
+  assert.deepEqual(requests.at(-1).body.thinking, { type: 'disabled' })
+  assert.equal(requests.at(-1).body.temperature, 0)
+  await collect(client, { messages: [], reasoning: '', temperature: null })
+  assert.equal(requests.at(-1).body.thinking, undefined)
+  assert.equal(requests.at(-1).body.temperature, undefined)
+  await collect(client, { messages: [], reasoning: 'high' })
+  assert.deepEqual(requests.at(-1).body.thinking, { type: 'enabled' }, 'Never send an effort name as thinking.type')
+  client.update({ antlingReasoning: 'off', antlingTemperature: null })
+  await collect(client)
+  assert.deepEqual(requests.at(-1).body.thinking, { type: 'disabled' })
+  assert.equal(requests.at(-1).body.temperature, undefined)
+})
+
+test('Second turn content streams without reasoning and without importing the previous thinking state', async () => {
+  let turn = 0
+  const { client, requests } = fixture(() => new Response(++turn === 1
+    ? frame({ choices: [{ delta: { reasoning_content: 'Private reasoning.' } }] }) + frame({ choices: [{ delta: { content: 'Four.' }, finish_reason: 'stop' }] }) + 'data:[DONE]\n\n'
+    : frame({ choices: [{ delta: { content: 'Six.' }, finish_reason: 'stop' }] }) + 'data:[DONE]\n\n'))
+  const messages = [{ role: 'user', content: 'Two plus two?' }]
+  const first = await collect(client, { messages })
+  assert.equal(first.content, 'Four.')
+  assert.equal(first.thinking, 'Private reasoning.')
+  messages.push({ role: 'assistant', content: first.content }, { role: 'user', content: 'Three plus three?' })
+  const second = await collect(client, { messages })
+  assert.equal(second.content, 'Six.')
+  assert.equal(second.thinking, undefined)
+  assert.equal(second.streamedThinking, '')
+  assert.deepEqual(requests[1].body.messages, messages)
+})
+
 test('HTTP gateway blocks, auth/quota errors, stream errors and empty responses stay actionable', async () => {
   const blocked = fixture(() => new Response('<!DOCTYPE html><html>blocked</html>', { status: 403 }))
   await assert.rejects(collect(blocked.client), e => e.status === 403 && /HTML gateway/.test(e.message) && !e.message.includes('<html>'))
@@ -108,6 +146,10 @@ test('HTTP gateway blocks, auth/quota errors, stream errors and empty responses 
   await assert.rejects(collect(failedStream.client), /Ant Ling stream error: Token quota exceeded/)
   const empty = fixture(() => new Response('data:[DONE]\n\n'))
   await assert.rejects(collect(empty.client), e => e.kind === 'parse' && /no chat content/.test(e.message))
+  const thinkingOnly = fixture(() => new Response(frame({ choices: [{ delta: { reasoning_content: 'Still thinking.' }, finish_reason: 'length' }] }) + 'data:[DONE]\n\n'))
+  await assert.rejects(collect(thinkingOnly.client), e => e.kind === 'parse' && /no final answer/.test(e.message))
+  const filteredEmpty = fixture(() => new Response(frame({ choices: [{ delta: {}, finish_reason: 'content_filter' }] })))
+  assert.equal((await collect(filteredEmpty.client)).finishReason, 'content_filter', 'Keep filter diagnostics even without a refusal body')
 })
 
 test('cancelling a pending Ant Ling stream aborts and releases its reader', async () => {
@@ -149,4 +191,41 @@ test('IPC accepts Ant Ling probes, labels presets, normalizes credentials and re
   handlers.get(IPC.llm.setConfig)(null, { provider: 'antling', antlingModel: ' ' })
   assert.equal(config().antlingModel, 'Ling-3.2-flash')
   assert.equal((await handlers.get(IPC.llm.listModels)(null)).source, 'preset')
+  assert.equal(config().antlingReasoning, '')
+  assert.equal(config().antlingTemperature, null)
+  handlers.get(IPC.llm.setConfig)(null, { antlingReasoning: 'off', antlingTemperature: 0 })
+  assert.equal(config().antlingReasoning, 'off')
+  assert.equal(config().antlingTemperature, 0)
+  handlers.get(IPC.llm.setConfig)(null, { antlingReasoning: 'high', antlingTemperature: 2 })
+  assert.equal(config().antlingReasoning, 'off')
+  assert.equal(config().antlingTemperature, 0)
+  handlers.get(IPC.llm.setConfig)(null, { antlingReasoning: 'on', antlingTemperature: 0.7 })
+  assert.equal(config().antlingReasoning, 'on')
+  assert.equal(config().antlingTemperature, 0.7)
+  handlers.get(IPC.llm.setConfig)(null, { antlingReasoning: '', antlingTemperature: null })
+  assert.equal(config().antlingReasoning, '')
+  assert.equal(config().antlingTemperature, null)
+})
+
+test('Ant Ling content_filter is reported across IPC without retrying or marking the refusal as success', async () => {
+  const refusal = '作为一个人工智能语言模型，这个问题超出我目前的学习范围了，您可以尝试问我其他问题，我将尽力为您解答。'
+  const { LmStudioClient, requests } = fixture(() => new Response(
+    frame({ choices: [{ delta: { content: refusal } }] }) +
+    frame({ choices: [{ delta: {}, finish_reason: 'content_filter' }], usage: { prompt_tokens: 0, completion_tokens: 0 } }) + 'data:[DONE]\n\n'))
+  const settings = new Map([['antling.apiKey', key]]), handlers = new Map(), chunks = []
+  loadTypeScript('src/main/ipc/llm.ts', {
+    electron: { ipcMain: { handle: (channel, fn) => handlers.set(channel, fn) } },
+    '../llm/prompt-progress': { watchPromptProgress: async () => () => {} },
+    '../store': { getStore: () => ({ getSetting: key => settings.get(key), setSetting: (key, value) => settings.set(key, value) }) },
+    '../llm/client': { LmStudioError: Error, LmStudioClient },
+    '../omniroute/runner': { getOmnirouteBaseUrl: () => '', startOmniroute: async () => {} }
+  }).registerLlmHandlers()
+  const sender = { once() {}, removeListener() {}, isDestroyed: () => false, send: (channel, chunk) => chunks.push(chunk) }
+  const result = await handlers.get(IPC.llm.chat)({ sender }, 'filtered-turn', { provider: 'antling', messages: [{ role: 'user', content: 'Hi' }] })
+  assert.equal(result.ok, false)
+  assert.equal(result.finishReason, 'content_filter')
+  assert.match(result.error, /content filter/)
+  assert.equal(result.content, refusal)
+  assert.equal(chunks.map(chunk => chunk.delta).join(''), refusal)
+  assert.equal(requests.length, 1)
 })

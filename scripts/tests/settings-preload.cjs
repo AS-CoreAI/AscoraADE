@@ -19,11 +19,24 @@ const fixture = window.settingsFixture = { signedOut: ['copilot'], checkFailures
   unslothModels: ['unsloth-fixture/model-a', 'unsloth-fixture/model-b'], modelRequests: [], analytics: [],
   computerAvailable: true, computerActions: [], computerStops: [], savedTasks: [] }
 fixture.checkpoints = []
+fixture.vpnStatus = { state: 'disconnected', protocol: 'wireguard', serverId: null, serverLabel: null, endpoint: null, assignedIp: null, connectedAt: null,
+  settings: { protocol: 'wireguard', serverId: null, apiBaseUrl: 'https://vpn.example.invalid' },
+  account: { authenticated: false, email: null, tier: 'anonymous' },
+  dependencies: { wireguard: { available: true, executable: 'fixture' }, openvpn: { available: true, executable: 'fixture' } } }
 const workspace = { id: 'settings-test', name: 'Settings test', path: 'E:\\fixture', createdAt: Date.now(), updatedAt: Date.now() }
 const group = (name) => new Proxy({}, { get: (_, method) => {
   if (name === 'computer' && method === 'onStopped') return callback => { Object.defineProperty(fixture, 'computerStopped', { value: callback, writable: true, configurable: true }); return () => { fixture.computerStopped = null } }
   if (String(method).startsWith('on')) return () => () => {}
   return async (...args) => {
+    if (name === 'vpn') {
+      if (method === 'status') return structuredClone(fixture.vpnStatus)
+      if (method === 'servers') return { ok: true, servers: [] }
+      if (method === 'traffic') return { ok: false, traffic: null }
+      if (method === 'login' || method === 'register') {
+        fixture.vpnAuthRequest = args[0]
+        return new Promise(resolve => { fixture.vpnAuthFinish = result => { fixture.vpnStatus = result.status; resolve(result) } })
+      }
+    }
     if (name === 'computer') {
       if (method === 'check') return { available: fixture.computerAvailable, reason: 'model' }
       if (method === 'start') { fixture.computerTask = args[0]; return { ok: true, sessionId: 'session-fixture' } }

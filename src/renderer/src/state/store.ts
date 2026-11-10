@@ -16,6 +16,7 @@ import type {
   TaskSummary,
   ToolDef,
   LlmProvider,
+  LlmConfig,
   CodexSandbox,
   CodexReasoning,
   CopilotPermissionMode,
@@ -1070,6 +1071,8 @@ interface WorkspaceLlm {
   ollamaModel: string
   openRouterModel: string
   antlingModel?: string
+  antlingReasoning?: LlmConfig['antlingReasoning']
+  antlingTemperature?: LlmConfig['antlingTemperature']
   codexModel: string
   codexSandbox: CodexSandbox
   codexReasoning: CodexReasoning | ''
@@ -1098,6 +1101,8 @@ interface WorkspaceLlm {
 
 /** Snapshot the active backend selection for persisting against a workspace. */
 function snapshotLlm(s: {
+  antlingReasoning: LlmConfig['antlingReasoning']
+  antlingTemperature: LlmConfig['antlingTemperature']
   lmStudioReasoning: import('@shared/ipc').LmStudioReasoning | ''
   unslothModel: string
   antigravityModel: AntigravityModel
@@ -1137,6 +1142,8 @@ function snapshotLlm(s: {
     ollamaModel: s.ollamaModel,
     openRouterModel: s.openRouterModel,
     antlingModel: s.antlingModel,
+    antlingReasoning: s.antlingReasoning,
+    antlingTemperature: s.antlingTemperature,
     codexModel: s.codexModel,
     codexSandbox: s.codexSandbox,
     codexReasoning: s.codexReasoning,
@@ -1356,6 +1363,8 @@ interface AppState {
   // Ant Ling
   antlingApiKey: string
   antlingModel: string
+  antlingReasoning: LlmConfig['antlingReasoning']
+  antlingTemperature: LlmConfig['antlingTemperature']
   // GigaChat (Sber)
   gigachatClientId: string
   gigachatScope: string
@@ -1585,6 +1594,8 @@ interface AppState {
   setOpenRouterModel: (m: string) => void
   setAntLingApiKey: (apiKey: string) => Promise<void>
   setAntLingModel: (m: string) => void
+  setAntLingReasoning: (value: LlmConfig['antlingReasoning']) => void
+  setAntLingTemperature: (value: LlmConfig['antlingTemperature']) => void
   setGigachatClientId: (id: string) => void
   setGigachatScope: (scope: string) => void
   setGigachatAuthKey: (key: string) => void
@@ -1831,6 +1842,8 @@ export const useApp = create<AppState>((set, get) => {
         unslothModel: saved.unslothModel ?? DEFAULT_LLM_CONFIG.unslothModel,
         openRouterModel: saved.openRouterModel ?? DEFAULT_LLM_CONFIG.openRouterModel,
         antlingModel: saved.antlingModel?.trim() || DEFAULT_LLM_CONFIG.antlingModel,
+        antlingReasoning: saved.antlingReasoning ?? DEFAULT_LLM_CONFIG.antlingReasoning,
+        antlingTemperature: saved.antlingTemperature ?? DEFAULT_LLM_CONFIG.antlingTemperature,
         gigachatModel: saved.gigachatModel ?? DEFAULT_LLM_CONFIG.gigachatModel,
         codexModel: saved.codexModel,
         codexSandbox: saved.codexSandbox,
@@ -1876,6 +1889,8 @@ export const useApp = create<AppState>((set, get) => {
       unslothModel: get().unslothModel,
       openRouterModel: get().openRouterModel,
       antlingModel: get().antlingModel,
+      antlingReasoning: get().antlingReasoning,
+      antlingTemperature: get().antlingTemperature,
       gigachatModel: get().gigachatModel,
       codexModel: get().codexModel,
       codexSandbox: get().codexSandbox,
@@ -1973,6 +1988,8 @@ export const useApp = create<AppState>((set, get) => {
   openRouterModel: DEFAULT_LLM_CONFIG.openRouterModel,
   antlingApiKey: DEFAULT_LLM_CONFIG.antlingApiKey,
   antlingModel: DEFAULT_LLM_CONFIG.antlingModel,
+  antlingReasoning: DEFAULT_LLM_CONFIG.antlingReasoning,
+  antlingTemperature: DEFAULT_LLM_CONFIG.antlingTemperature,
   gigachatClientId: DEFAULT_LLM_CONFIG.gigachatClientId,
   gigachatScope: DEFAULT_LLM_CONFIG.gigachatScope,
   gigachatAuthKey: DEFAULT_LLM_CONFIG.gigachatAuthKey,
@@ -2189,6 +2206,8 @@ export const useApp = create<AppState>((set, get) => {
       openRouterModel: cfg.openRouterModel,
       antlingApiKey: cfg.antlingApiKey ?? DEFAULT_LLM_CONFIG.antlingApiKey,
       antlingModel: cfg.antlingModel?.trim() || DEFAULT_LLM_CONFIG.antlingModel,
+      antlingReasoning: cfg.antlingReasoning ?? DEFAULT_LLM_CONFIG.antlingReasoning,
+      antlingTemperature: cfg.antlingTemperature ?? DEFAULT_LLM_CONFIG.antlingTemperature,
       gigachatClientId: cfg.gigachatClientId ?? DEFAULT_LLM_CONFIG.gigachatClientId,
       gigachatScope: cfg.gigachatScope ?? DEFAULT_LLM_CONFIG.gigachatScope,
       gigachatAuthKey: cfg.gigachatAuthKey ?? DEFAULT_LLM_CONFIG.gigachatAuthKey,
@@ -3416,6 +3435,18 @@ export const useApp = create<AppState>((set, get) => {
     get().persistWorkspaceLlm()
   },
 
+  setAntLingReasoning(antlingReasoning) {
+    set({ antlingReasoning })
+    void api.llm.setConfig({ antlingReasoning })
+    get().persistWorkspaceLlm()
+  },
+
+  setAntLingTemperature(antlingTemperature) {
+    set({ antlingTemperature })
+    void api.llm.setConfig({ antlingTemperature })
+    get().persistWorkspaceLlm()
+  },
+
   setGigachatClientId(gigachatClientId) {
     set({ gigachatClientId })
     void api.llm.setConfig({ gigachatClientId })
@@ -4133,6 +4164,8 @@ export const useApp = create<AppState>((set, get) => {
     const unslothModel = get().unslothModel
     const orModel = get().openRouterModel
     const antlingModel = get().antlingModel || DEFAULT_LLM_CONFIG.antlingModel
+    const antlingReasoning = get().antlingReasoning
+    const antlingTemperature = get().antlingTemperature
     const antlingApiKey = get().antlingApiKey
     const gigachatModel = get().gigachatModel
     const gigachatReasoning = get().gigachatReasoning
@@ -4827,6 +4860,7 @@ export const useApp = create<AppState>((set, get) => {
                 ...(agentProvider === 'lmstudio' ? { reasoning: lmStudioReasoning,
                   ...(outputBudget !== undefined ? { maxTokens: outputBudget } : {}) } : {}),
                 ...(agentProvider === 'gigachat' ? { reasoning: gigachatReasoning } : {}),
+                ...(isAntLing ? { reasoning: antlingReasoning, temperature: antlingTemperature } : {}),
                 model: isAntLing ? antlingModel : isUnsloth ? unslothModel : isOpenRouter
                   ? orModel
                   : isOllama
@@ -4842,8 +4876,9 @@ export const useApp = create<AppState>((set, get) => {
               onChunk
             )
         writeRun(taskId, { streamId: null, thinking: false, promptProgress: null })
+        const antlingFiltered = isAntLing && result.finishReason === 'content_filter'
         if (isAntLing && get().provider === agentProvider && get().antlingModel === antlingModel && get().antlingApiKey === antlingApiKey && !result.aborted) {
-          set({ connection: result.ok ? 'connected' : 'error', connectionError: result.error })
+          set({ connection: result.ok || antlingFiltered ? 'connected' : 'error', connectionError: antlingFiltered ? undefined : result.error })
         }
         // Settle the reasoning block: the ChatResult carries the definitive
         // text (chunks are throttled) and the measured duration for the header.
@@ -4873,8 +4908,11 @@ export const useApp = create<AppState>((set, get) => {
         if (!result.ok) {
           finalStatus = 'error'
           const prev = readRun(taskId)?.messages.find((m) => m.id === replyId)?.text ?? ''
-          if (prev.trim()) pushConvo({ role: 'assistant', content: prev })
-          patch(replyId, { text: prev ? `${prev}\n\n⚠ ${result.error}` : `⚠ ${result.error}` })
+          // A provider filter response is not a completed assistant turn. Keep
+          // its explanation visible without feeding the refusal into later turns.
+          if (prev.trim() && !antlingFiltered) pushConvo({ role: 'assistant', content: prev })
+          const error = antlingFiltered ? tr(get().appLanguage, 'chat.antlingContentFilter') : result.error
+          patch(replyId, { text: prev ? `${prev}\n\n⚠ ${error}` : `⚠ ${error}` })
           break
         }
 
