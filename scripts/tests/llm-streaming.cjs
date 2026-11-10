@@ -313,6 +313,29 @@ test('GigaChat sends reasoning_effort only when a level is selected', async () =
   assert.deepEqual(payloads.map(p => p.reasoning_effort), [undefined, 'low', 'medium', 'high'])
 })
 
+test('GigaChat drops reasoning_effort while tools travel', async () => {
+  const payloads = []
+  const fetchStub = async (url, init) => {
+    if (String(url).includes('/oauth')) {
+      return new Response(JSON.stringify({ access_token: 'token', expires_at: Date.now() + 3600_000 }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } })
+    }
+    payloads.push(JSON.parse(init.body))
+    return new Response(frame({ content: 'Done' }, 'stop') + done,
+      { status: 200, headers: { 'Content-Type': 'text/event-stream' } })
+  }
+  const { LmStudioClient } = loadTypeScript('src/main/llm/client.ts', { undici: { ...undici, fetch: fetchStub } })
+  const instance = new LmStudioClient({ ...DEFAULT_LLM_CONFIG, provider: 'gigachat', gigachatAuthKey: 'auth-key', gigachatModel: 'GigaChat-3-Ultra', gigachatReasoning: 'high' })
+  const tools = [{ type: 'function', function: { name: 'list_dir', description: 'List a directory', parameters: { type: 'object', properties: {} } } }]
+  // A level turns reasoning on for plain answers...
+  for await (const _ of instance.streamChat({ messages: [{ role: 'user', content: 'hi' }], reasoning: 'high' })) { /* consume */ }
+  // ...but GigaChat cannot combine reasoning with function calling, so the
+  // level is withheld whenever tools travel.
+  for await (const _ of instance.streamChat({ messages: [{ role: 'user', content: 'hi' }], reasoning: 'high', tools })) { /* consume */ }
+  assert.deepEqual(payloads.map(p => p.reasoning_effort), ['high', undefined])
+  assert.ok(payloads[1].functions)
+})
+
 test('GigaChat retries without functions when the model rejects them', async () => {
   let chatTries = 0
   const payloads = []

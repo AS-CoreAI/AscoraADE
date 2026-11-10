@@ -925,7 +925,7 @@ const hi: Translation = {
   'settings.gigachatGuide': 'GigaChat Studio',
   'settings.gigachatKeyRequired': 'कनेक्ट करने के लिए Authorization key जोड़ें।',
   'settings.gigachatModelsHint': 'GigaChat मॉडल: GigaChat-2, GigaChat-2-Pro, GigaChat-2-Max, GigaChat-3-Ultra.',
-  'settings.gigachatReasoningHint': 'जब तक कोई स्तर न चुनें, GigaChat तर्क नहीं करता। ऊँचा स्तर अधिक टोकन लेता है और धीमा उत्तर देता है।',
+  'settings.gigachatReasoningHint': 'GigaChat केवल स्तर चुनने पर तर्क करता है (ऊँचा स्तर = अधिक टोकन, धीमा)। जब एजेंट टूल्स का उपयोग करता है, तर्क बंद रहता है — GigaChat दोनों को भरोसेमंद ढंग से नहीं जोड़ सकता।',
   'settings.unslothKeyRequired': 'कनेक्शन जाँचने के लिए API कुंजी जोड़ें।',
   'settings.unslothModelsHint': 'Unsloth API से मिले मॉडल। चैट से पहले चुना गया मॉडल Unsloth में लोड करें या Settings → API में Model auto-switch चालू करें।',
   'settings.reasoningLevel': 'तर्क का स्तर',

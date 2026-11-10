@@ -563,7 +563,7 @@ const uk: Translation = {
   'settings.gigachatGuide': 'GigaChat Studio',
   'settings.gigachatKeyRequired': 'Додайте Authorization key для підключення.',
   'settings.gigachatModelsHint': 'Моделі GigaChat: GigaChat-2, GigaChat-2-Pro, GigaChat-2-Max, GigaChat-3-Ultra.',
-  'settings.gigachatReasoningHint': 'GigaChat не міркує, доки не вибрано рівень. Що вищий рівень, то більше токенів і повільніша відповідь.',
+  'settings.gigachatReasoningHint': 'GigaChat міркує лише за вибраного рівня (вищий рівень — більше токенів і повільніше). Поки агент використовує інструменти, міркування не застосовуються — GigaChat не вміє надійно їх поєднувати.',
   'settings.unslothKeyRequired': 'Додайте ключ API, щоб перевірити підключення.',
   'settings.unslothModelsHint': 'Моделі з API Unsloth. Перед початком чату завантажте вибрану модель в Unsloth або ввімкніть там Model auto-switch у Settings → API.',
   'settings.reasoningLevel': 'Рівень міркування',

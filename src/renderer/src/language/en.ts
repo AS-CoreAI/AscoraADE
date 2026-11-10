@@ -928,7 +928,7 @@
   'settings.gigachatGuide': 'GigaChat Studio',
   'settings.gigachatKeyRequired': 'Add an Authorization key to connect.',
   'settings.gigachatModelsHint': 'GigaChat models: GigaChat-2, GigaChat-2-Pro, GigaChat-2-Max, GigaChat-3-Ultra.',
-  'settings.gigachatReasoningHint': 'GigaChat does not reason unless you pick a level. Higher effort spends more tokens and responds slower.',
+  'settings.gigachatReasoningHint': 'GigaChat reasons only when a level is picked (higher = more tokens, slower). While the agent uses tools, reasoning stays off — GigaChat cannot combine the two reliably.',
   'settings.unslothKeyRequired': 'Add an API key to test the connection.',
   'settings.unslothModelsHint': 'Models reported by the Unsloth API. Load the selected model in Unsloth before chatting, or enable Model auto-switch in its Settings → API.',
   'settings.reasoningLevel': 'Reasoning level',

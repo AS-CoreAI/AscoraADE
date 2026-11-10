@@ -718,7 +718,7 @@ const de: Translation = {
   'settings.gigachatGuide': 'GigaChat Studio',
   'settings.gigachatKeyRequired': 'Fügen Sie einen Authorization key hinzu, um zu verbinden.',
   'settings.gigachatModelsHint': 'GigaChat-Modelle: GigaChat-2, GigaChat-2-Pro, GigaChat-2-Max, GigaChat-3-Ultra.',
-  'settings.gigachatReasoningHint': 'GigaChat denkt erst nach, wenn eine Stufe gewählt wird. Höhere Stufen verbrauchen mehr Tokens und antworten langsamer.',
+  'settings.gigachatReasoningHint': 'GigaChat denkt nur mit gewählter Stufe nach (höher = mehr Tokens, langsamer). Solange der Agent Tools nutzt, bleibt das Nachdenken aus — GigaChat kann beides nicht zuverlässig kombinieren.',
   'settings.unslothKeyRequired': 'Fügen Sie einen API-Schlüssel hinzu, um die Verbindung zu testen.',
   'settings.unslothModelsHint': 'Modelle aus der Unsloth-API. Laden Sie das gewählte Modell vor dem Chat in Unsloth oder aktivieren Sie dort Model auto-switch unter Settings → API.',
   'settings.reasoningLevel': 'Denktiefe',

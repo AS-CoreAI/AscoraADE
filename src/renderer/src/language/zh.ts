@@ -925,7 +925,7 @@ const zh: Translation = {
   'settings.gigachatGuide': 'GigaChat Studio',
   'settings.gigachatKeyRequired': '请添加 Authorization key 以连接。',
   'settings.gigachatModelsHint': 'GigaChat 模型：GigaChat-2、GigaChat-2-Pro、GigaChat-2-Max、GigaChat-3-Ultra。',
-  'settings.gigachatReasoningHint': 'GigaChat 默认不进行推理，选择级别后才会开启。级别越高，消耗的 token 越多，响应越慢。',
+  'settings.gigachatReasoningHint': 'GigaChat 仅在选择级别时进行推理（级别越高，消耗 token 越多、越慢）。当智能体使用工具时，推理会保持关闭——GigaChat 无法可靠地同时使用两者。',
   'settings.unslothKeyRequired': '请添加 API 密钥以测试连接。',
   'settings.unslothModelsHint': '由 Unsloth API 返回的模型。开始聊天前，请在 Unsloth 中加载所选模型，或在 Settings → API 中启用 Model auto-switch。',
   'settings.reasoningLevel': '推理级别',

@@ -925,7 +925,7 @@ const ko: Translation = {
   'settings.gigachatGuide': 'GigaChat Studio',
   'settings.gigachatKeyRequired': '연결하려면 Authorization key를 추가하세요.',
   'settings.gigachatModelsHint': 'GigaChat 모델: GigaChat-2, GigaChat-2-Pro, GigaChat-2-Max, GigaChat-3-Ultra.',
-  'settings.gigachatReasoningHint': 'GigaChat은 레벨을 선택해야 추론합니다. 레벨이 높을수록 토큰을 더 많이 쓰고 응답이 느려집니다.',
+  'settings.gigachatReasoningHint': 'GigaChat은 레벨을 선택했을 때만 추론합니다(높을수록 토큰을 더 쓰고 느립니다). 에이전트가 도구를 사용하는 동안에는 추론이 꺼집니다 — GigaChat은 둘을 안정적으로 함께 쓸 수 없습니다.',
   'settings.unslothKeyRequired': '연결을 테스트하려면 API 키를 추가하세요.',
   'settings.unslothModelsHint': 'Unsloth API에서 제공하는 모델입니다. 채팅 전에 선택한 모델을 Unsloth에서 불러오거나 Settings → API에서 Model auto-switch를 켜세요.',
   'settings.reasoningLevel': '추론 수준',

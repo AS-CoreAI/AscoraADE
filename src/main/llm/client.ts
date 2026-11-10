@@ -478,8 +478,13 @@ export class LmStudioClient {
       ...(this.config.provider === 'lmstudio' && reasoning
         ? { reasoning_effort: reasoning === 'off' ? 'none' : reasoning === 'on' ? 'high' : reasoning } : {}),
       // GigaChat keeps reasoning off by default; a level turns it on. Reasoning
-      // is then streamed back in `delta.reasoning_content` (handled below).
-      ...(isGigachat && gigachatReasoning ? { reasoning_effort: gigachatReasoning } : {}),
+      // then streams back in `delta.reasoning_content` (handled below).
+      // GigaChat cannot reliably combine reasoning with function calling: with
+      // `functions` present, GigaChat-3-Ultra writes the tool call as text into
+      // reasoning_content, loops until the token limit and returns nothing
+      // (finish_reason: length), and 2-Pro/2-Max end with finish_reason: error.
+      // Keep tools working by sending the level only when no tools travel.
+      ...(isGigachat && gigachatReasoning && !withTools ? { reasoning_effort: gigachatReasoning } : {}),
       // GigaChat predates OpenAI's tool protocol and takes `functions` +
       // `function_call`; every other backend uses the `tools` array.
       ...(withTools

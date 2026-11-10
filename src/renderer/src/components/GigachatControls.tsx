@@ -19,7 +19,7 @@ export function GigachatControls({ settings = false, disabled = false }: { setti
     aria-label={t('composer.reasoningEffort')}
     title={t('composer.reasoningEffort')}
     onChange={event => setReasoning(event.target.value as GigachatReasoning | '')}>
-    <option value="">{t('composer.reasoningAuto')}</option>
+    <option value="">{t('composer.reasoning.off')}</option>
     {GIGACHAT_REASONING_LEVELS.map(level => <option key={level} value={level}>{t(labels[level])}</option>)}
   </select>
   return settings
