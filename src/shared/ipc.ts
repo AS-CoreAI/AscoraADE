@@ -626,6 +626,13 @@ export interface LlmModel {
 }
 
 export type LmStudioReasoning = 'off' | 'on' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'
+
+/** GigaChat's reasoning depth for `reasoning_effort` on /chat/completions.
+ *  GigaChat keeps reasoning off unless the parameter is sent, so an empty
+ *  selection means "model default" (no reasoning). */
+export type GigachatReasoning = 'low' | 'medium' | 'high'
+export const GIGACHAT_REASONING_LEVELS: GigachatReasoning[] = ['low', 'medium', 'high']
+
 export interface LmStudioModelInfo {
   /** Actual loaded instance window. Null when unloaded, ambiguous or unavailable. */
   contextLength: number | null
@@ -1187,6 +1194,8 @@ export interface LlmConfig {
   gigachatAuthKey: string
   /** Default GigaChat model id used when selected. */
   gigachatModel: string
+  /** Reasoning depth for GigaChat; empty → model default (reasoning off). */
+  gigachatReasoning: GigachatReasoning | ''
   /** Default model id routed through the bundled OmniRoute gateway. */
   omnirouteModel: string
   /**
@@ -1241,6 +1250,7 @@ export const DEFAULT_LLM_CONFIG: LlmConfig = {
   gigachatScope: 'GIGACHAT_API_PERS',
   gigachatAuthKey: '',
   gigachatModel: 'GigaChat-2',
+  gigachatReasoning: '',
   omnirouteModel: '',
   omnirouteBaseUrl: ''
 }

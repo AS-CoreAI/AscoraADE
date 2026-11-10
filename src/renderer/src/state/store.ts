@@ -28,6 +28,7 @@ import type {
   GlmMode,
   AntigravityModel,
   AntigravityReasoning,
+  GigachatReasoning,
   CodexEvent,
   CodexItem,
   CodexCheckResult,
@@ -1351,6 +1352,7 @@ interface AppState {
   gigachatScope: string
   gigachatAuthKey: string
   gigachatModel: string
+  gigachatReasoning: GigachatReasoning | ''
   // Codex CLI
   codexPath: string
   codexModel: string
@@ -1576,6 +1578,7 @@ interface AppState {
   setGigachatScope: (scope: string) => void
   setGigachatAuthKey: (key: string) => void
   setGigachatModel: (m: string) => void
+  setGigachatReasoning: (value: GigachatReasoning | '') => void
   setGigachatConnection: (clientId: string, scope: string, authKey: string) => Promise<void>
   setCodexPath: (path: string) => Promise<void>
   setCodexModel: (m: string) => void
@@ -1953,6 +1956,7 @@ export const useApp = create<AppState>((set, get) => {
   gigachatScope: DEFAULT_LLM_CONFIG.gigachatScope,
   gigachatAuthKey: DEFAULT_LLM_CONFIG.gigachatAuthKey,
   gigachatModel: DEFAULT_LLM_CONFIG.gigachatModel,
+  gigachatReasoning: DEFAULT_LLM_CONFIG.gigachatReasoning,
   codexPath: DEFAULT_LLM_CONFIG.codexPath,
   codexModel: DEFAULT_LLM_CONFIG.codexModel,
   codexSandbox: DEFAULT_LLM_CONFIG.codexSandbox,
@@ -2166,6 +2170,7 @@ export const useApp = create<AppState>((set, get) => {
       gigachatScope: cfg.gigachatScope ?? DEFAULT_LLM_CONFIG.gigachatScope,
       gigachatAuthKey: cfg.gigachatAuthKey ?? DEFAULT_LLM_CONFIG.gigachatAuthKey,
       gigachatModel: cfg.gigachatModel ?? DEFAULT_LLM_CONFIG.gigachatModel,
+      gigachatReasoning: cfg.gigachatReasoning ?? DEFAULT_LLM_CONFIG.gigachatReasoning,
       codexPath: cfg.codexPath,
       codexModel: cfg.codexModel,
       codexSandbox: cfg.codexSandbox,
@@ -3386,6 +3391,11 @@ export const useApp = create<AppState>((set, get) => {
     get().persistWorkspaceLlm()
   },
 
+  setGigachatReasoning(gigachatReasoning) {
+    set({ gigachatReasoning })
+    void api.llm.setConfig({ gigachatReasoning })
+  },
+
   async setGigachatConnection(clientId, scope, authKey) {
     const patch = {
       gigachatClientId: clientId.trim(),
@@ -4075,6 +4085,7 @@ export const useApp = create<AppState>((set, get) => {
     const unslothModel = get().unslothModel
     const orModel = get().openRouterModel
     const gigachatModel = get().gigachatModel
+    const gigachatReasoning = get().gigachatReasoning
     const codexModel = get().codexModel
     const codexSandbox = get().codexSandbox
     const codexReasoning = get().codexReasoning
@@ -4764,6 +4775,7 @@ export const useApp = create<AppState>((set, get) => {
                 provider: agentProvider,
                 ...(agentProvider === 'lmstudio' ? { reasoning: lmStudioReasoning,
                   ...(outputBudget !== undefined ? { maxTokens: outputBudget } : {}) } : {}),
+                ...(agentProvider === 'gigachat' ? { reasoning: gigachatReasoning } : {}),
                 model: isUnsloth ? unslothModel : isOpenRouter
                   ? orModel
                   : isOllama

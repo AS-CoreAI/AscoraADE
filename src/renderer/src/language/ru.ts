@@ -930,6 +930,7 @@ const ru: Translation = {
   'settings.gigachatGuide': 'GigaChat Studio',
   'settings.gigachatKeyRequired': 'Добавьте Authorization key для подключения.',
   'settings.gigachatModelsHint': 'Модели GigaChat: GigaChat-2, GigaChat-2-Pro, GigaChat-2-Max, GigaChat-3-Ultra.',
+  'settings.gigachatReasoningHint': 'GigaChat не рассуждает, пока не выбран уровень. Чем выше уровень, тем больше токенов и медленнее ответ.',
   'settings.unslothKeyRequired': 'Добавьте API-ключ для проверки подключения.',
   'settings.unslothModelsHint': 'Модели из API Unsloth. Перед отправкой сообщения загрузите выбранную модель в Unsloth или включите там Model auto-switch в Settings → API.',
   'settings.reasoningLevel': 'Уровень рассуждения',

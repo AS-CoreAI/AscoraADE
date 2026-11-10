@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type JSX } from 'react'
 import { Icon } from './Icon'
 import { LmStudioControls } from './LmStudioControls'
+import { GigachatControls } from './GigachatControls'
 import { api } from '@/lib/api'
 import {
   CODEX_MODEL_PRESETS,
@@ -475,6 +476,7 @@ function GigaChatPanel(): JSX.Element {
       </select>
       <span className="field-hint">{t('settings.gigachatModelsHint')}</span>
     </label>
+    <GigachatControls settings />
     <button className="btn" style={{ alignSelf: 'flex-start' }} disabled={!authKey || saving || connection === 'connecting'} onClick={() => void refreshModels()}>{t('settings.refreshModels')}</button>
   </div>
 }

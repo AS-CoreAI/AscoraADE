@@ -457,6 +457,7 @@ export class LmStudioClient {
     const name = this.providerName
     const url = `${this.baseUrl}/chat/completions`
     const reasoning = params.reasoning ?? this.config.lmStudioReasoning
+    const gigachatReasoning = params.reasoning ?? this.config.gigachatReasoning
     const isGigachat = this.config.provider === 'gigachat'
     const withTools = !!params.tools && params.tools.length > 0
     const token = isGigachat ? await this.ensureGigachatToken(signal) : undefined
@@ -476,6 +477,9 @@ export class LmStudioClient {
       // accepts none/high for toggle models, and the named levels otherwise.
       ...(this.config.provider === 'lmstudio' && reasoning
         ? { reasoning_effort: reasoning === 'off' ? 'none' : reasoning === 'on' ? 'high' : reasoning } : {}),
+      // GigaChat keeps reasoning off by default; a level turns it on. Reasoning
+      // is then streamed back in `delta.reasoning_content` (handled below).
+      ...(isGigachat && gigachatReasoning ? { reasoning_effort: gigachatReasoning } : {}),
       // GigaChat predates OpenAI's tool protocol and takes `functions` +
       // `function_call`; every other backend uses the `tools` array.
       ...(withTools

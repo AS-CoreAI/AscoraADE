@@ -72,6 +72,8 @@ export function readConfig(): LlmConfig {
       store.getSetting<string>('gigachat.authKey') ?? DEFAULT_LLM_CONFIG.gigachatAuthKey
     ),
     gigachatModel: store.getSetting<string>('gigachat.model') ?? DEFAULT_LLM_CONFIG.gigachatModel,
+    gigachatReasoning:
+      store.getSetting<LlmConfig['gigachatReasoning']>('gigachat.reasoning') ?? '',
     codexPath: store.getSetting<string>('codex.path') ?? DEFAULT_LLM_CONFIG.codexPath,
     codexModel: store.getSetting<string>('codex.model') ?? DEFAULT_LLM_CONFIG.codexModel,
     codexSandbox: store.getSetting<CodexSandbox>('codex.sandbox') ?? DEFAULT_LLM_CONFIG.codexSandbox,
@@ -180,6 +182,9 @@ export function registerLlmHandlers(): void {
     }
     if (typeof patch.gigachatModel === 'string') {
       store.setSetting('gigachat.model', patch.gigachatModel.trim())
+    }
+    if (typeof patch.gigachatReasoning === 'string' && ['', 'low', 'medium', 'high'].includes(patch.gigachatReasoning)) {
+      store.setSetting('gigachat.reasoning', patch.gigachatReasoning)
     }
     if (typeof patch.codexPath === 'string') store.setSetting('codex.path', patch.codexPath.trim())
     if (typeof patch.codexModel === 'string') store.setSetting('codex.model', patch.codexModel.trim())

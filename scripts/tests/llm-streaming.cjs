@@ -292,6 +292,27 @@ test('GigaChat speaks the functions/function_call protocol and parses function_c
   assert.equal(result.finishReason, 'function_call')
 })
 
+test('GigaChat sends reasoning_effort only when a level is selected', async () => {
+  const payloads = []
+  const fetchStub = async (url, init) => {
+    if (String(url).includes('/oauth')) {
+      return new Response(JSON.stringify({ access_token: 'token', expires_at: Date.now() + 3600_000 }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } })
+    }
+    payloads.push(JSON.parse(init.body))
+    return new Response(frame({ content: 'Done' }, 'stop') + done,
+      { status: 200, headers: { 'Content-Type': 'text/event-stream' } })
+  }
+  const { LmStudioClient } = loadTypeScript('src/main/llm/client.ts', { undici: { ...undici, fetch: fetchStub } })
+  // Config-level default is overridden per request; an empty selection keeps
+  // reasoning off (no parameter) even when a default is configured.
+  const instance = new LmStudioClient({ ...DEFAULT_LLM_CONFIG, provider: 'gigachat', gigachatAuthKey: 'auth-key', gigachatModel: 'GigaChat-3-Ultra', gigachatReasoning: 'high' })
+  for (const reasoning of ['', 'low', 'medium', 'high']) {
+    for await (const _ of instance.streamChat({ ...params, reasoning })) { /* consume */ }
+  }
+  assert.deepEqual(payloads.map(p => p.reasoning_effort), [undefined, 'low', 'medium', 'high'])
+})
+
 test('GigaChat retries without functions when the model rejects them', async () => {
   let chatTries = 0
   const payloads = []
