@@ -4,6 +4,7 @@ import en, { type Translation } from './en'
 // Ukrainian wording. New translations belong in this file only.
 const uk: Translation = {
   ...en,
+  'settings.antlingModelsHint': "Моделі з документації Ant Ling. Доступ до API перевіряється під час надсилання повідомлення.",
   'chat.contextSummary': "Підсумок контексту",
   'chat.compacting': "Збереження та стиснення контексту…",
   'chat.checkpointFailed': "Не вдалося зберегти чат. Перевірте вільне місце й повторіть спробу.",

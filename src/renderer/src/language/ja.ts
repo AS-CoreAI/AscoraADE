@@ -2,6 +2,7 @@
 
 const ja: Translation = {
   ...en,
+  'settings.antlingModelsHint': "Ant Lingのドキュメントに記載されたモデルです。メッセージ送信時にAPIへのアクセスを確認します。",
   'chat.contextSummary': "コンテキストの要約",
   'chat.compacting': "コンテキストを保存・圧縮中…",
   'chat.checkpointFailed': "チャットを保存できませんでした。空き容量を確認して再試行してください。",

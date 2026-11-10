@@ -1,5 +1,6 @@
 ﻿export const en = {
   'app.language.english': 'English',
+  'settings.antlingModelsHint': "Models from Ant Ling documentation. API access is verified when you send a message.",
   'chat.contextSummary': "Context summary",
   'chat.compacting': "Saving and compacting context…",
   'chat.checkpointFailed': "Could not save the chat. Check disk space and retry.",

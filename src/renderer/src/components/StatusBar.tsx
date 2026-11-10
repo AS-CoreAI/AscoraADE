@@ -14,7 +14,7 @@ import {
   GLM_MODE_SHORT_KEY,
   MODE_LABEL_KEY
 } from './Composer'
-import { CLAUDE_MODEL_LABEL, WPROVIDER_SERVICE_INFO, type PublicIpStatus } from '@shared/ipc'
+import { CLAUDE_MODEL_LABEL, DEFAULT_LLM_CONFIG, WPROVIDER_SERVICE_INFO, type PublicIpStatus } from '@shared/ipc'
 
 /** Re-poll Claude usage every few minutes while it's the active backend. */
 const USAGE_POLL_MS = 3 * 60 * 1000
@@ -66,6 +66,7 @@ export function StatusBar(): JSX.Element {
   const ollamaModel = useApp((s) => s.ollamaModel)
   const unslothModel = useApp((s) => s.unslothModel)
   const openRouterModel = useApp((s) => s.openRouterModel)
+  const antlingModel = useApp((s) => s.antlingModel)
   const mode = useApp((s) => s.mode)
   const connection = useApp((s) => s.connection)
   const models = useApp((s) => s.models)
@@ -308,6 +309,8 @@ export function StatusBar(): JSX.Element {
         connection === 'connected' && models.length > 0
           ? `OpenRouter: ${t('status.connected')} - ${modelCount(models.length)}`
           : `OpenRouter: ${connectionStatusLabel(connection)}`
+    } else if (provider === 'antling') {
+      label = `Ant Ling: ${connectionStatusLabel(connection)}`
     } else if (provider === 'unsloth') {
       label = `Unsloth: ${connectionStatusLabel(connection)}${models.length ? ` · ${modelCount(models.length)}` : ''}`
     } else if (isGigachat) {
@@ -323,7 +326,7 @@ export function StatusBar(): JSX.Element {
     }
   }
 
-  const modelLabel = provider === 'unsloth' ? unslothModel || t('status.noModel') : isOmniroute
+  const modelLabel = provider === 'antling' ? antlingModel || DEFAULT_LLM_CONFIG.antlingModel : provider === 'unsloth' ? unslothModel || t('status.noModel') : isOmniroute
     ? omnirouteModel || 'auto'
     : isWProvider
     ? `${wproviderLabel} · Web`

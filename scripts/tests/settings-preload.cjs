@@ -46,6 +46,10 @@ const group = (name) => new Proxy({}, { get: (_, method) => {
       if (method === 'listModels') {
         const provider = args[0] || config.provider
         fixture.modelRequests.push(provider)
+        if (provider === 'antling') {
+          if (!config.antlingApiKey) return { ok: false, error: 'Ant Ling requires an API key.' }
+          return { ok: true, source: 'preset', models: contract.exports.ANT_LING_MODELS.map(id => ({ id })) }
+        }
         if (provider === 'unsloth') {
           if (!config.unslothApiKey || config.unslothApiKey === 'invalid') return { ok: false, error: 'Unsloth rejected the API key.' }
           return { ok: true, models: fixture.unslothModels.map(id => ({ id })) }

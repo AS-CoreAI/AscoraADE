@@ -65,6 +65,11 @@ export function readConfig(): LlmConfig {
     openRouterApiKey,
     openRouterModel:
       store.getSetting<string>('openrouter.model') ?? DEFAULT_LLM_CONFIG.openRouterModel,
+    antlingApiKey: normalizeOpenRouterApiKey(
+      store.getSetting<string>('antling.apiKey') ?? DEFAULT_LLM_CONFIG.antlingApiKey
+    ),
+    antlingModel:
+      store.getSetting<string>('antling.model')?.trim() || DEFAULT_LLM_CONFIG.antlingModel,
     gigachatClientId:
       store.getSetting<string>('gigachat.clientId') ?? DEFAULT_LLM_CONFIG.gigachatClientId,
     gigachatScope: store.getSetting<string>('gigachat.scope') ?? DEFAULT_LLM_CONFIG.gigachatScope,
@@ -171,6 +176,12 @@ export function registerLlmHandlers(): void {
     if (typeof patch.openRouterModel === 'string') {
       store.setSetting('openrouter.model', patch.openRouterModel.trim())
     }
+    if (typeof patch.antlingApiKey === 'string') {
+      store.setSetting('antling.apiKey', normalizeOpenRouterApiKey(patch.antlingApiKey))
+    }
+    if (typeof patch.antlingModel === 'string') {
+      store.setSetting('antling.model', patch.antlingModel.trim() || DEFAULT_LLM_CONFIG.antlingModel)
+    }
     if (typeof patch.gigachatClientId === 'string') {
       store.setSetting('gigachat.clientId', patch.gigachatClientId.trim())
     }
@@ -222,10 +233,12 @@ export function registerLlmHandlers(): void {
 
   ipcMain.handle(IPC.llm.listModels, async (_event, provider?: LlmProvider): Promise<ListModelsResult> => {
     try {
-      if (provider && !['lmstudio', 'ollama', 'unsloth', 'openrouter', 'omniroute', 'gigachat'].includes(provider)) throw new Error('Unsupported model provider')
-      const probe = provider ? new LmStudioClient({ ...readConfig(), provider }) : getClient()
+      if (provider && !['lmstudio', 'ollama', 'unsloth', 'openrouter', 'antling', 'omniroute', 'gigachat'].includes(provider)) throw new Error('Unsupported model provider')
+      const config = readConfig()
+      const selectedProvider = provider ?? config.provider
+      const probe = new LmStudioClient({ ...config, provider: selectedProvider })
       const models = await probe.listModels(AbortSignal.timeout(15_000))
-      return { ok: true, models }
+      return { ok: true, models, source: selectedProvider === 'antling' ? 'preset' : 'api' }
     } catch (err) {
       return { ok: false, error: errorMessage(err) }
     }

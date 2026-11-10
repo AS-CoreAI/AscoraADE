@@ -5,6 +5,7 @@ export const PROVIDERS: { id: LlmProvider; name: string }[] = [
   { id: 'ollama', name: 'Ollama' },
   { id: 'unsloth', name: 'Unsloth' },
   { id: 'openrouter', name: 'OpenRouter' },
+  { id: 'antling', name: 'Ant Ling' },
   { id: 'omniroute', name: 'OmniRoute' },
   { id: 'gigachat', name: 'GigaChat (Sber)' },
   { id: 'codex', name: 'Codex' },

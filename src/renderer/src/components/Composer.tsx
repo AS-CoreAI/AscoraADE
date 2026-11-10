@@ -26,6 +26,7 @@ import {
   GROK_REASONING_LEVELS,
   GLM_MODES,
   GIGACHAT_MODELS,
+  ANT_LING_MODELS,
   type LlmProvider,
   type CodexReasoning,
   type CodexSandbox,
@@ -325,6 +326,9 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
   const wproviderLoggingIn = useApp((s) => s.wproviderLoggingIn)
   const omnirouteModel = useApp((s) => s.omnirouteModel)
   const setOmnirouteModel = useApp((s) => s.setOmnirouteModel)
+  const antlingModel = useApp((s) => s.antlingModel)
+  const setAntLingModel = useApp((s) => s.setAntLingModel)
+  const antlingApiKey = useApp((s) => s.antlingApiKey)
   const gigachatModel = useApp((s) => s.gigachatModel)
   const setGigachatModel = useApp((s) => s.setGigachatModel)
   const gigachatAuthKey = useApp((s) => s.gigachatAuthKey)
@@ -396,6 +400,7 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
     },
     { value: 'unsloth', label: 'Unsloth', disabled: blockedBySsh('unsloth'), tooltip: sshBlockedTitle('unsloth') },
     { value: 'openrouter', label: 'OpenRouter', disabled: blockedBySsh('openrouter'), tooltip: sshBlockedTitle('openrouter') },
+    { value: 'antling', label: 'Ant Ling', disabled: blockedBySsh('antling'), tooltip: sshBlockedTitle('antling') },
     { value: 'omniroute', label: 'OmniRoute' },
     { value: 'gigachat', label: 'GigaChat (Sber)' },
     {
@@ -443,10 +448,12 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
     { value: 'wprovider', label: 'Ascora WProvider' }
   ]
   const selectedLocalModel =
-    provider === 'unsloth' ? unslothModel : provider === 'ollama' ? ollamaModel : provider === 'omniroute' ? omnirouteModel : provider === 'gigachat' ? gigachatModel : model
+    provider === 'unsloth' ? unslothModel : provider === 'ollama' ? ollamaModel : provider === 'omniroute' ? omnirouteModel : provider === 'gigachat' ? gigachatModel : provider === 'antling' ? antlingModel : model
   const modelOptions =
     provider === 'openrouter'
       ? openRouterModelOptions(models, openRouterModel)
+      : provider === 'antling'
+        ? [...new Set([...ANT_LING_MODELS, ...(antlingModel ? [antlingModel] : [])])]
       : provider === 'gigachat'
         ? (models.length > 0 ? models : [...GIGACHAT_MODELS])
         : models.length > 0
@@ -460,6 +467,7 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
     !attaching &&
     !(provider === 'omniroute' && omnirouteStatus.state !== 'ready') &&
     !(provider === 'gigachat' && !gigachatAuthKey) &&
+    !(provider === 'antling' && !antlingApiKey) &&
     !readOnly
   const canAttach = !!active && !activeSsh && !attaching && !readOnly
 
@@ -1088,6 +1096,15 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
                 {m}
               </option>
             ))}
+          </select>
+        ) : provider === 'antling' ? (
+          <select
+            className="composer-select"
+            value={antlingModel || DEFAULT_LLM_CONFIG.antlingModel}
+            onChange={(e) => setAntLingModel(e.target.value)}
+            title="Ant Ling model"
+          >
+            {modelOptions.map((m) => <option key={m} value={m}>{m}</option>)}
           </select>
         ) : provider === 'gigachat' ? (
           <select

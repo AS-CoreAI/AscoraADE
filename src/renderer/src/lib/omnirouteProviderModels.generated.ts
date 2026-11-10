@@ -73,6 +73,7 @@ export const OMNI_PROVIDER_ID_TO_ALIAS: Record<string, string> = {
   "tencent": "tencent",
   "coze": "coze",
   "ai21": "ai21",
+  "ant-ling": "ant-ling",
   "publicai": "publicai",
   "featherless-ai": "featherless",
   "antigravity": "antigravity",
@@ -2619,6 +2620,36 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
     {
       "id": "jamba-mini-2",
       "name": "jamba-mini-2"
+    }
+  ],
+  "ant-ling": [
+    {
+      "id": "Ling-3.2-flash",
+      "name": "Ling 3.2 Flash"
+    },
+    {
+      "id": "Ling-3.1-flash",
+      "name": "Ling 3.1 Flash"
+    },
+    {
+      "id": "Ling-3.0-flash-VL",
+      "name": "Ling 3.0 Flash VL"
+    },
+    {
+      "id": "Ling-3.0-flash",
+      "name": "Ling 3.0 Flash"
+    },
+    {
+      "id": "Ling-3.0-tiny",
+      "name": "Ling 3.0 Tiny"
+    },
+    {
+      "id": "Ming-3.0-audio-flash",
+      "name": "Ming 3.0 Audio Flash"
+    },
+    {
+      "id": "AntAngelMed",
+      "name": "AntAngelMed"
     }
   ],
   "publicai": [

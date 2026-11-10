@@ -2,6 +2,7 @@
 
 const hi: Translation = {
   ...en,
+  'settings.antlingModelsHint': "Ant Ling दस्तावेज़ के मॉडल। संदेश भेजते समय API एक्सेस की जाँच की जाती है।",
   'chat.contextSummary': "संदर्भ का सारांश",
   'chat.compacting': "संदर्भ सहेजा और संक्षिप्त किया जा रहा है…",
   'chat.checkpointFailed': "चैट सहेजी नहीं जा सकी। डिस्क में खाली जगह जाँचकर फिर कोशिश करें।",

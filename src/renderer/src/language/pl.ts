@@ -2,6 +2,7 @@
 
 const pl: Translation = {
   ...en,
+  'settings.antlingModelsHint': "Modele z dokumentacji Ant Ling. Dostęp do API jest sprawdzany przy wysyłaniu wiadomości.",
   'chat.contextSummary': "Podsumowanie kontekstu",
   'chat.compacting': "Zapisywanie i kompresowanie kontekstu…",
   'chat.checkpointFailed': "Nie udało się zapisać czatu. Sprawdź wolne miejsce i spróbuj ponownie.",

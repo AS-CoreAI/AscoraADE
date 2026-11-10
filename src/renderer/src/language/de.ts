@@ -2,6 +2,7 @@
 
 const de: Translation = {
   ...en,
+  'settings.antlingModelsHint': "Modelle aus der Ant Ling-Dokumentation. Der API-Zugriff wird beim Senden einer Nachricht geprüft.",
   'chat.contextSummary': "Kontextzusammenfassung",
   'chat.compacting': "Kontext wird gespeichert und komprimiert…",
   'chat.checkpointFailed': "Chat konnte nicht gespeichert werden. Prüfen Sie den Speicherplatz und versuchen Sie es erneut.",

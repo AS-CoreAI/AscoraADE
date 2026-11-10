@@ -38,6 +38,7 @@ import {
   GROK_REASONING_LEVELS,
   GLM_MODES,
   GIGACHAT_MODELS,
+  ANT_LING_MODELS,
   GIGACHAT_SCOPES,
   normalizeOpenRouterApiKey,
   type CodexReasoning,
@@ -136,6 +137,7 @@ function useCliAuth(
 
 function useProviderModels(provider: LlmProvider) {
   const configKey = useApp((s) => provider === 'openrouter' ? `${s.openRouterEnabled}:${s.openRouterApiKey}`
+    : provider === 'antling' ? `${s.antlingApiKey}`
     : provider === 'unsloth' ? `${s.unslothBaseUrl}:${s.unslothApiKey}`
     : provider === 'gigachat' ? `${s.gigachatClientId}:${s.gigachatScope}:${s.gigachatAuthKey}`
     : provider === 'lmstudio' ? s.baseUrl : provider === 'ollama' ? s.ollamaBaseUrl : s.omnirouteStatus.state)
@@ -145,7 +147,7 @@ function useProviderModels(provider: LlmProvider) {
   const [connectionError, setConnectionError] = useState<string>()
   const refreshModels = async (): Promise<void> => {
     const id = ++request.current
-    if ((provider === 'unsloth' && !useApp.getState().unslothApiKey) || (provider === 'gigachat' && !useApp.getState().gigachatAuthKey)) {
+    if ((provider === 'unsloth' && !useApp.getState().unslothApiKey) || (provider === 'gigachat' && !useApp.getState().gigachatAuthKey) || (provider === 'antling' && !useApp.getState().antlingApiKey)) {
       setModels([])
       setConnection('unknown')
       setConnectionError(undefined)
@@ -157,7 +159,7 @@ function useProviderModels(provider: LlmProvider) {
       const result = await api.llm.listModels(provider)
       if (id !== request.current) return
       setModels(result.ok ? (result.models ?? []).map((model) => model.id) : [])
-      setConnection(result.ok ? 'connected' : 'error')
+      setConnection(result.ok ? (result.source === 'preset' ? 'unknown' : 'connected') : 'error')
       setConnectionError(result.error)
     } catch (error) {
       if (id !== request.current) return
@@ -1776,6 +1778,45 @@ function WProviderPanel(): JSX.Element {
   )
 }
 
+function AntLingSetup(): JSX.Element {
+  const t = useT()
+  const antlingApiKey = useApp((s) => s.antlingApiKey)
+  const setAntLingApiKey = useApp((s) => s.setAntLingApiKey)
+
+  const [apiKey, setApiKey] = useState(antlingApiKey)
+  const [saving, setSaving] = useState(false)
+
+  const save = async (): Promise<void> => {
+    const normalized = normalizeOpenRouterApiKey(apiKey)
+    setSaving(true)
+    try {
+      await setAntLingApiKey(normalized)
+      setApiKey(normalized)
+    } finally { setSaving(false) }
+  }
+
+  return (
+    <div className="field">
+      <span className="field-label">Ant Ling</span>
+      <div className="field-row">
+        <input
+          className="text-input"
+          type="password"
+          value={apiKey}
+          spellCheck={false}
+          placeholder="sk-... or Authorization: Bearer ..."
+          onChange={(e) => setApiKey(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && void save()}
+        />
+        <button className="btn" onClick={() => void save()} disabled={saving}>
+          {saving ? t('settings.saving') : t('common.save')}
+        </button>
+      </div>
+      <span className="field-hint">Use your Ant Ling API key as a Bearer token against https://api.ant-ling.com/v1.</span>
+    </div>
+  )
+}
+
 function OpenRouterSetup(): JSX.Element {
   const t = useT()
   const openRouterEnabled = useApp((s) => s.openRouterEnabled)
@@ -1835,6 +1876,43 @@ function OpenRouterSetup(): JSX.Element {
   )
 }
 
+function AntLingPanel(): JSX.Element {
+  const { models, connection, connectionError, refreshModels } = useProviderModels('antling')
+  const t = useT()
+  const antlingModel = useApp((s) => s.antlingModel)
+  const setAntLingModel = useApp((s) => s.setAntLingModel)
+  const options = [...new Set([...ANT_LING_MODELS, ...models, ...(antlingModel ? [antlingModel] : [])])]
+
+  return (
+    <>
+      <label className="field">
+        <span className="field-label">{t('common.model')}</span>
+        <select
+          className="text-input"
+          value={antlingModel || DEFAULT_LLM_CONFIG.antlingModel}
+          onChange={(e) => setAntLingModel(e.target.value)}
+        >
+          {options.map((m) => (
+            <option key={m} value={m}>{m}</option>
+          ))}
+        </select>
+        <span className="field-hint">{t('settings.antlingModelsHint')}</span>
+      </label>
+
+      <div className={`conn-line ${connection}`}>
+        {connection === 'connected' && `Ant Ling ${t('settings.connectedModels', { count: models.length })}`}
+        {connection === 'connecting' && `${t('settings.connecting')} Ant Ling`}
+        {connection === 'error' && `Ant Ling: ${connectionError ?? t('settings.connectionFailed')}`}
+        {connection === 'unknown' && t('settings.notTestedYet')}
+      </div>
+
+      <button className="btn" style={{ alignSelf: 'flex-start' }} onClick={() => void refreshModels()}>
+        {t('settings.refreshModels')}
+      </button>
+    </>
+  )
+}
+
 function OpenRouterPanel(): JSX.Element {
   const { models, connection, connectionError, refreshModels } = useProviderModels('openrouter')
   const t = useT()
@@ -1882,6 +1960,7 @@ export function ConnectionSettings({ provider }: { provider: LlmProvider }): JSX
   return (
     <div className="provider-settings-form">
       {provider === 'openrouter' && <OpenRouterSetup />}
+      {provider === 'antling' && <AntLingSetup />}
       {provider === 'codex' ? <CodexPanel />
         : provider === 'ollama' ? <OllamaPanel />
         : provider === 'unsloth' ? <UnslothPanel />
@@ -1894,7 +1973,9 @@ export function ConnectionSettings({ provider }: { provider: LlmProvider }): JSX
         : provider === 'wprovider' ? <WProviderPanel />
         : provider === 'omniroute' ? <OmniRoutePanel />
         : provider === 'gigachat' ? <GigaChatPanel />
-        : provider === 'openrouter' ? <OpenRouterPanel /> : <LmStudioPanel />}
+        : provider === 'openrouter' ? <OpenRouterPanel />
+        : provider === 'antling' ? <AntLingPanel />
+        : <LmStudioPanel />}
     </div>
   )
 }

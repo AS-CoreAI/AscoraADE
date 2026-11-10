@@ -1,4 +1,6 @@
 import {
+  ANT_LING_BASE_URL,
+  ANT_LING_MODELS,
   GIGACHAT_BASE_URL,
   GIGACHAT_OAUTH_URL,
   normalizeGigachatAuthKey,
@@ -202,6 +204,7 @@ function isAbort(err: unknown): boolean {
 function providerName(config: LlmConfig): string {
   if (config.provider === 'unsloth') return 'Unsloth'
   if (config.provider === 'gigachat') return 'GigaChat'
+  if (config.provider === 'antling') return 'Ant Ling'
   return config.provider === 'openrouter'
     ? 'OpenRouter'
     : config.provider === 'ollama'
@@ -241,10 +244,16 @@ async function httpError(name: string, url: string, res: Response | ChatResponse
     return new LmStudioError('Unsloth rejected the API key. Create a key in Unsloth Settings → API and save it in the Unsloth connection settings.', 'http', 401)
   }
   const text = await res.text().catch(() => '')
+  if (name === 'Ant Ling' && /<\s*(?:!doctype\s+html|html)\b/i.test(text)) {
+    return new LmStudioError(
+      `Ant Ling responded HTTP ${res.status} with an HTML gateway page for ${url}. The API request was blocked before a model response. Check network/proxy access to api.ant-ling.com or contact Ant Ling support; this response does not verify the API key.`,
+      'http', res.status
+    )
+  }
   let detail = text
   try {
     const json = JSON.parse(text)
-    detail = json?.error?.message ?? json?.error ?? text
+    detail = json?.error?.message ?? json?.message ?? (typeof json?.error === 'string' ? json.error : text)
   } catch {
     /* not JSON */
   }
@@ -319,6 +328,7 @@ export class LmStudioClient {
   get baseUrl(): string {
     if (this.config.provider === 'unsloth') return normalizeUnslothBaseUrl(this.config.unslothBaseUrl)
     if (this.config.provider === 'gigachat') return GIGACHAT_BASE_URL
+    if (this.config.provider === 'antling') return ANT_LING_BASE_URL
     if (this.config.provider === 'openrouter') return OPENROUTER_BASE_URL
     if (this.config.provider === 'ollama') return stripTrailingSlash(this.config.ollamaBaseUrl)
     if (this.config.provider === 'omniroute') return stripTrailingSlash(this.config.omnirouteBaseUrl)
@@ -333,6 +343,10 @@ export class LmStudioClient {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' }
     if (this.config.provider === 'unsloth') {
       headers.Authorization = `Bearer ${normalizeUnslothApiKey(this.config.unslothApiKey)}`
+    }
+    if (this.config.provider === 'antling') {
+      const apiKey = normalizeOpenRouterApiKey(this.config.antlingApiKey)
+      if (apiKey) headers.Authorization = `Bearer ${apiKey}`
     }
     if (this.config.provider === 'gigachat' && token) {
       headers.Authorization = `Bearer ${token}`
@@ -352,6 +366,9 @@ export class LmStudioClient {
     }
     if (this.config.provider === 'gigachat' && !normalizeGigachatAuthKey(this.config.gigachatAuthKey)) {
       throw new LmStudioError('GigaChat requires an authorization key. Copy the "Authorization key" from the GigaChat developer cabinet and save it in the GigaChat connection settings.', 'connection')
+    }
+    if (this.config.provider === 'antling' && !normalizeOpenRouterApiKey(this.config.antlingApiKey)) {
+      throw new LmStudioError('Ant Ling requires an API key. Add your Ant Ling API token in the Ant Ling connection settings.', 'connection')
     }
     if (this.config.provider !== 'openrouter') return
     if (!this.config.openRouterEnabled || !normalizeOpenRouterApiKey(this.config.openRouterApiKey)) {
@@ -410,16 +427,24 @@ export class LmStudioClient {
       return this.config.unslothModel
     }
     if (this.config.provider === 'gigachat') return this.config.gigachatModel || 'GigaChat-2'
+    if (this.config.provider === 'antling') {
+      return this.config.antlingModel?.trim() || ANT_LING_MODELS[0]
+    }
     if (this.config.provider === 'openrouter') return this.config.openRouterModel || 'openrouter/free'
     if (this.config.provider === 'ollama') return this.config.ollamaModel
     if (this.config.provider === 'omniroute') return this.config.omnirouteModel || 'auto'
     return this.config.model
   }
 
-  /** GET /models — never throws for empty lists, only for real failures. */
+  /** API discovery, or documented presets for providers without GET /models. */
   async listModels(signal?: AbortSignal): Promise<LlmModel[]> {
     this.requireApiKey()
     this.requireOmniroute()
+    if (this.config.provider === 'antling') {
+      signal?.throwIfAborted()
+      const selected = this.config.antlingModel?.trim()
+      return [...new Set([...ANT_LING_MODELS, ...(selected ? [selected] : [])])].map(id => ({ id }))
+    }
     const name = this.providerName
     const url = `${this.baseUrl}/models`
     const token = this.config.provider === 'gigachat' ? await this.ensureGigachatToken(signal) : undefined
@@ -459,6 +484,7 @@ export class LmStudioClient {
     const reasoning = params.reasoning ?? this.config.lmStudioReasoning
     const gigachatReasoning = params.reasoning ?? this.config.gigachatReasoning
     const isGigachat = this.config.provider === 'gigachat'
+    const isAntLing = this.config.provider === 'antling'
     const withTools = !!params.tools && params.tools.length > 0
     const token = isGigachat ? await this.ensureGigachatToken(signal) : undefined
     const basePayload: Record<string, unknown> = {
@@ -471,8 +497,9 @@ export class LmStudioClient {
               ...images.map(url => ({ type: 'image_url', image_url: { url } }))
             ] }
           : message),
-      temperature: params.temperature ?? 0.7,
-      ...(params.maxTokens ? { max_tokens: params.maxTokens } : {}),
+      temperature: isAntLing ? Math.max(0, Math.min(1, params.temperature ?? 0.7)) : params.temperature ?? 0.7,
+      ...(params.maxTokens ? { [isAntLing ? 'max_completion_tokens' : 'max_tokens']: params.maxTokens } : {}),
+      ...(isAntLing && params.reasoning ? { thinking: { type: params.reasoning === 'off' ? 'disabled' : 'enabled' } } : {}),
       // LM Studio's native model metadata says off/on; its OpenAI endpoint
       // accepts none/high for toggle models, and the named levels otherwise.
       ...(this.config.provider === 'lmstudio' && reasoning
@@ -497,7 +524,7 @@ export class LmStudioClient {
       ...basePayload,
       stream: true,
       // Ask OpenAI-compatible servers to append a final usage frame.
-      ...(this.config.provider === 'openrouter' || this.config.provider === 'gigachat' ? {} : { stream_options: { include_usage: true } })
+      ...(this.config.provider === 'openrouter' || isGigachat || isAntLing ? {} : { stream_options: { include_usage: true } })
     })
 
     let res: ChatResponse
@@ -582,8 +609,9 @@ export class LmStudioClient {
     try {
       for (;;) {
         const { value, done } = await reader.read()
-        if (done) break
-        buffer += decoder.decode(value, { stream: true })
+        buffer += done ? decoder.decode() : decoder.decode(value, { stream: true })
+        // Some compatible servers close after the final data line without LF.
+        if (done && buffer.trim()) buffer += '\n'
 
         let newline: number
         while ((newline = buffer.indexOf('\n')) >= 0) {
@@ -594,6 +622,10 @@ export class LmStudioClient {
           if (data === '[DONE]') { streamDone = true; break }
           try {
             const json = JSON.parse(data)
+            if (json?.error) {
+              const detail = json.error.message ?? json.error
+              throw new LmStudioError(`${name} stream error: ${typeof detail === 'string' ? detail : JSON.stringify(detail)}`, 'http')
+            }
             const choice = json?.choices?.[0]
             const reasoning: unknown = choice?.delta?.reasoning_content ?? choice?.delta?.reasoning
             if (typeof reasoning === 'string') addThinking(reasoning)
@@ -639,13 +671,15 @@ export class LmStudioClient {
                 outputTokens: rawUsage.completion_tokens ?? 0
               }
             }
-          } catch {
+          } catch (err) {
+            if (err instanceof LmStudioError) throw err
             /* keep-alive or partial frame — ignore */
           }
         }
-        if (streamDone) break
+        if (streamDone || done) break
       }
     } catch (err) {
+      if (err instanceof LmStudioError) throw err
       throw connectionError(name, url, err, signal, true)
     } finally {
       // [DONE] can arrive before the socket closes. Release the connection even
@@ -656,6 +690,9 @@ export class LmStudioClient {
     const tail = thinkingParser.push('', true)
     addThinking(tail.thinking)
     if (tail.content) { yielded = true; yield tail.content }
+    if (isAntLing && !yielded && !thinking && toolAcc.size === 0) {
+      throw new LmStudioError('Ant Ling returned no chat content or tool calls. Check the selected model and API access, then try again.', 'parse')
+    }
 
     // OmniRoute routes some web/free providers that ignore `stream: true` and
     // return an empty SSE stream even though a non-streaming request answers

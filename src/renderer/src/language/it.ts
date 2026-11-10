@@ -2,6 +2,7 @@
 
 const it: Translation = {
   ...en,
+  'settings.antlingModelsHint': "Modelli dalla documentazione Ant Ling. L’accesso all’API viene verificato quando invii un messaggio.",
   'chat.contextSummary': "Riepilogo del contesto",
   'chat.compacting': "Salvataggio e compressione del contesto…",
   'chat.checkpointFailed': "Impossibile salvare la chat. Controlla lo spazio su disco e riprova.",

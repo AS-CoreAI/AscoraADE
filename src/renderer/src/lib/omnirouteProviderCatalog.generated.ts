@@ -1513,6 +1513,26 @@ export const OMNI_PROVIDER_CATALOG: OmniProviderCatalogEntry[] = [
     "logo": "./providers/command-code.svg"
   },
   {
+    "id": "ant-ling",
+    "name": "Ant Ling",
+    "category": "apikey",
+    "color": "#F59E0B",
+    "textIcon": "AL",
+    "website": "https://developer.ant-ling.com/en/docs/",
+    "authHint": "Create a token in the Ant Ling API console and send it as Authorization: Bearer <key>. Base URL: https://api.ant-ling.com/v1",
+    "apiHint": "Create an API token in Ant Ling, then call https://api.ant-ling.com/v1/chat/completions with Authorization: Bearer <YOUR_API_KEY>.",
+    "freeNote": "OpenAI-compatible API with models such as Ling-3.2-flash and Ming-3.0-audio-flash.",
+    "hasFree": false,
+    "noAuth": false,
+    "subscriptionRisk": false,
+    "deprecated": false,
+    "passthroughModels": true,
+    "serviceKinds": [
+      "llm",
+      "audio"
+    ]
+  },
+  {
     "id": "openrouter",
     "name": "OpenRouter",
     "category": "apikey",

@@ -1,0 +1,95 @@
+// Run after npm run build. Uses an isolated profile and mocked IPC, no real API calls.
+const { join, resolve } = require('node:path')
+const { mkdirSync } = require('node:fs')
+if (!process.versions.electron) {
+  const { spawnSync } = require('node:child_process')
+  const env = { ...process.env }; delete env.ELECTRON_RUN_AS_NODE
+  const result = spawnSync(require('electron'), [__filename], { env, stdio: 'inherit', windowsHide: true })
+  process.exit(result.status ?? 1)
+}
+const { app, BrowserWindow } = require('electron')
+const assert = require('node:assert/strict')
+const output = resolve(__dirname, '../../.build/antling-ui')
+mkdirSync(output, { recursive: true })
+app.setPath('userData', join(output, 'profile'))
+app.disableHardwareAcceleration()
+let win
+const evaluate = code => win.webContents.executeJavaScript(code)
+const waitFor = async condition => {
+  const until = Date.now() + 10_000
+  while (Date.now() < until) {
+    if (await evaluate(condition)) return
+    await new Promise(resolve => setTimeout(resolve, 50))
+  }
+  throw Error(`Timed out: ${condition}`)
+}
+const click = async selector => {
+  await waitFor(`!!document.querySelector(${JSON.stringify(selector)})`)
+  await evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`)
+}
+const fill = async (selector, value, tag = 'HTMLSelectElement') => {
+  await evaluate(`{ const el = document.querySelector(${JSON.stringify(selector)});
+    Object.getOwnPropertyDescriptor(${tag}.prototype, 'value').set.call(el, ${JSON.stringify(value)});
+    el.dispatchEvent(new Event(${JSON.stringify(tag === 'HTMLSelectElement' ? 'change' : 'input')}, {bubbles:true})); }`)
+}
+app.whenReady().then(async () => {
+  win = new BrowserWindow({ width: 1250, height: 900, show: false,
+    webPreferences: { preload: join(__dirname, 'settings-preload.cjs'), contextIsolation: false, sandbox: false, backgroundThrottling: false, offscreen: true } })
+  const errors = []
+  win.webContents.on('console-message', event => { if (event.level === 'error') errors.push(event.message) })
+  await win.webContents.session.clearStorageData()
+  const page = resolve(__dirname, '../../out/renderer/index.html')
+  await win.loadFile(page)
+  await click('.ws-item')
+  await waitFor(`document.querySelector('select[title="Модель (LM Studio)"]')?.value === 'test-model'`)
+  await evaluate(`Promise.all([window.ascora.settings.set('workspace.llm', {}), window.ascora.settings.set('task.llm', {})])`)
+  await evaluate(`window.ascora.llm.setConfig({provider:'antling',antlingApiKey:'fixture',antlingModel:'',model:'local-must-not-change'})`)
+  await win.loadFile(page)
+  await click('.ws-item')
+  const picker = 'select[title="Ant Ling model"]'
+  await waitFor(`document.querySelector(${JSON.stringify(picker)})?.value === 'Ling-3.2-flash'`)
+  assert.equal(await evaluate(`document.querySelector(${JSON.stringify(picker)}).options.length`), 7)
+  assert.equal(await evaluate(`document.querySelector('.statusbar').textContent.includes('LM Studio')`), false)
+  assert.equal(await evaluate(`/подключено/i.test(document.querySelector('.statusbar').textContent)`), false, 'Presets do not prove a live connection')
+  assert.equal(await evaluate(`document.querySelector('.statusbar').textContent.includes('Ling-3.2-flash')`), true)
+  await fill(picker, 'Ling-3.1-flash')
+  await waitFor(`window.ascora.llm.config().then(c => c.antlingModel === 'Ling-3.1-flash')`)
+  assert.equal(await evaluate(`window.ascora.llm.config().then(c => c.model)`), 'local-must-not-change')
+  await fill('.composer-input', 'Hello Ling', 'HTMLTextAreaElement')
+  await click('.send-btn')
+  await waitFor(`window.settingsFixture.chatParams?.provider === 'antling'`)
+  assert.equal(await evaluate('window.settingsFixture.chatParams.model'), 'Ling-3.1-flash')
+  assert.equal(await evaluate('window.settingsFixture.chatParams.tools.length > 0'), true)
+  await evaluate(`window.settingsFixture.chatFinish({ok:true,content:'Hello from Ling',usage:{inputTokens:5,outputTokens:3}})`)
+  await waitFor(`window.settingsFixture.analytics.length === 1 && !document.querySelector('.send-btn.stopping')`)
+  assert.equal(await evaluate('window.settingsFixture.analytics[0].provider'), 'antling')
+  assert.equal(await evaluate('window.settingsFixture.analytics[0].model'), 'Ling-3.1-flash')
+  assert.equal(await evaluate(`/Ant Ling: подключено/i.test(document.querySelector('.statusbar').textContent)`), true)
+  const firstId = await evaluate('window.settingsFixture.chatId')
+  await fill('.composer-input', 'Check API errors', 'HTMLTextAreaElement')
+  await click('.send-btn')
+  await waitFor(`window.settingsFixture.chatId !== ${JSON.stringify(firstId)}`)
+  await evaluate(`window.settingsFixture.chatFinish({ok:false,content:'',error:'Ant Ling responded HTTP 403 with an HTML gateway page.'})`)
+  await waitFor(`!document.querySelector('.send-btn.stopping') && document.body.textContent.includes('Ant Ling responded HTTP 403')`)
+  assert.equal(await evaluate(`/Ant Ling: нет подключения/i.test(document.querySelector('.statusbar').textContent)`), true)
+  await win.loadFile(page)
+  await click('.ws-item')
+  await waitFor(`document.querySelector(${JSON.stringify(picker)})?.value === 'Ling-3.1-flash'`)
+  assert.equal(await evaluate(`window.ascora.llm.config().then(c => c.model)`), 'local-must-not-change')
+  // Exercise the independent provider page while keeping the selected chat model.
+  await click('[title="Настройки языка и внешнего вида"]')
+  await evaluate(`[...document.querySelectorAll('.settings-nav nav > button')].find(b => b.textContent.trim() === 'Провайдеры агентов').click()`)
+  await waitFor(`[...document.querySelectorAll('.settings-provider-nav button')].some(b => b.textContent.trim() === 'Ant Ling')`)
+  await evaluate(`[...document.querySelectorAll('.settings-provider-nav button')].find(b => b.textContent.trim() === 'Ant Ling').click()`)
+  await waitFor(`document.querySelector('.settings-content').textContent.includes('Модели из документации Ant Ling')`)
+  assert.equal(await evaluate(`document.querySelector('.settings-content select').value`), 'Ling-3.1-flash')
+  assert.equal(await evaluate(`document.querySelector('.settings-content select').options.length`), 7)
+  assert.equal(await evaluate(`window.ascora.llm.config().then(c => c.provider)`), 'antling')
+  assert.deepEqual(errors.filter(message => !/Electron Security Warning/.test(message)), [])
+  console.log('Ant Ling UI passed: blank-model recovery, independent model selection, agent request, usage, reload and provider settings.')
+  app.exit(0)
+}).catch(async error => {
+  console.error(error)
+  if (win) console.error(await evaluate(`({providerLabels:[...document.querySelectorAll('.provider-select-label')].map(e=>e.textContent),selects:[...document.querySelectorAll('select')].map(e=>({title:e.title,value:e.value})),body:document.body.innerText.slice(-2000)})`))
+  app.exit(1)
+})

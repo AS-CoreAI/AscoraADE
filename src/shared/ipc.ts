@@ -374,6 +374,7 @@ export type LlmProvider =
   | 'ollama'
   | 'unsloth'
   | 'openrouter'
+  | 'antling'
   | 'codex'
   | 'copilot'
   | 'claude'
@@ -775,6 +776,13 @@ export const ANTIGRAVITY_MODELS: AntigravityModel[] = ['flash_lite', 'flash', 'f
 export const GIGACHAT_OAUTH_URL = 'https://ngw.devices.sberbank.ru:9443/api/v2/oauth'
 /** OpenAI-compatible API base. */
 export const GIGACHAT_BASE_URL = 'https://api.giga.chat/v1'
+/** OpenAI-compatible API base for Ant Ling. */
+export const ANT_LING_BASE_URL = 'https://api.ant-ling.com/v1'
+/** Documented Chat Completions models; Ant Ling does not document GET /models. */
+export const ANT_LING_MODELS = [
+  'Ling-3.2-flash', 'Ling-3.1-flash', 'Ling-3.0-flash-VL',
+  'Ling-3.0-flash', 'Ling-3.0-tiny', 'Ming-3.0-audio-flash', 'AntAngelMed'
+]
 
 /** Selectable OAuth scopes (personal / business / corporate). */
 export const GIGACHAT_SCOPES = ['GIGACHAT_API_PERS', 'GIGACHAT_API_B2B', 'GIGACHAT_API_CORP']
@@ -1131,6 +1139,10 @@ export interface LlmConfig {
   openRouterApiKey: string
   /** Default OpenRouter model id used when selected. */
   openRouterModel: string
+  /** Ant Ling API key for the OpenAI-compatible endpoint. */
+  antlingApiKey: string
+  /** Default Ant Ling model id used when selected. */
+  antlingModel: string
   /** Path to the `codex` binary; empty → auto-detect (PATH / bundled extension). */
   codexPath: string
   /** Model passed to `codex exec -m`; empty → Codex's own default. */
@@ -1220,6 +1232,8 @@ export const DEFAULT_LLM_CONFIG: LlmConfig = {
   openRouterEnabled: false,
   openRouterApiKey: '',
   openRouterModel: 'openrouter/free',
+  antlingApiKey: '',
+  antlingModel: ANT_LING_MODELS[0],
   codexPath: '',
   codexModel: '',
   codexSandbox: 'workspace-write',
@@ -1310,6 +1324,8 @@ export interface ChatResult {
 export interface ListModelsResult {
   ok: boolean
   models?: LlmModel[]
+  /** A preset catalog does not verify network access or credentials. */
+  source?: 'api' | 'preset'
   error?: string
 }
 

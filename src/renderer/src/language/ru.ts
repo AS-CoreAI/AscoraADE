@@ -1,6 +1,7 @@
 ﻿import type { Translation } from './en'
 
 const ru: Translation = {
+  'settings.antlingModelsHint': "Модели из документации Ant Ling. Доступ к API проверяется при отправке сообщения.",
   'chat.contextSummary': "Сводка контекста",
   'chat.compacting': "Сохранение и сжатие контекста…",
   'chat.checkpointFailed': "Не удалось сохранить чат. Проверьте свободное место и повторите попытку.",

@@ -279,6 +279,7 @@ export function GitPanel(): JSX.Element {
   const ollamaModel = useApp((s) => s.ollamaModel)
   const unslothModel = useApp((s) => s.unslothModel)
   const openRouterModel = useApp((s) => s.openRouterModel)
+  const antlingModel = useApp((s) => s.antlingModel)
   const gigachatModel = useApp((s) => s.gigachatModel)
   const openFileInEditor = useApp((s) => s.openFile)
   const activePath = activeSsh ? undefined : active?.path
@@ -675,7 +676,7 @@ export function GitPanel(): JSX.Element {
       const result = await api.llm.chat(
         id,
         {
-          model: provider === 'unsloth' ? unslothModel : provider === 'openrouter' ? openRouterModel : provider === 'gigachat' ? gigachatModel : provider === 'ollama' ? ollamaModel : model,
+          model: provider === 'unsloth' ? unslothModel : provider === 'openrouter' ? openRouterModel : provider === 'antling' ? antlingModel : provider === 'gigachat' ? gigachatModel : provider === 'ollama' ? ollamaModel : model,
           temperature: 0.2,
           messages: [
             {

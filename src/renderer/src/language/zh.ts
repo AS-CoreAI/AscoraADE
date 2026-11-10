@@ -2,6 +2,7 @@
 
 const zh: Translation = {
   ...en,
+  'settings.antlingModelsHint': "模型来自 Ant Ling 文档。发送消息时会验证 API 访问权限。",
   'chat.contextSummary': "上下文摘要",
   'chat.compacting': "正在保存并压缩上下文…",
   'chat.checkpointFailed': "无法保存聊天。请检查磁盘空间后重试。",

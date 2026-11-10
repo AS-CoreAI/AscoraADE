@@ -873,6 +873,7 @@ function modelLabel(s: {
   ollamaModel: string
   unslothModel: string
   openRouterModel: string
+  antlingModel: string
   gigachatModel: string
   codexModel: string
   copilotModel: string
@@ -893,6 +894,8 @@ function modelLabel(s: {
       return s.unslothModel || 'Unsloth'
     case 'openrouter':
       return s.openRouterModel || 'openrouter/free'
+    case 'antling':
+      return s.antlingModel || DEFAULT_LLM_CONFIG.antlingModel
     case 'gigachat':
       return s.gigachatModel || 'GigaChat-2'
     case 'codex':
@@ -1066,6 +1069,7 @@ interface WorkspaceLlm {
   model: string
   ollamaModel: string
   openRouterModel: string
+  antlingModel?: string
   codexModel: string
   codexSandbox: CodexSandbox
   codexReasoning: CodexReasoning | ''
@@ -1102,6 +1106,7 @@ function snapshotLlm(s: {
   model: string
   ollamaModel: string
   openRouterModel: string
+  antlingModel: string
   codexModel: string
   codexSandbox: CodexSandbox
   codexReasoning: CodexReasoning | ''
@@ -1131,6 +1136,7 @@ function snapshotLlm(s: {
     model: s.model,
     ollamaModel: s.ollamaModel,
     openRouterModel: s.openRouterModel,
+    antlingModel: s.antlingModel,
     codexModel: s.codexModel,
     codexSandbox: s.codexSandbox,
     codexReasoning: s.codexReasoning,
@@ -1347,6 +1353,9 @@ interface AppState {
   openRouterEnabled: boolean
   openRouterApiKey: string
   openRouterModel: string
+  // Ant Ling
+  antlingApiKey: string
+  antlingModel: string
   // GigaChat (Sber)
   gigachatClientId: string
   gigachatScope: string
@@ -1574,6 +1583,8 @@ interface AppState {
   setOpenRouterEnabled: (enabled: boolean) => Promise<void>
   setOpenRouterApiKey: (apiKey: string) => Promise<void>
   setOpenRouterModel: (m: string) => void
+  setAntLingApiKey: (apiKey: string) => Promise<void>
+  setAntLingModel: (m: string) => void
   setGigachatClientId: (id: string) => void
   setGigachatScope: (scope: string) => void
   setGigachatAuthKey: (key: string) => void
@@ -1819,6 +1830,7 @@ export const useApp = create<AppState>((set, get) => {
         ollamaModel: saved.ollamaModel ?? DEFAULT_LLM_CONFIG.ollamaModel,
         unslothModel: saved.unslothModel ?? DEFAULT_LLM_CONFIG.unslothModel,
         openRouterModel: saved.openRouterModel ?? DEFAULT_LLM_CONFIG.openRouterModel,
+        antlingModel: saved.antlingModel?.trim() || DEFAULT_LLM_CONFIG.antlingModel,
         gigachatModel: saved.gigachatModel ?? DEFAULT_LLM_CONFIG.gigachatModel,
         codexModel: saved.codexModel,
         codexSandbox: saved.codexSandbox,
@@ -1848,6 +1860,12 @@ export const useApp = create<AppState>((set, get) => {
       await get().refreshModels()
       return
     }
+    if (provider === 'antling' && !get().antlingApiKey.trim()) {
+      set({ provider: 'lmstudio' })
+      await api.llm.setConfig({ provider: 'lmstudio' })
+      await get().refreshModels()
+      return
+    }
     await api.llm.setConfig({
       provider,
       antigravityModel: get().antigravityModel,
@@ -1857,6 +1875,7 @@ export const useApp = create<AppState>((set, get) => {
       ollamaModel: get().ollamaModel,
       unslothModel: get().unslothModel,
       openRouterModel: get().openRouterModel,
+      antlingModel: get().antlingModel,
       gigachatModel: get().gigachatModel,
       codexModel: get().codexModel,
       codexSandbox: get().codexSandbox,
@@ -1952,6 +1971,8 @@ export const useApp = create<AppState>((set, get) => {
   openRouterEnabled: DEFAULT_LLM_CONFIG.openRouterEnabled,
   openRouterApiKey: DEFAULT_LLM_CONFIG.openRouterApiKey,
   openRouterModel: DEFAULT_LLM_CONFIG.openRouterModel,
+  antlingApiKey: DEFAULT_LLM_CONFIG.antlingApiKey,
+  antlingModel: DEFAULT_LLM_CONFIG.antlingModel,
   gigachatClientId: DEFAULT_LLM_CONFIG.gigachatClientId,
   gigachatScope: DEFAULT_LLM_CONFIG.gigachatScope,
   gigachatAuthKey: DEFAULT_LLM_CONFIG.gigachatAuthKey,
@@ -2166,6 +2187,8 @@ export const useApp = create<AppState>((set, get) => {
       openRouterEnabled: cfg.openRouterEnabled,
       openRouterApiKey: cfg.openRouterApiKey,
       openRouterModel: cfg.openRouterModel,
+      antlingApiKey: cfg.antlingApiKey ?? DEFAULT_LLM_CONFIG.antlingApiKey,
+      antlingModel: cfg.antlingModel?.trim() || DEFAULT_LLM_CONFIG.antlingModel,
       gigachatClientId: cfg.gigachatClientId ?? DEFAULT_LLM_CONFIG.gigachatClientId,
       gigachatScope: cfg.gigachatScope ?? DEFAULT_LLM_CONFIG.gigachatScope,
       gigachatAuthKey: cfg.gigachatAuthKey ?? DEFAULT_LLM_CONFIG.gigachatAuthKey,
@@ -3198,12 +3221,13 @@ export const useApp = create<AppState>((set, get) => {
 
   async refreshModels() {
     const provider = get().provider
-    if (!['lmstudio', 'ollama', 'unsloth', 'openrouter', 'omniroute', 'gigachat'].includes(provider)) return
+    if (!['lmstudio', 'ollama', 'unsloth', 'openrouter', 'antling', 'omniroute', 'gigachat'].includes(provider)) return
     const request = ++modelRefreshRequest
     set({ connection: 'connecting', connectionError: undefined, models: [] })
-    const res = await api.llm.listModels(provider).catch((error: unknown) => ({ ok: false as const, error: String(error), models: [] }))
+    const res = await api.llm.listModels(provider).catch((error: unknown) => ({ ok: false as const, error: String(error), models: [], source: undefined }))
     if (request !== modelRefreshRequest || get().provider !== provider) return
     const isOpenRouter = provider === 'openrouter'
+    const isAntLing = provider === 'antling'
     const isOllama = provider === 'ollama'
     const isUnsloth = provider === 'unsloth'
     const isOmniroute = provider === 'omniroute'
@@ -3212,13 +3236,15 @@ export const useApp = create<AppState>((set, get) => {
       const models = (res.models ?? []).map((m) => m.id)
       const configuredModel = isUnsloth ? get().unslothModel : isOpenRouter
         ? get().openRouterModel
-        : isOllama
-          ? get().ollamaModel
-          : isOmniroute
-            ? get().omnirouteModel
-            : isGigachat
-              ? get().gigachatModel
-              : get().model
+        : isAntLing
+          ? get().antlingModel
+          : isOllama
+            ? get().ollamaModel
+            : isOmniroute
+              ? get().omnirouteModel
+              : isGigachat
+                ? get().gigachatModel
+                : get().model
       const selected =
         (configuredModel && models.includes(configuredModel) ? configuredModel : '') ||
         (isOmniroute ? models.find((model) => model === 'auto') : '') ||
@@ -3228,26 +3254,30 @@ export const useApp = create<AppState>((set, get) => {
       set(
         isUnsloth ? { models, connection: 'connected', unslothModel: selected } : isOpenRouter
           ? { models, connection: 'connected', openRouterModel: selected }
-          : isOllama
-            ? { models, connection: 'connected', ollamaModel: selected, ollamaReachable: true }
-            : isOmniroute
-              ? { models, connection: 'connected', omnirouteModel: selected }
-              : isGigachat
-                ? { models, connection: 'connected', gigachatModel: selected }
-              : { models, connection: 'connected', model: selected, lmStudioReachable: true,
-                  lmStudioReasoning: selected === configuredModel ? get().lmStudioReasoning : '' }
+          : isAntLing
+            ? { models, connection: res.source === 'preset' ? 'unknown' : 'connected', antlingModel: selected || DEFAULT_LLM_CONFIG.antlingModel }
+            : isOllama
+              ? { models, connection: 'connected', ollamaModel: selected, ollamaReachable: true }
+              : isOmniroute
+                ? { models, connection: 'connected', omnirouteModel: selected }
+                : isGigachat
+                  ? { models, connection: 'connected', gigachatModel: selected }
+                  : { models, connection: 'connected', model: selected, lmStudioReachable: true,
+                      lmStudioReasoning: selected === configuredModel ? get().lmStudioReasoning : '' }
       )
       if (selected || isUnsloth) {
         void api.llm.setConfig(
           isUnsloth ? { unslothModel: selected } : isOpenRouter
             ? { openRouterModel: selected }
-            : isOllama
-              ? { ollamaModel: selected }
-              : isOmniroute
-                ? { omnirouteModel: selected }
-                : isGigachat
-                  ? { gigachatModel: selected }
-                : { model: selected, lmStudioReasoning: get().lmStudioReasoning }
+            : isAntLing
+              ? { antlingModel: selected }
+              : isOllama
+                ? { ollamaModel: selected }
+                : isOmniroute
+                  ? { omnirouteModel: selected }
+                  : isGigachat
+                    ? { gigachatModel: selected }
+                    : { model: selected, lmStudioReasoning: get().lmStudioReasoning }
         )
         get().persistWorkspaceLlm()
       }
@@ -3365,6 +3395,24 @@ export const useApp = create<AppState>((set, get) => {
   setOpenRouterModel(openRouterModel) {
     set({ openRouterModel })
     void api.llm.setConfig({ openRouterModel })
+    get().persistWorkspaceLlm()
+  },
+
+  async setAntLingApiKey(apiKey) {
+    const antlingApiKey = normalizeOpenRouterApiKey(apiKey)
+    await api.llm.setConfig({ antlingApiKey })
+    set({ antlingApiKey })
+    if ((!antlingApiKey) && get().provider === 'antling') {
+      await get().setProvider('lmstudio')
+    } else if (get().provider === 'antling') {
+      await get().refreshModels()
+    }
+  },
+
+  setAntLingModel(antlingModel) {
+    antlingModel = antlingModel.trim() || DEFAULT_LLM_CONFIG.antlingModel
+    set({ antlingModel })
+    void api.llm.setConfig({ antlingModel })
     get().persistWorkspaceLlm()
   },
 
@@ -4084,6 +4132,8 @@ export const useApp = create<AppState>((set, get) => {
     const ollamaModel = get().ollamaModel
     const unslothModel = get().unslothModel
     const orModel = get().openRouterModel
+    const antlingModel = get().antlingModel || DEFAULT_LLM_CONFIG.antlingModel
+    const antlingApiKey = get().antlingApiKey
     const gigachatModel = get().gigachatModel
     const gigachatReasoning = get().gigachatReasoning
     const codexModel = get().codexModel
@@ -4541,6 +4591,7 @@ export const useApp = create<AppState>((set, get) => {
       }
 
       const isOpenRouter = agentProvider === 'openrouter'
+      const isAntLing = agentProvider === 'antling'
       const isOllama = agentProvider === 'ollama'
       const isUnsloth = agentProvider === 'unsloth'
       const isWProvider = agentProvider === 'wprovider'
@@ -4776,7 +4827,7 @@ export const useApp = create<AppState>((set, get) => {
                 ...(agentProvider === 'lmstudio' ? { reasoning: lmStudioReasoning,
                   ...(outputBudget !== undefined ? { maxTokens: outputBudget } : {}) } : {}),
                 ...(agentProvider === 'gigachat' ? { reasoning: gigachatReasoning } : {}),
-                model: isUnsloth ? unslothModel : isOpenRouter
+                model: isAntLing ? antlingModel : isUnsloth ? unslothModel : isOpenRouter
                   ? orModel
                   : isOllama
                     ? ollamaModel
@@ -4791,6 +4842,9 @@ export const useApp = create<AppState>((set, get) => {
               onChunk
             )
         writeRun(taskId, { streamId: null, thinking: false, promptProgress: null })
+        if (isAntLing && get().provider === agentProvider && get().antlingModel === antlingModel && get().antlingApiKey === antlingApiKey && !result.aborted) {
+          set({ connection: result.ok ? 'connected' : 'error', connectionError: result.error })
+        }
         // Settle the reasoning block: the ChatResult carries the definitive
         // text (chunks are throttled) and the measured duration for the header.
         {
@@ -4834,7 +4888,7 @@ export const useApp = create<AppState>((set, get) => {
             workspaceId,
             workspaceName,
             taskId,
-            provider: isUnsloth ? 'unsloth' : isWProvider
+            provider: isAntLing ? 'antling' : isUnsloth ? 'unsloth' : isWProvider
               ? 'wprovider'
               : isOpenRouter
                 ? 'openrouter'
@@ -4845,7 +4899,7 @@ export const useApp = create<AppState>((set, get) => {
                     : isGigachat
                       ? 'gigachat'
                       : 'lmstudio',
-            model: isUnsloth ? unslothModel || 'Unsloth' : isWProvider
+            model: isAntLing ? antlingModel : isUnsloth ? unslothModel || 'Unsloth' : isWProvider
               ? `${wproviderService}-web`
               : isOpenRouter
                 ? orModel || 'openrouter/free'
