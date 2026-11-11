@@ -136,19 +136,17 @@ export const GROK_PERMISSION_SHORT_KEY: Record<GrokPermissionMode, TranslationKe
 }
 
 /**
- * Suggested Codex models (current gpt-5.x family, mirroring the Codex VS Code
- * extension's picker). An empty value lets Codex use the model from its own
- * config.toml. The list is just a convenience — any valid id can be typed in
- * connection settings.
+ * Suggested Codex models, checked against https://learn.chatgpt.com/docs/models
+ * on 2026-11-11. GPT-6 Sol remains available as a previous-generation option.
+ * An empty value uses Codex's own config.toml; any valid id can still be entered
+ * in connection settings. Availability depends on the account and CLI version.
  */
 export const CODEX_MODEL_PRESETS = [
-  'gpt-5.6-terra',
-  'gpt-5.6-lunna',
-  'gpt-5.6-sol',
-  'gpt-5.5',
-  'gpt-5.4',
-  'gpt-5.4-mini',
-  'gpt-5.3-codex'
+  'gpt-6.1-sol',
+  'gpt-6-astra',
+  'gpt-6.1-terra',
+  'gpt-6-luna',
+  'gpt-6-sol'
 ]
 
 export const COPILOT_MODEL_PRESETS = [

@@ -675,22 +675,23 @@ export const CLAUDE_PERMISSION_MODES: ClaudePermissionMode[] = [
 ]
 
 /**
- * Suggested Claude model aliases ('default' → Claude Code's own default). The
- * CLI resolves each alias to the newest model of that family, so the list only
- * needs updating when a new family ships (e.g. Fable alongside Opus).
+ * Suggested Claude model aliases ('default' → Claude Code's own default).
+ * The CLI resolves each alias to the recommended version for its provider;
+ * custom model IDs can still be entered in connection settings.
  */
 export const CLAUDE_MODEL_PRESETS = ['default', 'fable', 'opus', 'sonnet', 'haiku']
 
 /**
- * Versioned display labels for the model aliases — what each alias resolves to
- * today. Purely cosmetic (the CLI still receives the alias), so bump these when
- * a new model version ships.
+ * Latest Anthropic model labels, checked on 2026-11-11 against
+ * https://code.claude.com/docs/en/model-config. The CLI still receives aliases;
+ * older CLI versions, other providers, and configured overrides may resolve
+ * them differently. Update these display labels when a new version ships.
  */
 export const CLAUDE_MODEL_LABEL: Record<string, string> = {
-  fable: 'fable-5',
-  opus: 'opus-4-8',
-  sonnet: 'sonnet-5',
-  haiku: 'haiku-4-5'
+  fable: 'fable-5-2',
+  opus: 'opus-5-5',
+  sonnet: 'sonnet-5-5',
+  haiku: 'haiku-5-5'
 }
 
 /** Effort level for Claude Code (`claude --effort`), like the VS Code extension's cycle. */
