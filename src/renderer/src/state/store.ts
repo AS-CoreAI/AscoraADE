@@ -56,7 +56,9 @@ import {
   WPROVIDER_SERVICE_INFO,
   isSshCapableProvider,
   normalizeGigachatAuthKey,
-  normalizeOpenRouterApiKey
+  normalizeOpenRouterApiKey,
+  normalizeOpenRouterApiKeys,
+  type OpenRouterApiKey
 } from '@shared/ipc'
 import {
   WPROVIDER_TOOL_NAMES,
@@ -1056,6 +1058,14 @@ export function parseFileRef(ref: string): { path: string; line?: number } | nul
   return { path: target, line }
 }
 
+/** The saved OpenRouter key with this id, or the first key when it is gone. */
+function selectedOpenRouterKey(
+  keys: OpenRouterApiKey[],
+  requestedId: string | undefined
+): OpenRouterApiKey | undefined {
+  return keys.find((key) => key.id === requestedId) ?? keys[0]
+}
+
 /**
  * Per-workspace agent backend selection, persisted so each project remembers its
  * own model/provider independently. Connection-level fields (base URL, binary
@@ -1070,6 +1080,8 @@ interface WorkspaceLlm {
   model: string
   ollamaModel: string
   openRouterModel: string
+  /** Optional for snapshots created before OpenRouter supported multiple keys. */
+  openRouterActiveKeyId?: string
   antlingModel?: string
   antlingReasoning?: LlmConfig['antlingReasoning']
   antlingTemperature?: LlmConfig['antlingTemperature']
@@ -1111,6 +1123,7 @@ function snapshotLlm(s: {
   model: string
   ollamaModel: string
   openRouterModel: string
+  openRouterActiveKeyId: string
   antlingModel: string
   codexModel: string
   codexSandbox: CodexSandbox
@@ -1141,6 +1154,7 @@ function snapshotLlm(s: {
     model: s.model,
     ollamaModel: s.ollamaModel,
     openRouterModel: s.openRouterModel,
+    openRouterActiveKeyId: s.openRouterActiveKeyId,
     antlingModel: s.antlingModel,
     antlingReasoning: s.antlingReasoning,
     antlingTemperature: s.antlingTemperature,
@@ -1359,6 +1373,8 @@ interface AppState {
   // OpenRouter
   openRouterEnabled: boolean
   openRouterApiKey: string
+  openRouterApiKeys: OpenRouterApiKey[]
+  openRouterActiveKeyId: string
   openRouterModel: string
   // Ant Ling
   antlingApiKey: string
@@ -1591,6 +1607,8 @@ interface AppState {
   setProvider: (p: LlmProvider) => Promise<void>
   setOpenRouterEnabled: (enabled: boolean) => Promise<void>
   setOpenRouterApiKey: (apiKey: string) => Promise<void>
+  setOpenRouterApiKeys: (keys: OpenRouterApiKey[], activeKeyId?: string) => Promise<void>
+  setOpenRouterActiveKeyId: (id: string) => Promise<void>
   setOpenRouterModel: (m: string) => void
   setAntLingApiKey: (apiKey: string) => Promise<void>
   setAntLingModel: (m: string) => void
@@ -1832,6 +1850,10 @@ export const useApp = create<AppState>((set, get) => {
    */
   const applyLlm = async (saved?: WorkspaceLlm): Promise<void> => {
     if (saved) {
+      const openRouterKey = selectedOpenRouterKey(
+        get().openRouterApiKeys,
+        saved.openRouterActiveKeyId ?? get().openRouterActiveKeyId
+      )
       set({
         antigravityModel: saved.antigravityModel ?? DEFAULT_LLM_CONFIG.antigravityModel,
         antigravityReasoning: saved.antigravityReasoning ?? (saved.antigravityModel === 'pro' ? 'high' : DEFAULT_LLM_CONFIG.antigravityReasoning),
@@ -1841,6 +1863,8 @@ export const useApp = create<AppState>((set, get) => {
         ollamaModel: saved.ollamaModel ?? DEFAULT_LLM_CONFIG.ollamaModel,
         unslothModel: saved.unslothModel ?? DEFAULT_LLM_CONFIG.unslothModel,
         openRouterModel: saved.openRouterModel ?? DEFAULT_LLM_CONFIG.openRouterModel,
+        openRouterApiKey: openRouterKey?.apiKey ?? '',
+        openRouterActiveKeyId: openRouterKey?.id ?? '',
         antlingModel: saved.antlingModel?.trim() || DEFAULT_LLM_CONFIG.antlingModel,
         antlingReasoning: saved.antlingReasoning ?? DEFAULT_LLM_CONFIG.antlingReasoning,
         antlingTemperature: saved.antlingTemperature ?? DEFAULT_LLM_CONFIG.antlingTemperature,
@@ -1888,6 +1912,7 @@ export const useApp = create<AppState>((set, get) => {
       ollamaModel: get().ollamaModel,
       unslothModel: get().unslothModel,
       openRouterModel: get().openRouterModel,
+      openRouterActiveKeyId: get().openRouterActiveKeyId,
       antlingModel: get().antlingModel,
       antlingReasoning: get().antlingReasoning,
       antlingTemperature: get().antlingTemperature,
@@ -1985,6 +2010,8 @@ export const useApp = create<AppState>((set, get) => {
   ollamaReachable: false,
   openRouterEnabled: DEFAULT_LLM_CONFIG.openRouterEnabled,
   openRouterApiKey: DEFAULT_LLM_CONFIG.openRouterApiKey,
+  openRouterApiKeys: DEFAULT_LLM_CONFIG.openRouterApiKeys,
+  openRouterActiveKeyId: DEFAULT_LLM_CONFIG.openRouterActiveKeyId,
   openRouterModel: DEFAULT_LLM_CONFIG.openRouterModel,
   antlingApiKey: DEFAULT_LLM_CONFIG.antlingApiKey,
   antlingModel: DEFAULT_LLM_CONFIG.antlingModel,
@@ -2203,6 +2230,8 @@ export const useApp = create<AppState>((set, get) => {
       unslothModel: cfg.unslothModel,
       openRouterEnabled: cfg.openRouterEnabled,
       openRouterApiKey: cfg.openRouterApiKey,
+      openRouterApiKeys: cfg.openRouterApiKeys ?? [],
+      openRouterActiveKeyId: cfg.openRouterActiveKeyId ?? '',
       openRouterModel: cfg.openRouterModel,
       antlingApiKey: cfg.antlingApiKey ?? DEFAULT_LLM_CONFIG.antlingApiKey,
       antlingModel: cfg.antlingModel?.trim() || DEFAULT_LLM_CONFIG.antlingModel,
@@ -3401,14 +3430,45 @@ export const useApp = create<AppState>((set, get) => {
   },
 
   async setOpenRouterApiKey(apiKey) {
-    const openRouterApiKey = normalizeOpenRouterApiKey(apiKey)
-    set({ openRouterApiKey })
-    await api.llm.setConfig({ openRouterApiKey })
+    const normalized = normalizeOpenRouterApiKey(apiKey)
+    const keys = get().openRouterApiKeys
+    const active = selectedOpenRouterKey(keys, get().openRouterActiveKeyId)
+    const next = normalized
+      ? active
+        ? keys.map((key) => key.id === active.id ? { ...key, apiKey: normalized } : key)
+        : [{ id: 'legacy', label: 'Key 1', apiKey: normalized }]
+      : active
+        ? keys.filter((key) => key.id !== active.id)
+        : keys
+    await get().setOpenRouterApiKeys(next, active?.id)
+  },
+
+  async setOpenRouterApiKeys(keys, activeKeyId) {
+    const openRouterApiKeys = normalizeOpenRouterApiKeys(keys)
+    const selected = selectedOpenRouterKey(
+      openRouterApiKeys,
+      activeKeyId ?? get().openRouterActiveKeyId
+    )
+    const openRouterActiveKeyId = selected?.id ?? ''
+    const openRouterApiKey = selected?.apiKey ?? ''
+    set({ openRouterApiKeys, openRouterActiveKeyId, openRouterApiKey })
+    await api.llm.setConfig({ openRouterApiKeys, openRouterActiveKeyId })
     if ((!openRouterApiKey || !get().openRouterEnabled) && get().provider === 'openrouter') {
       await get().setProvider('lmstudio')
     } else if (get().provider === 'openrouter') {
       await get().refreshModels()
     }
+  },
+
+  async setOpenRouterActiveKeyId(id) {
+    const selected = selectedOpenRouterKey(get().openRouterApiKeys, id)
+    const openRouterActiveKeyId = selected?.id ?? ''
+    const openRouterApiKey = selected?.apiKey ?? ''
+    if (openRouterActiveKeyId === get().openRouterActiveKeyId) return
+    set({ openRouterActiveKeyId, openRouterApiKey })
+    await api.llm.setConfig({ openRouterActiveKeyId })
+    get().persistWorkspaceLlm()
+    if (get().provider === 'openrouter') await get().refreshModels()
   },
 
   setOpenRouterModel(openRouterModel) {
@@ -4163,6 +4223,9 @@ export const useApp = create<AppState>((set, get) => {
     const ollamaModel = get().ollamaModel
     const unslothModel = get().unslothModel
     const orModel = get().openRouterModel
+    // Fixed for the whole run, like the model, so switching another chat's key
+    // cannot change the account this chat bills.
+    const orKeyId = get().openRouterActiveKeyId
     const antlingModel = get().antlingModel || DEFAULT_LLM_CONFIG.antlingModel
     const antlingReasoning = get().antlingReasoning
     const antlingTemperature = get().antlingTemperature
@@ -4860,6 +4923,7 @@ export const useApp = create<AppState>((set, get) => {
                 ...(agentProvider === 'lmstudio' ? { reasoning: lmStudioReasoning,
                   ...(outputBudget !== undefined ? { maxTokens: outputBudget } : {}) } : {}),
                 ...(agentProvider === 'gigachat' ? { reasoning: gigachatReasoning } : {}),
+                ...(isOpenRouter && orKeyId ? { openRouterKeyId: orKeyId } : {}),
                 ...(isAntLing ? { reasoning: antlingReasoning, temperature: antlingTemperature } : {}),
                 model: isAntLing ? antlingModel : isUnsloth ? unslothModel : isOpenRouter
                   ? orModel

@@ -1,9 +1,9 @@
 import { ipcMain } from 'electron'
 import crossSpawn from 'cross-spawn'
 import { spawn } from 'node:child_process'
-import { IPC, normalizeOpenRouterApiKey, type LlmProvider } from '@shared/ipc'
+import { IPC, type LlmProvider } from '@shared/ipc'
 import type { ProviderCreditInfo, ProviderInstallResult, ProviderSoftwareInfo } from '@shared/provider-setup'
-import { getStore } from '../store'
+import { readConfig } from './llm'
 
 // Package names and commands are owned by the main process, never supplied by IPC.
 const PACKAGES: Partial<Record<LlmProvider, string>> = {
@@ -68,7 +68,7 @@ async function plan(provider: LlmProvider): Promise<ProviderSoftwareInfo & { fil
 export function registerProviderSetupHandlers(): void {
   ipcMain.handle(IPC.providerSetup.credits, async (_event, provider: LlmProvider): Promise<ProviderCreditInfo> => {
     if (provider !== 'openrouter') return { ok: false, error: 'Credit reporting is unavailable for this provider.' }
-    const key = normalizeOpenRouterApiKey(getStore().getSetting<string>('openrouter.apiKey') ?? '')
+    const key = readConfig().openRouterApiKey
     if (!key) return { ok: false, error: 'Save an OpenRouter API key to check its remaining credits.' }
     try {
       // https://openrouter.ai/docs/api/api-reference/api-keys/get-current-key

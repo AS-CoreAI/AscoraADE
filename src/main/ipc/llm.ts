@@ -5,6 +5,7 @@ import {
   WPROVIDER_SERVICES,
   normalizeGigachatAuthKey,
   normalizeOpenRouterApiKey,
+  normalizeOpenRouterApiKeys,
   type ChatParams,
   type ChatResult,
   type PromptProgress,
@@ -23,9 +24,10 @@ import {
   type LlmConfig,
   type LlmProvider,
   type ListModelsResult,
+  type OpenRouterApiKey,
   type WProviderService
 } from '@shared/ipc'
-import { getStore } from '../store'
+import { getStore, type Store } from '../store'
 import { LmStudioClient, LmStudioError } from '../llm/client'
 import { watchPromptProgress } from '../llm/prompt-progress'
 import { normalizeUnslothApiKey, normalizeUnslothBaseUrl } from '@shared/unsloth'
@@ -34,6 +36,45 @@ import { getOmnirouteBaseUrl, startOmniroute } from '../omniroute/runner'
 let client: LmStudioClient | null = null
 /** In-flight chat requests, keyed by the renderer-supplied request id. */
 const aborters = new Map<string, AbortController>()
+
+/** Read the new named-key setting, falling back to installations saved before
+ * multiple OpenRouter keys were supported. */
+function storedOpenRouterApiKeys(store: Store): OpenRouterApiKey[] {
+  const raw = store.getSetting<unknown>('openrouter.apiKeys')
+  const keys = normalizeOpenRouterApiKeys(raw)
+  if (Array.isArray(raw)) return keys
+  const legacyApiKey = normalizeOpenRouterApiKey(
+    store.getSetting<string>('openrouter.apiKey') ?? DEFAULT_LLM_CONFIG.openRouterApiKey
+  )
+  return legacyApiKey
+    ? [{ id: 'legacy', label: 'Key 1', apiKey: legacyApiKey }]
+    : keys
+}
+
+function selectOpenRouterKey(
+  keys: OpenRouterApiKey[],
+  requestedId: string | undefined
+): OpenRouterApiKey | undefined {
+  return keys.find((key) => key.id === requestedId) ?? keys[0]
+}
+
+/** Use the saved key a request names; an unknown or missing id keeps the active key. */
+function withOpenRouterKey(config: LlmConfig, keyId: string | undefined): LlmConfig {
+  const key = keyId ? config.openRouterApiKeys.find((entry) => entry.id === keyId) : undefined
+  return key ? { ...config, openRouterApiKey: key.apiKey, openRouterActiveKeyId: key.id } : config
+}
+
+function saveOpenRouterApiKeys(
+  store: Store,
+  keys: OpenRouterApiKey[],
+  requestedId?: string
+): void {
+  const active = selectOpenRouterKey(keys, requestedId)
+  store.setSetting('openrouter.apiKeys', keys)
+  store.setSetting('openrouter.activeKeyId', active?.id ?? '')
+  // Keep the old setting in sync for a safe downgrade and existing local data.
+  store.setSetting('openrouter.apiKey', active?.apiKey ?? '')
+}
 
 /** Chat can arrive while the shared sidecar is still prewarming. Keep the
  * request's settings snapshot, but obtain its URL only after startup finishes.
@@ -57,10 +98,13 @@ export function readConfig(): LlmConfig {
   const store = getStore()
   const openRouterEnabled =
     store.getSetting<boolean>('openrouter.enabled') ?? DEFAULT_LLM_CONFIG.openRouterEnabled
-  const openRouterApiKey =
-    normalizeOpenRouterApiKey(
-      store.getSetting<string>('openrouter.apiKey') ?? DEFAULT_LLM_CONFIG.openRouterApiKey
-    )
+  const openRouterApiKeys = storedOpenRouterApiKeys(store)
+  const activeOpenRouterKey = selectOpenRouterKey(
+    openRouterApiKeys,
+    store.getSetting<string>('openrouter.activeKeyId')
+  )
+  const openRouterApiKey = activeOpenRouterKey?.apiKey ?? ''
+  const openRouterActiveKeyId = activeOpenRouterKey?.id ?? ''
   const savedProvider = store.getSetting<LlmProvider>('llm.provider') ?? DEFAULT_LLM_CONFIG.provider
   const provider =
     savedProvider === 'openrouter' && (!openRouterEnabled || !openRouterApiKey.trim())
@@ -81,6 +125,8 @@ export function readConfig(): LlmConfig {
     unslothModel: store.getSetting<string>('unsloth.model') ?? DEFAULT_LLM_CONFIG.unslothModel,
     openRouterEnabled,
     openRouterApiKey,
+    openRouterApiKeys,
+    openRouterActiveKeyId,
     openRouterModel:
       store.getSetting<string>('openrouter.model') ?? DEFAULT_LLM_CONFIG.openRouterModel,
     antlingApiKey: normalizeOpenRouterApiKey(
@@ -192,8 +238,31 @@ export function registerLlmHandlers(): void {
     if (typeof patch.openRouterEnabled === 'boolean') {
       store.setSetting('openrouter.enabled', patch.openRouterEnabled)
     }
-    if (typeof patch.openRouterApiKey === 'string') {
-      store.setSetting('openrouter.apiKey', normalizeOpenRouterApiKey(patch.openRouterApiKey))
+    if (patch.openRouterApiKeys !== undefined) {
+      const keys = normalizeOpenRouterApiKeys(patch.openRouterApiKeys)
+      const requestedId = typeof patch.openRouterActiveKeyId === 'string'
+        ? patch.openRouterActiveKeyId
+        : store.getSetting<string>('openrouter.activeKeyId')
+      saveOpenRouterApiKeys(store, keys, requestedId)
+    } else if (typeof patch.openRouterApiKey === 'string') {
+      // Compatibility for callers that still save one unlabelled key.
+      const apiKey = normalizeOpenRouterApiKey(patch.openRouterApiKey)
+      const keys = storedOpenRouterApiKeys(store)
+      const active = selectOpenRouterKey(keys, store.getSetting<string>('openrouter.activeKeyId'))
+      const next = apiKey
+        ? active
+          ? keys.map((key) => key.id === active.id ? { ...key, apiKey } : key)
+          : [{ id: 'legacy', label: 'Key 1', apiKey }]
+        : active
+          ? keys.filter((key) => key.id !== active.id)
+          : keys
+      saveOpenRouterApiKeys(store, next, active?.id)
+    } else if (typeof patch.openRouterActiveKeyId === 'string') {
+      saveOpenRouterApiKeys(
+        store,
+        storedOpenRouterApiKeys(store),
+        patch.openRouterActiveKeyId
+      )
     }
     if (typeof patch.openRouterModel === 'string') {
       store.setSetting('openrouter.model', patch.openRouterModel.trim())
@@ -361,7 +430,10 @@ export function registerLlmHandlers(): void {
               scheduleChunks()
             })
         }
-        const requestConfig = await readyConfig({ ...config, provider }, controller.signal)
+        // A chat keeps the OpenRouter key it started with, even if another chat
+        // selects a different key while this one is still working.
+        const keyedConfig = provider === 'openrouter' ? withOpenRouterKey(config, params.openRouterKeyId) : config
+        const requestConfig = await readyConfig({ ...keyedConfig, provider }, controller.signal)
         const gen = new LmStudioClient(requestConfig).streamChat(params, controller.signal, (delta) => {
           finishProgress()
           thinkingStartedAt ??= Date.now()

@@ -57,6 +57,7 @@ import {
   type AntigravityReasoning,
   antigravityReasoningLevels,
   type LlmProvider,
+  type OpenRouterApiKey,
   type WProviderAuthorization,
   type WProviderService
 } from '@shared/ipc'
@@ -1822,20 +1823,43 @@ function AntLingSetup(): JSX.Element {
 function OpenRouterSetup(): JSX.Element {
   const t = useT()
   const openRouterEnabled = useApp((s) => s.openRouterEnabled)
-  const openRouterApiKey = useApp((s) => s.openRouterApiKey)
+  const openRouterApiKeys = useApp((s) => s.openRouterApiKeys)
+  const openRouterActiveKeyId = useApp((s) => s.openRouterActiveKeyId)
   const setOpenRouterEnabled = useApp((s) => s.setOpenRouterEnabled)
-  const setOpenRouterApiKey = useApp((s) => s.setOpenRouterApiKey)
+  const setOpenRouterApiKeys = useApp((s) => s.setOpenRouterApiKeys)
 
-  const [apiKey, setApiKey] = useState(openRouterApiKey)
+  const draftKey = (index: number): OpenRouterApiKey =>
+    ({ id: `openrouter-${crypto.randomUUID()}`, label: `Key ${index + 1}`, apiKey: '' })
+  // Before the first key is saved, show one empty row to paste it into. Empty
+  // rows are discarded on save, so the draft never becomes a stored key.
+  const withDraft = (list: OpenRouterApiKey[]): OpenRouterApiKey[] => list.length > 0 ? list : [draftKey(0)]
+  const [keys, setKeys] = useState(() => withDraft(openRouterApiKeys))
   const [saving, setSaving] = useState(false)
-  const ready = openRouterEnabled && openRouterApiKey.trim().length > 0
+  const ready = openRouterEnabled && openRouterApiKeys.length > 0
+
+  useEffect(() => setKeys(withDraft(openRouterApiKeys)), [openRouterApiKeys])
+
+  const updateKey = (id: string, patch: Partial<OpenRouterApiKey>): void => {
+    setKeys((keys) => keys.map((key) => key.id === id ? { ...key, ...patch } : key))
+  }
+
+  const addKey = (): void => {
+    setKeys((keys) => [...keys, draftKey(keys.length)])
+  }
 
   const save = async (): Promise<void> => {
-    const normalized = normalizeOpenRouterApiKey(apiKey)
+    const normalized = keys.map((key, index) => ({
+      ...key,
+      label: key.label.trim() || `Key ${index + 1}`,
+      apiKey: normalizeOpenRouterApiKey(key.apiKey)
+    }))
+    const activeKeyId = normalized.some((key) => key.id === openRouterActiveKeyId)
+      ? openRouterActiveKeyId
+      : normalized[0]?.id
     setSaving(true)
     try {
-      await setOpenRouterApiKey(normalized)
-      setApiKey(normalized)
+      await setOpenRouterApiKeys(normalized, activeKeyId)
+      setKeys(withDraft(useApp.getState().openRouterApiKeys))
     } finally { setSaving(false) }
   }
 
@@ -1855,16 +1879,41 @@ function OpenRouterSetup(): JSX.Element {
         </label>
         <span className="field-hint">{t('settings.openRouterHint')}</span>
       </div>
+      <span className="field-label">{t('settings.openRouterKeys')}</span>
+      {keys.map((key) => (
+        <div className="field-row" key={key.id}>
+          <input
+            className="text-input"
+            value={key.label}
+            maxLength={120}
+            placeholder={t('settings.openRouterKeyName')}
+            aria-label={t('settings.openRouterKeyName')}
+            onChange={(e) => updateKey(key.id, { label: e.target.value })}
+          />
+          <input
+            className="text-input"
+            type="password"
+            value={key.apiKey}
+            spellCheck={false}
+            placeholder="sk-or-v1-..."
+            aria-label={t('composer.openRouterKey')}
+            onChange={(e) => updateKey(key.id, { apiKey: e.target.value })}
+            onKeyDown={(e) => e.key === 'Enter' && void save()}
+          />
+          <button
+            className="btn"
+            title={t('common.delete')}
+            aria-label={`${t('common.delete')}: ${key.label}`}
+            onClick={() => setKeys((keys) => keys.filter((entry) => entry.id !== key.id))}
+          >
+            <Icon name="trash" size={14} />
+          </button>
+        </div>
+      ))}
       <div className="field-row">
-        <input
-          className="text-input"
-          type="password"
-          value={apiKey}
-          spellCheck={false}
-          placeholder="sk-or-v1-..."
-          onChange={(e) => setApiKey(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && void save()}
-        />
+        <button className="btn btn-icon" onClick={addKey}>
+          <Icon name="plus" size={14} /> {t('settings.openRouterAddKey')}
+        </button>
         <button className="btn" onClick={() => void save()} disabled={saving}>
           {saving ? t('settings.saving') : t('common.save')}
         </button>

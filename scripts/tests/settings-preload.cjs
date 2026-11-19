@@ -9,6 +9,18 @@ contract._compile(ts.transpileModule(readFileSync(filename, 'utf8'), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 }
 }).outputText, filename)
 const config = { ...contract.exports.DEFAULT_LLM_CONFIG, ...JSON.parse(localStorage.getItem('settings-smoke-llm') || '{}') }
+// Mirror main's OpenRouter key handling: a lone legacy key becomes the first named
+// key, and openRouterApiKey always follows the active named key.
+const syncOpenRouterKey = () => {
+  if (!config.openRouterApiKeys?.length && config.openRouterApiKey) {
+    config.openRouterApiKeys = [{ id: 'legacy', label: 'Key 1', apiKey: config.openRouterApiKey }]
+  }
+  const keys = config.openRouterApiKeys ?? []
+  const active = keys.find(key => key.id === config.openRouterActiveKeyId) ?? keys[0]
+  config.openRouterActiveKeyId = active?.id ?? ''
+  config.openRouterApiKey = active?.apiKey ?? ''
+}
+syncOpenRouterKey()
 const status = { state: 'ready', port: 20128, version: '3.8.48', baseUrl: 'http://127.0.0.1:20128/v1', logsPath: '' }
 const values = JSON.parse(localStorage.getItem('settings-smoke') || '{"appearance.language":"ru"}')
 const save = () => localStorage.setItem('settings-smoke', JSON.stringify(values))
@@ -55,7 +67,20 @@ const group = (name) => new Proxy({}, { get: (_, method) => {
       if (method === 'modelInfo') return { contextLength: fixture.contextLength === undefined ? 8192 : fixture.contextLength,
         reasoningOptions: ['off', 'low', 'medium', 'xhigh'], reasoningDefault: 'xhigh' }
       if (method === 'config') return config
-      if (method === 'setConfig') { Object.assign(config, args[0]); localStorage.setItem('settings-smoke-llm', JSON.stringify(config)); return }
+      if (method === 'setConfig') {
+        const patch = args[0]
+        // A lone key from an older caller updates only the active named key, as in main.
+        if (typeof patch.openRouterApiKey === 'string' && patch.openRouterApiKeys === undefined) {
+          const keys = config.openRouterApiKeys ?? []
+          const active = keys.find(key => key.id === config.openRouterActiveKeyId) ?? keys[0]
+          const apiKey = patch.openRouterApiKey.trim()
+          config.openRouterApiKeys = apiKey
+            ? active ? keys.map(key => key.id === active.id ? { ...key, apiKey } : key) : [{ id: 'legacy', label: 'Key 1', apiKey }]
+            : keys.filter(key => key !== active)
+        }
+        Object.assign(config, patch); syncOpenRouterKey()
+        localStorage.setItem('settings-smoke-llm', JSON.stringify(config)); return
+      }
       if (method === 'listModels') {
         const provider = args[0] || config.provider
         fixture.modelRequests.push(provider)

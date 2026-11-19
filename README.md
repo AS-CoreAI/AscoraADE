@@ -34,7 +34,7 @@ pinning):
 
 - **LM Studio** (default): local LLM over the OpenAI-compatible API.
 - **Ollama** and **Unsloth**: local model servers with model discovery and streaming.
-- **OpenRouter**: cloud OpenAI-compatible backend with a saved API key.
+- **OpenRouter**: cloud OpenAI-compatible backend with one or more named API keys; when several are saved, the composer picks the key per chat next to the model.
 - **Codex CLI**: OpenAI Codex agent driven over `stream-json`.
 - **GitHub Copilot CLI**: Copilot agent with device-code login and reasoning levels.
 - **Claude Code**: Anthropic's CLI agent with selectable permission modes.

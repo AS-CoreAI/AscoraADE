@@ -654,6 +654,42 @@ export function normalizeOpenRouterApiKey(value: string): string {
   return stripWrappingQuotes(key).split(/\s+/)[0] ?? ''
 }
 
+/** A named OpenRouter credential stored locally in the app settings. */
+export interface OpenRouterApiKey {
+  /** Stable local identifier; never sent to OpenRouter. */
+  id: string
+  /** User-defined label shown in the key pickers. */
+  label: string
+  /** The actual OpenRouter bearer token. */
+  apiKey: string
+}
+
+/**
+ * Validate OpenRouter credentials received through persisted settings or IPC.
+ * Empty keys are discarded, so they can never be selected or sent by mistake.
+ */
+export function normalizeOpenRouterApiKeys(value: unknown): OpenRouterApiKey[] {
+  if (!Array.isArray(value)) return []
+  const usedIds = new Set<string>()
+  const result: OpenRouterApiKey[] = []
+  for (const [index, entry] of value.entries()) {
+    if (!entry || typeof entry !== 'object') continue
+    const raw = entry as Partial<OpenRouterApiKey>
+    if (typeof raw.apiKey !== 'string') continue
+    const apiKey = normalizeOpenRouterApiKey(raw.apiKey)
+    if (!apiKey) continue
+    const fallbackId = `openrouter-key-${index + 1}`
+    const baseId = typeof raw.id === 'string' ? raw.id.trim().slice(0, 128) : ''
+    let id = baseId || fallbackId
+    let suffix = 2
+    while (usedIds.has(id)) id = `${baseId || fallbackId}-${suffix++}`
+    usedIds.add(id)
+    const label = typeof raw.label === 'string' ? raw.label.trim().slice(0, 120) : ''
+    result.push({ id, label: label || `Key ${result.length + 1}`, apiKey })
+  }
+  return result
+}
+
 /** Sandbox policy passed to `codex exec -s`. */
 export type CodexSandbox = 'read-only' | 'workspace-write' | 'danger-full-access'
 
@@ -1136,8 +1172,12 @@ export interface LlmConfig {
   unslothModel: string
   /** Whether OpenRouter is exposed as a selectable agent backend. */
   openRouterEnabled: boolean
-  /** OpenRouter API key. Stored locally in app settings. */
+  /** The active OpenRouter API key, derived from openRouterApiKeys for compatibility. */
   openRouterApiKey: string
+  /** Named OpenRouter API keys stored locally in app settings. */
+  openRouterApiKeys: OpenRouterApiKey[]
+  /** Id of the OpenRouter API key selected for the current chat/workspace. */
+  openRouterActiveKeyId: string
   /** Default OpenRouter model id used when selected. */
   openRouterModel: string
   /** Ant Ling API key for the OpenAI-compatible endpoint. */
@@ -1236,6 +1276,8 @@ export const DEFAULT_LLM_CONFIG: LlmConfig = {
   unslothModel: '',
   openRouterEnabled: false,
   openRouterApiKey: '',
+  openRouterApiKeys: [],
+  openRouterActiveKeyId: '',
   openRouterModel: 'openrouter/free',
   antlingApiKey: '',
   antlingModel: ANT_LING_MODELS[0],
@@ -1287,6 +1329,9 @@ export interface ChatParams {
   reasoning?: LmStudioReasoning | ''
   /** When set, advertised to the model for native function-calling. */
   tools?: ToolDef[]
+  /** OpenRouter only: local id of the saved key this chat started with. Never
+   * sent upstream; an unknown id falls back to the active key. */
+  openRouterKeyId?: string
 }
 
 export interface PromptProgress {

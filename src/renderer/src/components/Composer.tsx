@@ -309,6 +309,9 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
   const openSettings = useApp((s) => s.openSettings)
   const openRouterModel = useApp((s) => s.openRouterModel)
   const setOpenRouterModel = useApp((s) => s.setOpenRouterModel)
+  const openRouterApiKeys = useApp((s) => s.openRouterApiKeys)
+  const openRouterActiveKeyId = useApp((s) => s.openRouterActiveKeyId)
+  const setOpenRouterActiveKeyId = useApp((s) => s.setOpenRouterActiveKeyId)
   const codexModel = useApp((s) => s.codexModel)
   const setCodexModel = useApp((s) => s.setCodexModel)
   const codexReasoning = useApp((s) => s.codexReasoning)
@@ -1112,14 +1115,25 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
             emptyLabel={omniRu ? 'Модели недоступны.' : 'No models available.'}
           />
         ) : provider === 'openrouter' ? (
-          <select
-            className="composer-select"
-            value={openRouterModel || modelOptions[0]}
-            onChange={(e) => setOpenRouterModel(e.target.value)}
-            title={t('composer.modelOpenRouter')}
-          >
-            <OpenRouterModelOptions options={modelOptions} />
-          </select>
+          <>
+            <select
+              className="composer-select"
+              value={openRouterModel || modelOptions[0]}
+              onChange={(e) => setOpenRouterModel(e.target.value)}
+              title={t('composer.modelOpenRouter')}
+            >
+              <OpenRouterModelOptions options={modelOptions} />
+            </select>
+            {openRouterApiKeys.length > 1 && <select
+              className="composer-select"
+              value={openRouterActiveKeyId || openRouterApiKeys[0].id}
+              onChange={(e) => void setOpenRouterActiveKeyId(e.target.value)}
+              title={t('composer.openRouterKey')}
+              aria-label={t('composer.openRouterKey')}
+            >
+              {openRouterApiKeys.map((key) => <option key={key.id} value={key.id}>{key.label}</option>)}
+            </select>}
+          </>
         ) : provider === 'antling' ? (
           <select
             className="composer-select"
