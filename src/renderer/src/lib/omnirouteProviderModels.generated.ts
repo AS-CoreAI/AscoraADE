@@ -9,18 +9,21 @@ export interface OmniBuiltinModel {
 
 export const OMNI_PROVIDER_ID_TO_ALIAS: Record<string, string> = {
   "aimlapi": "aiml",
+  "mlx-gemma": "mlx-gemma",
+  "mlx-qwen": "mlx-qwen",
   "ollama-cloud": "ollamacloud",
   "synthetic": "synthetic",
   "ideogram": "ideo",
   "friendliai": "friendli",
-  "suno": "suno",
   "adapta-web": "adp-web",
+  "notion-web": "nw",
   "anthropic": "anthropic",
   "sambanova": "samba",
-  "puter": "pu",
   "upstage": "upstage",
+  "deepai": "deepai",
   "nebius": "nebius",
   "fireworks": "fireworks",
+  "freebuff": "fb",
   "llamagate": "llamagate",
   "glm": "glm",
   "glmt": "glmt",
@@ -29,16 +32,19 @@ export const OMNI_PROVIDER_ID_TO_ALIAS: Record<string, string> = {
   "muse-spark-web": "ms-web",
   "lmarena": "lma",
   "kilocode": "kc",
-  "github-models": "ghm",
+  "workbuddy": "wb",
   "github": "gh",
+  "ghe-copilot": "ghe-copilot",
   "dify": "dify",
   "ovhcloud": "ovh",
   "claude": "cc",
   "claude-web": "cw",
+  "cloudflare-playground": "cfp",
   "bedrock": "bedrock",
   "inner-ai": "in-ai",
   "qoder": "if",
   "xiaomi-mimo": "mimo",
+  "xiaomi-mimo-token-plan": "mimotp",
   "codestral": "codestral",
   "wandb": "wandb",
   "predibase": "predibase",
@@ -55,6 +61,10 @@ export const OMNI_PROVIDER_ID_TO_ALIAS: Record<string, string> = {
   "kimi-web": "kimi-web",
   "groq": "groq",
   "inference-net": "inet",
+  "hetzner": "hetzner",
+  "grokified": "grokified",
+  "replicate": "replicate",
+  "cerebrium": "cerebrium",
   "llm7": "llm7",
   "cerebras": "cerebras",
   "charm-hyper": "charm-hyper",
@@ -62,28 +72,35 @@ export const OMNI_PROVIDER_ID_TO_ALIAS: Record<string, string> = {
   "clinepass": "cp",
   "sparkdesk": "sparkdesk",
   "nlpcloud": "nlpc",
+  "oneminai": "1min",
   "nvidia": "nvidia",
   "api-airforce": "af",
   "mistral": "mistral",
   "together": "together",
   "cohere": "cohere",
   "cursor": "cu",
+  "cursor-api": "cua",
   "volcengine": "volcengine",
-  "hackclub": "hc",
+  "volcengine-agent-plan": "veap",
+  "volcengine-coding-plan": "vecp",
+  "freetheai": "fta",
+  "g4f-groq": "g4fgroq",
+  "g4f-gemini": "g4fgem",
+  "g4f-pollinations": "g4fpol",
+  "g4f-ollama": "g4foll",
+  "g4f-nvidia": "g4fnv",
   "tencent": "tencent",
   "coze": "coze",
   "ai21": "ai21",
-  "ant-ling": "ant-ling",
   "publicai": "publicai",
   "featherless-ai": "featherless",
   "antigravity": "antigravity",
   "openai": "openai",
   "snowflake": "snowflake",
   "huggingface": "hf",
-  "chipotle": "pepper",
   "freeaiapikey": "faik",
-  "qwen": "qw",
-  "qwen-web": "qwen-web",
+  "qwen-cloud": "qwc",
+  "qwen-cloud-token-plan": "qct",
   "zai-web": "zw",
   "modal": "modal",
   "zenmux": "zm",
@@ -95,12 +112,17 @@ export const OMNI_PROVIDER_ID_TO_ALIAS: Record<string, string> = {
   "sensenova": "sensenova",
   "hyperbolic": "hyp",
   "lambda-ai": "lambda",
+  "runcrate": "runcrate",
   "t3-web": "t3chat",
+  "conol-web": "cnl",
+  "chatplayground": "cpl",
   "iflytek": "iflytek",
   "crof": "crof",
   "moonshot": "moonshot",
+  "poe": "poe",
   "bazaarlink": "bzl",
   "perplexity": "pplx",
+  "perplexity-agent": "pplx-agent",
   "perplexity-web": "pplx-web",
   "minimax": "minimax",
   "minimax-cn": "minimax-cn",
@@ -110,9 +132,13 @@ export const OMNI_PROVIDER_ID_TO_ALIAS: Record<string, string> = {
   "blackbox-web": "bb-web",
   "uncloseai": "unc",
   "nscale": "nscale",
-  "chatgpt-web": "cgpt-web",
+  "chatgpt-web-codex": "cgpt-codex",
+  "chatgpt-web": "chatgpt-web",
   "openrouter": "openrouter",
+  "cheaperinference": "cinf",
   "openvecta": "openvecta",
+  "openference": "of",
+  "openference-api": "ofa",
   "orcarouter": "orcarouter",
   "copilot-web": "copilot-web",
   "copilot-m365-web": "m365copilot",
@@ -121,27 +147,42 @@ export const OMNI_PROVIDER_ID_TO_ALIAS: Record<string, string> = {
   "gitlawb-gmi": "glb-gmi",
   "gitlawb": "glb",
   "liquid": "liquid",
+  "arcee-ai": "arcee",
   "deepinfra": "deepinfra",
   "agy": "agy",
+  "agnes": "agnes",
+  "agnes-cn": "agnescn",
+  "aihorde": "aihorde",
+  "ainative": "ainative",
+  "aion": "aion",
   "udio": "udio",
   "longcat": "lc",
   "vertex-partner": "vp",
   "vertex": "vertex",
   "duckduckgo-web": "ddgw",
   "xai": "xai",
+  "xai-oauth": "xao",
   "morph": "morph",
   "siliconflow": "siliconflow",
   "gitlab-duo": "gld",
   "command-code": "cmd",
   "novita": "novita",
-  "windsurf": "ws",
+  "regolo": "regolo",
+  "devin-desktop": "devin-desktop",
+  "zcode": "zc",
+  "minimax-code": "mmcode",
   "zed-hosted": "zed-hosted",
   "nanogpt": "nanogpt",
+  "nan": "nan",
+  "apmix": "apmix",
   "scaleway": "scw",
   "agentrouter": "agentrouter",
   "zai": "zai",
+  "bigmodel": "bigmodel",
   "huggingchat": "huggingchat",
   "yuanbao-web": "ybw",
+  "notrack-web": "ntw",
+  "tencent-aistudio-web": "tasw",
   "galadriel": "galadriel",
   "qianfan": "qianfan",
   "meta-llama": "meta",
@@ -155,16 +196,27 @@ export const OMNI_PROVIDER_ID_TO_ALIAS: Record<string, string> = {
   "bailian-coding-plan": "bcp",
   "gigachat": "gigachat",
   "devin-cli": "dv",
+  "devin-cli-agentic": "dva",
   "auggie": "aug",
   "chutes": "chutes",
+  "chenzk": "chenzk",
   "factory": "factory",
   "databricks": "databricks",
   "reka": "reka",
+  "typhoon": "typhoon",
+  "inception": "inception",
+  "sarvam": "sarvam",
+  "writer": "writer",
+  "plamo": "plamo",
+  "clova-studio": "clova",
+  "internlm": "internlm",
+  "ant-ling": "ling",
   "vercel-ai-gateway": "vag",
   "v0-vercel": "v0",
   "opencode-zen": "opencode-zen",
   "opencode-go": "opencode-go",
-  "opencode": "oc",
+  "opencode-server": "ocs",
+  "dahl": "dahl",
   "maritalk": "maritalk",
   "baseten": "baseten",
   "gemini": "gemini",
@@ -172,59 +224,145 @@ export const OMNI_PROVIDER_ID_TO_ALIAS: Record<string, string> = {
   "cline": "cl",
   "heroku": "heroku",
   "bluesminds": "bm",
-  "theoldllm": "tllm",
   "baidu": "baidu",
   "pollinations": "pol",
   "veoaifree-web": "veo-free",
   "codex": "cx",
+  "chatgpt": "chatgpt",
+  "codex-app-server": "cxa",
+  "maxai": "mx",
+  "uc": "ucn",
+  "uc-direct": "ucd",
   "venice": "venice",
   "kiro": "kr",
   "byteplus": "bpm",
-  "mimocode": "mcode",
   "wafer": "wafer",
   "openadapter": "oad",
   "dit": "dai",
   "tokenrouter": "trk",
+  "token-kiosk": "tk",
   "grok-cli": "gc",
   "codebuddy-cn": "cbcn",
+  "codebuddy-intl": "cbai",
   "pioneer": "pn",
   "zenmux-free": "zmf",
+  "tinycms-web": "tcw",
   "sumopod": "sumopod",
   "x5lab": "x5lab",
   "kenari": "kenari",
+  "navy": "navy",
+  "nara": "nara",
+  "xkiro": "xkiro",
+  "opper": "opper",
   "requesty": "requesty",
+  "sealion": "sealion",
+  "routeway": "routeway",
   "digitalocean": "digitalocean",
-  "hcnsec": "hcnsec"
+  "hcnsec": "hcnsec",
+  "promptql": "pql",
+  "hyperagent": "ha",
+  "muse-code": "mc",
+  "zylo-api": "zylo",
+  "unorouter": "unorouter",
+  "naga-ac": "naga",
+  "chatanywhere": "chatanywhere",
+  "poolside": "poolside",
+  "fastrouter": "fastrouter",
+  "anyapi": "anyapi",
+  "beatapi": "beatapi",
+  "electronhub": "electronhub",
+  "llmgateway": "llmgateway",
+  "lyceum": "lyceum",
+  "llm-kiwi": "llmkiwi",
+  "literouter": "literouter",
+  "greenpt": "greenpt",
+  "ainetcafe": "ainetcafe",
+  "onomeo": "onomeo",
+  "eurouter": "eurouter",
+  "unifically": "unifically",
+  "y-api": "y-api",
+  "mnn-ai": "mnn-ai",
+  "meganova-ai": "meganova-ai",
+  "mixlayer": "mixlayer",
+  "speka": "speka",
+  "tokenreply": "tokenreply",
+  "yolo-auto": "yolo-auto",
+  "dxnt": "dxnt",
+  "cloudcode-one": "cloudcode-one",
+  "ofoxai": "ofoxai",
+  "zerolimitai": "zerolimitai",
+  "helyxai": "helyxai",
+  "auriko": "auriko",
+  "poixe-ai": "poixe-ai",
+  "naga-ai": "naga-ai",
+  "chat-oripe": "chat-oripe",
+  "freeinference": "freeinference",
+  "free-ai": "free-ai",
+  "void-ai": "void-ai",
+  "helixmind": "helixmind",
+  "tabitoken": "tabitoken",
+  "logfare": "logfare",
+  "seekai": "ska",
+  "tokenmarket": "tokenmarket",
+  "tokenharbor": "tokenharbor",
+  "twinmind": "tm",
+  "syntx": "stx",
+  "daoxe": "daoxe",
+  "gisoo": "gisoo",
+  "demonroute": "demonroute",
+  "paraloncloud": "paralon",
+  "empiriolabs": "empiriolabs",
+  "megabrain": "mb"
 }
 
 export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
   "aiml": [
     {
-      "id": "gpt-4o",
-      "name": "GPT-4o (via AI/ML API)"
+      "id": "gpt-5",
+      "name": "GPT-5 (via AI/ML API)"
     },
     {
-      "id": "claude-3-5-sonnet-20241022",
-      "name": "Claude 3.5 Sonnet (via AI/ML API)"
+      "id": "claude-sonnet-4.6",
+      "name": "Claude 4.6 Sonnet (via AI/ML API)"
     },
     {
-      "id": "gemini-1.5-pro",
-      "name": "Gemini 1.5 Pro (via AI/ML API)"
+      "id": "gemini-2.5-pro",
+      "name": "Gemini 2.5 Pro (via AI/ML API)"
     },
     {
-      "id": "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo",
-      "name": "Llama 3.1 70B (via AI/ML API)"
+      "id": "glm-5",
+      "name": "GLM-5 (via AI/ML API)"
     },
     {
       "id": "deepseek-chat",
-      "name": "DeepSeek Chat (via AI/ML API)"
+      "name": "DeepSeek V3 (via AI/ML API)"
     },
     {
-      "id": "mistral-large-latest",
+      "id": "mistral-large",
       "name": "Mistral Large (via AI/ML API)"
     }
   ],
+  "mlx-gemma": [
+    {
+      "id": "mlx-community/gemma-4-26B-A4B-it-qat-q4_0-mlx-aligned",
+      "name": "Gemma 4 26B A4B IT-QAT (MLX)"
+    }
+  ],
+  "mlx-qwen": [
+    {
+      "id": "maglun/Qwen3.8-27B-MLX-Mixed-3.80bpw",
+      "name": "Qwen 3.8 27B MLX Mixed 3.80bpw"
+    }
+  ],
   "ollamacloud": [
+    {
+      "id": "gpt-oss:20b",
+      "name": "GPT-OSS 20B"
+    },
+    {
+      "id": "gpt-oss:120b",
+      "name": "GPT-OSS 120B"
+    },
     {
       "id": "deepseek-v4-pro",
       "name": "DeepSeek V4 Pro"
@@ -240,6 +378,10 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
     {
       "id": "glm-5.1",
       "name": "GLM 5.1"
+    },
+    {
+      "id": "glm-5.2",
+      "name": "GLM 5.2"
     },
     {
       "id": "minimax-m3",
@@ -312,24 +454,6 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
       "name": "meta-llama-3.1-8b-instruct"
     }
   ],
-  "suno": [
-    {
-      "id": "chirp-fenix",
-      "name": "Chirp V5.5"
-    },
-    {
-      "id": "chirp-crow",
-      "name": "Chirp V5"
-    },
-    {
-      "id": "chirp-v4",
-      "name": "Chirp V4"
-    },
-    {
-      "id": "chirp-v3-5",
-      "name": "Chirp V3.5"
-    }
-  ],
   "adp-web": [
     {
       "id": "adapta-one",
@@ -360,7 +484,173 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
       "name": "Llama 4 (via Adapta)"
     }
   ],
+  "nw": [
+    {
+      "id": "notion-ai",
+      "name": "Notion AI (default)"
+    },
+    {
+      "id": "gpt-5.6-sol",
+      "name": "GPT-5.6 Sol"
+    },
+    {
+      "id": "gpt-5.6-terra",
+      "name": "GPT-5.6 Terra"
+    },
+    {
+      "id": "gpt-5.6-luna",
+      "name": "GPT-5.6 Luna"
+    },
+    {
+      "id": "gpt-5.5",
+      "name": "GPT-5.5"
+    },
+    {
+      "id": "gpt-5.4",
+      "name": "GPT-5.4"
+    },
+    {
+      "id": "gpt-5.4-mini",
+      "name": "GPT-5.4 Mini"
+    },
+    {
+      "id": "gpt-5.4-nano",
+      "name": "GPT-5.4 Nano"
+    },
+    {
+      "id": "gpt-5.2",
+      "name": "GPT-5.2"
+    },
+    {
+      "id": "gemini-3.7-flash",
+      "name": "Gemini 3.7 Flash"
+    },
+    {
+      "id": "gemini-3.6-flash",
+      "name": "Gemini 3.6 Flash"
+    },
+    {
+      "id": "gemini-3.5-flash",
+      "name": "Gemini 3.5 Flash"
+    },
+    {
+      "id": "gemini-3-flash",
+      "name": "Gemini 3 Flash"
+    },
+    {
+      "id": "gemini-3.1-pro",
+      "name": "Gemini 3.1 Pro"
+    },
+    {
+      "id": "fable-5",
+      "name": "Claude Fable 5"
+    },
+    {
+      "id": "opus-5.5",
+      "name": "Claude Opus 5.5"
+    },
+    {
+      "id": "opus-5",
+      "name": "Claude Opus 5"
+    },
+    {
+      "id": "opus-4.8",
+      "name": "Claude Opus 4.8"
+    },
+    {
+      "id": "opus-4.7",
+      "name": "Claude Opus 4.7"
+    },
+    {
+      "id": "opus-4.6",
+      "name": "Claude Opus 4.6"
+    },
+    {
+      "id": "sonnet-5.5",
+      "name": "Claude Sonnet 5.5"
+    },
+    {
+      "id": "sonnet-5",
+      "name": "Claude Sonnet 5"
+    },
+    {
+      "id": "sonnet-4.6",
+      "name": "Claude Sonnet 4.6"
+    },
+    {
+      "id": "haiku-5.5",
+      "name": "Claude Haiku 5.5"
+    },
+    {
+      "id": "haiku-4.5",
+      "name": "Claude Haiku 4.5"
+    },
+    {
+      "id": "grok-4.6",
+      "name": "Grok 4.6"
+    },
+    {
+      "id": "grok-4.5",
+      "name": "Grok 4.5"
+    },
+    {
+      "id": "grok-4.3",
+      "name": "Grok 4.3"
+    },
+    {
+      "id": "grok-build-0.1",
+      "name": "Grok Build 0.1"
+    },
+    {
+      "id": "kimi-k3",
+      "name": "Kimi K3"
+    },
+    {
+      "id": "kimi-k2.7-code",
+      "name": "Kimi K2.7 Code"
+    },
+    {
+      "id": "deepseek-v4-pro",
+      "name": "DeepSeek V4 Pro"
+    },
+    {
+      "id": "deepseek-v4-flash",
+      "name": "DeepSeek V4 Flash"
+    },
+    {
+      "id": "deepseek-v4.1-flash",
+      "name": "DeepSeek V4.1 Flash"
+    },
+    {
+      "id": "glm-5.3-flash",
+      "name": "GLM 5.3 Flash"
+    },
+    {
+      "id": "glm-5.3",
+      "name": "GLM 5.3"
+    },
+    {
+      "id": "glm-5.2",
+      "name": "GLM 5.2"
+    }
+  ],
   "anthropic": [
+    {
+      "id": "claude-fable-5-1",
+      "name": "Claude Fable 5.1"
+    },
+    {
+      "id": "claude-fable-5",
+      "name": "Claude Fable 5"
+    },
+    {
+      "id": "claude-opus-5-5",
+      "name": "Claude Opus 5.5"
+    },
+    {
+      "id": "claude-opus-5",
+      "name": "Claude Opus 5"
+    },
     {
       "id": "claude-opus-4.7",
       "name": "Claude Opus 4.7"
@@ -368,10 +658,6 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
     {
       "id": "claude-opus-4.8",
       "name": "Claude Opus 4.8"
-    },
-    {
-      "id": "claude-fable-5",
-      "name": "Claude Fable 5"
     },
     {
       "id": "claude-opus-4.6",
@@ -386,16 +672,24 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
       "name": "Claude Sonnet 5"
     },
     {
+      "id": "claude-sonnet-5-5",
+      "name": "Claude Sonnet 5.5"
+    },
+    {
       "id": "claude-sonnet-4.6",
       "name": "Claude Sonnet 4.6"
     },
     {
       "id": "claude-sonnet-4.5",
-      "name": "Claude Sonnet 4.6"
+      "name": "Claude Sonnet 4.5"
     },
     {
       "id": "claude-haiku-4.5",
       "name": "Claude Haiku 4.5"
+    },
+    {
+      "id": "claude-haiku-5-5",
+      "name": "Claude Haiku 5.5"
     }
   ],
   "samba": [
@@ -418,144 +712,14 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
     {
       "id": "gpt-oss-120b",
       "name": "gpt-oss-120b"
-    }
-  ],
-  "pu": [
-    {
-      "id": "gpt-5.5",
-      "name": "GPT-5.5 (Puter)"
     },
     {
-      "id": "gpt-5.4",
-      "name": "GPT-5.4 (Puter)"
+      "id": "DeepSeek-V3.1",
+      "name": "DeepSeek-V3.1"
     },
     {
-      "id": "gpt-5.4-mini",
-      "name": "GPT-5.4 Mini (Puter)"
-    },
-    {
-      "id": "gpt-5.4-nano",
-      "name": "GPT-5.4 Nano (Puter)"
-    },
-    {
-      "id": "gpt-4o",
-      "name": "GPT-4o (Puter)"
-    },
-    {
-      "id": "gpt-4o-mini",
-      "name": "GPT-4o Mini (🆓 Puter)"
-    },
-    {
-      "id": "o3",
-      "name": "OpenAI o3 (Puter)"
-    },
-    {
-      "id": "claude-haiku-4-5",
-      "name": "Claude Haiku 4.5 (Puter)"
-    },
-    {
-      "id": "claude-sonnet-4-6",
-      "name": "Claude Sonnet 4.6 (Puter)"
-    },
-    {
-      "id": "claude-opus-4-7",
-      "name": "Claude Opus 4.7 (Puter)"
-    },
-    {
-      "id": "google/gemini-3.5-flash",
-      "name": "Gemini 3.5 Flash (Puter)"
-    },
-    {
-      "id": "google/gemini-3.1-flash-lite-preview",
-      "name": "Gemini 3.1 Flash Lite (Puter)"
-    },
-    {
-      "id": "google/gemini-3-flash",
-      "name": "Gemini 3 Flash (Puter)"
-    },
-    {
-      "id": "google/gemini-3.1-pro-preview",
-      "name": "Gemini 3.1 Pro (Puter)"
-    },
-    {
-      "id": "deepseek/deepseek-v4-pro",
-      "name": "DeepSeek V4 Pro (Puter)"
-    },
-    {
-      "id": "deepseek/deepseek-v4-flash",
-      "name": "DeepSeek V4 Flash (Puter)"
-    },
-    {
-      "id": "x-ai/grok-4.3",
-      "name": "Grok 4.3 (Puter)"
-    },
-    {
-      "id": "x-ai/grok-4.20",
-      "name": "Grok 4.20 (Puter)"
-    },
-    {
-      "id": "llama-4-scout",
-      "name": "Llama 4 Scout (Puter)"
-    },
-    {
-      "id": "llama-4-maverick",
-      "name": "Llama 4 Maverick (Puter)"
-    },
-    {
-      "id": "llama-3.3-70b-instruct",
-      "name": "Llama 3.3 70B (Puter)"
-    },
-    {
-      "id": "mistral-small-2603",
-      "name": "Mistral Small 4 (Puter)"
-    },
-    {
-      "id": "mistral-medium-3-5",
-      "name": "Mistral Medium 3.5 (Puter)"
-    },
-    {
-      "id": "mistral-large-2512",
-      "name": "Mistral Large (Puter)"
-    },
-    {
-      "id": "devstral-2512",
-      "name": "Devstral 2 (Puter)"
-    },
-    {
-      "id": "codestral-2508",
-      "name": "Codestral (Puter)"
-    },
-    {
-      "id": "mistral-nemo",
-      "name": "Mistral Nemo (Puter)"
-    },
-    {
-      "id": "qwen/qwen3.6-plus",
-      "name": "Qwen 3.6 Plus (Puter)"
-    },
-    {
-      "id": "qwen/qwen3.5-397b-a17b",
-      "name": "Qwen 3.5 397B (Puter)"
-    },
-    {
-      "id": "perplexity/sonar-deep-research",
-      "name": "Perplexity Sonar Deep Research (Puter)"
-    },
-    {
-      "id": "perplexity/sonar-pro-search",
-      "name": "Perplexity Sonar Pro Search (Puter)"
-    },
-    {
-      "id": "perplexity/sonar-pro",
-      "name": "Perplexity Sonar Pro (Puter)"
-    },
-    {
-      "id": "perplexity/sonar-reasoning-pro",
-      "name": "Perplexity Sonar Reasoning Pro (Puter)"
-    },
-    {
-      "id": "perplexity/sonar",
-      "name": "Perplexity Sonar (Puter)"
+      "id": "gemma-4-31B-it",
+      "name": "gemma-4-31B-it"
     }
   ],
   "upstage": [
@@ -566,6 +730,12 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
     {
       "id": "solar-mini",
       "name": "solar-mini"
+    }
+  ],
+  "deepai": [
+    {
+      "id": "text2img",
+      "name": "Text to Image"
     }
   ],
   "nebius": [
@@ -616,6 +786,44 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
       "name": "Qwen3.6 Plus"
     }
   ],
+  "fb": [
+    {
+      "id": "deepseek/deepseek-v4-flash",
+      "name": "DeepSeek V4 Flash"
+    },
+    {
+      "id": "deepseek/deepseek-v4-pro",
+      "name": "DeepSeek V4 Pro"
+    },
+    {
+      "id": "openai/gpt-5.6-luna",
+      "name": "GPT-5.6 Luna"
+    },
+    {
+      "id": "minimax/minimax-m3",
+      "name": "MiniMax M3"
+    },
+    {
+      "id": "mimo/mimo-v2.5",
+      "name": "MiMo v2.5"
+    },
+    {
+      "id": "z-ai/glm-5.2",
+      "name": "GLM 5.2"
+    },
+    {
+      "id": "crof/kimi-k3-eco",
+      "name": "Kimi K3 Eco"
+    },
+    {
+      "id": "anthropic/claude-fable-5",
+      "name": "Claude Fable 5"
+    },
+    {
+      "id": "meta/muse-spark-1.2-contributor",
+      "name": "Meta Muse Spark 1.2 Contributor"
+    }
+  ],
   "llamagate": [
     {
       "id": "qwen2.5-coder-7b",
@@ -631,6 +839,38 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
     }
   ],
   "glm": [
+    {
+      "id": "glm-5.3-flash",
+      "name": "GLM 5.3 Flash"
+    },
+    {
+      "id": "glm-5.3",
+      "name": "GLM 5.3"
+    },
+    {
+      "id": "glm-5.3-high",
+      "name": "GLM 5.3 High"
+    },
+    {
+      "id": "glm-5.3-low",
+      "name": "GLM 5.3 Low"
+    },
+    {
+      "id": "glm-5.3-max",
+      "name": "GLM 5.3 Max"
+    },
+    {
+      "id": "glm-5.3-flash-high",
+      "name": "GLM 5.3 Flash High"
+    },
+    {
+      "id": "glm-5.3-flash-low",
+      "name": "GLM 5.3 Flash Low"
+    },
+    {
+      "id": "glm-5.3-flash-max",
+      "name": "GLM 5.3 Flash Max"
+    },
     {
       "id": "glm-5.2",
       "name": "GLM 5.2"
@@ -686,6 +926,38 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
   ],
   "glmt": [
     {
+      "id": "glm-5.3-flash",
+      "name": "GLM 5.3 Flash"
+    },
+    {
+      "id": "glm-5.3",
+      "name": "GLM 5.3"
+    },
+    {
+      "id": "glm-5.3-high",
+      "name": "GLM 5.3 High"
+    },
+    {
+      "id": "glm-5.3-low",
+      "name": "GLM 5.3 Low"
+    },
+    {
+      "id": "glm-5.3-max",
+      "name": "GLM 5.3 Max"
+    },
+    {
+      "id": "glm-5.3-flash-high",
+      "name": "GLM 5.3 Flash High"
+    },
+    {
+      "id": "glm-5.3-flash-low",
+      "name": "GLM 5.3 Flash Low"
+    },
+    {
+      "id": "glm-5.3-flash-max",
+      "name": "GLM 5.3 Flash Max"
+    },
+    {
       "id": "glm-5.2",
       "name": "GLM 5.2"
     },
@@ -739,6 +1011,38 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
     }
   ],
   "glmcn": [
+    {
+      "id": "glm-5.3-flash",
+      "name": "GLM 5.3 Flash"
+    },
+    {
+      "id": "glm-5.3",
+      "name": "GLM 5.3"
+    },
+    {
+      "id": "glm-5.3-high",
+      "name": "GLM 5.3 High"
+    },
+    {
+      "id": "glm-5.3-low",
+      "name": "GLM 5.3 Low"
+    },
+    {
+      "id": "glm-5.3-max",
+      "name": "GLM 5.3 Max"
+    },
+    {
+      "id": "glm-5.3-flash-high",
+      "name": "GLM 5.3 Flash High"
+    },
+    {
+      "id": "glm-5.3-flash-low",
+      "name": "GLM 5.3 Flash Low"
+    },
+    {
+      "id": "glm-5.3-flash-max",
+      "name": "GLM 5.3 Flash Max"
+    },
     {
       "id": "glm-5.2",
       "name": "GLM 5.2"
@@ -878,8 +1182,8 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
       "name": "gemini-3.1-pro-preview"
     },
     {
-      "id": "gemini-3.5-flash-high",
-      "name": "gemini-3.5-flash-high"
+      "id": "gemini-3.6-flash",
+      "name": "gemini-3.6-flash"
     },
     {
       "id": "significant-otter",
@@ -1044,28 +1348,24 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
       "name": "Free Models Router"
     },
     {
-      "id": "qwen/qwen3.6-plus",
-      "name": "Qwen3.6 Plus"
+      "id": "openai/gpt-5.6-sol",
+      "name": "GPT-5.6 Sol"
     },
     {
-      "id": "qwen/qwen3.5-397b-a17b",
-      "name": "Qwen3.5 397B A17B"
+      "id": "openai/gpt-5.6-terra",
+      "name": "GPT-5.6 Terra"
     },
     {
-      "id": "openai/gpt-5.5",
-      "name": "GPT-5.5"
+      "id": "openai/gpt-5.6-luna",
+      "name": "GPT-5.6 Luna"
     },
     {
-      "id": "openai/gpt-5.4-mini",
-      "name": "GPT-5.4 Mini"
+      "id": "anthropic/claude-opus-5",
+      "name": "Claude Opus 5"
     },
     {
-      "id": "anthropic/claude-opus-4.7",
-      "name": "Claude Opus 4.7"
-    },
-    {
-      "id": "anthropic/claude-sonnet-4.6",
-      "name": "Claude Sonnet 4.6"
+      "id": "anthropic/claude-sonnet-5",
+      "name": "Claude Sonnet 5"
     },
     {
       "id": "anthropic/claude-haiku-4.5",
@@ -1076,88 +1376,108 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
       "name": "Gemini 3.1 Pro"
     },
     {
-      "id": "google/gemini-3-flash-preview",
-      "name": "Gemini 3 Flash"
+      "id": "google/gemini-3.7-flash",
+      "name": "Gemini 3.7 Flash"
     },
     {
-      "id": "google/gemini-3.1-flash-lite",
-      "name": "Gemini 3.1 Flash Lite"
+      "id": "google/gemini-3.5-flash-lite",
+      "name": "Gemini 3.5 Flash Lite"
     },
     {
-      "id": "deepseek/deepseek-v4-pro",
+      "id": "qwen/qwen3.8-max",
+      "name": "Qwen3.8 Max"
+    },
+    {
+      "id": "qwen/qwen3.7-plus",
+      "name": "Qwen3.7 Plus"
+    },
+    {
+      "id": "deepseek/deepseek-v4-pro-0813",
       "name": "DeepSeek V4 Pro"
     },
     {
-      "id": "deepseek/deepseek-v4-flash",
+      "id": "deepseek/deepseek-v4-flash-0731",
       "name": "DeepSeek V4 Flash"
     },
     {
-      "id": "moonshotai/kimi-k2.6",
-      "name": "Kimi K2.6"
-    }
-  ],
-  "ghm": [
-    {
-      "id": "openai/gpt-4.1",
-      "name": "GPT-4.1 (Free)"
-    },
-    {
-      "id": "openai/gpt-4o",
-      "name": "GPT-4o (Free)"
-    },
-    {
-      "id": "openai/gpt-4o-mini",
-      "name": "GPT-4o Mini (Free)"
-    },
-    {
-      "id": "openai/o1",
-      "name": "o1 (Free)"
-    },
-    {
-      "id": "openai/o3",
-      "name": "o3 (Free)"
-    },
-    {
-      "id": "openai/o4-mini",
-      "name": "o4-mini (Free)"
-    },
-    {
-      "id": "deepseek/DeepSeek-R1",
-      "name": "DeepSeek R1 (Free)"
-    },
-    {
-      "id": "meta/Llama-4-Maverick-17B-128E-Instruct",
-      "name": "Llama 4 Maverick (Free)"
-    },
-    {
-      "id": "xai/grok-3",
-      "name": "Grok 3 (Free)"
-    },
-    {
-      "id": "mistral-ai/Mistral-Medium-3",
-      "name": "Mistral Medium 3 (Free)"
-    },
-    {
-      "id": "cohere/Cohere-command-a",
-      "name": "Cohere Command A (Free)"
-    },
-    {
-      "id": "microsoft/Phi-4",
-      "name": "Phi-4 (Free)"
-    },
-    {
-      "id": "openai/text-embedding-3-large",
-      "name": "Text Embedding 3 Large (Free)"
-    },
-    {
-      "id": "openai/text-embedding-3-small",
-      "name": "Text Embedding 3 Small (Free)"
+      "id": "moonshotai/kimi-k3",
+      "name": "Kimi K3"
     }
   ],
   "gh": [
     {
+      "id": "gpt-6-astra",
+      "name": "GPT-6 Astra"
+    },
+    {
+      "id": "gpt-5.6-sol",
+      "name": "GPT-5.6 Sol"
+    },
+    {
+      "id": "gpt-5.6-terra",
+      "name": "GPT-5.6 Terra"
+    },
+    {
+      "id": "gpt-5.6-luna",
+      "name": "GPT-5.6 Luna"
+    },
+    {
+      "id": "claude-fable-5.1",
+      "name": "Claude Fable 5.1"
+    },
+    {
+      "id": "claude-opus-5",
+      "name": "Claude Opus 5"
+    },
+    {
+      "id": "claude-sonnet-5",
+      "name": "Claude Sonnet 5"
+    },
+    {
+      "id": "claude-sonnet-5-5",
+      "name": "Claude Sonnet 5.5"
+    },
+    {
+      "id": "claude-opus-4.8-fast",
+      "name": "Claude Opus 4.8 (fast mode)"
+    },
+    {
+      "id": "claude-opus-4.8",
+      "name": "Claude Opus 4.8"
+    },
+    {
+      "id": "claude-haiku-4.5",
+      "name": "Claude Haiku 4.5"
+    },
+    {
+      "id": "gemini-3.8-flash",
+      "name": "Gemini 3.8 Flash"
+    },
+    {
+      "id": "mai-code-1.1-flash",
+      "name": "MAI-Code-1.1-Flash"
+    },
+    {
+      "id": "kimi-k3",
+      "name": "Kimi K3"
+    },
+    {
+      "id": "grok-4.6",
+      "name": "Grok 4.6"
+    },
+    {
+      "id": "auto",
+      "name": "Auto"
+    }
+  ],
+  "ghe-copilot": [
+    {
       "id": "claude-fable-5",
       "name": "Claude Fable 5"
+    },
+    {
+      "id": "claude-opus-5",
+      "name": "Claude Opus 5"
     },
     {
       "id": "claude-opus-4.8-fast",
@@ -1184,6 +1504,10 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
       "name": "Claude Sonnet 5"
     },
     {
+      "id": "claude-sonnet-5-5",
+      "name": "Claude Sonnet 5.5"
+    },
+    {
       "id": "claude-sonnet-4.5",
       "name": "Claude Sonnet 4.5"
     },
@@ -1196,8 +1520,40 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
       "name": "Gemini 3.1 Pro"
     },
     {
-      "id": "gemini-3.5-flash",
-      "name": "Gemini 3.5 Flash"
+      "id": "gemini-3.7-flash",
+      "name": "Gemini 3.7 Flash"
+    },
+    {
+      "id": "gpt-6.1-terra",
+      "name": "GPT-6.1 Terra"
+    },
+    {
+      "id": "gpt-6.1-sol",
+      "name": "GPT-6.1 Sol"
+    },
+    {
+      "id": "gpt-6-luna",
+      "name": "GPT-6 Luna"
+    },
+    {
+      "id": "gpt-6-sol",
+      "name": "GPT-6 Sol"
+    },
+    {
+      "id": "gpt-6-astra",
+      "name": "GPT-6 Astra"
+    },
+    {
+      "id": "gpt-5.6-sol",
+      "name": "GPT-5.6 Sol"
+    },
+    {
+      "id": "gpt-5.6-terra",
+      "name": "GPT-5.6 Terra"
+    },
+    {
+      "id": "gpt-5.6-luna",
+      "name": "GPT-5.6 Luna"
     },
     {
       "id": "gpt-5.5",
@@ -1266,8 +1622,20 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
   ],
   "cc": [
     {
+      "id": "claude-fable-5-1",
+      "name": "Claude Fable 5.1"
+    },
+    {
       "id": "claude-fable-5",
       "name": "Claude Fable 5"
+    },
+    {
+      "id": "claude-opus-5",
+      "name": "Claude Opus 5"
+    },
+    {
+      "id": "claude-opus-5-5",
+      "name": "Claude Opus 5.5"
     },
     {
       "id": "claude-opus-4-8",
@@ -1290,33 +1658,159 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
       "name": "Claude Sonnet 5"
     },
     {
+      "id": "claude-sonnet-5-5",
+      "name": "Claude Sonnet 5.5"
+    },
+    {
       "id": "claude-sonnet-4-6",
-      "name": "Claude 4.6 Sonnet"
+      "name": "Claude Sonnet 4.6"
     },
     {
       "id": "claude-sonnet-4-5-20250929",
-      "name": "Claude 4.5 Sonnet"
+      "name": "Claude Sonnet 4.5"
     },
     {
       "id": "claude-haiku-4-5-20251001",
-      "name": "Claude 4.5 Haiku"
+      "name": "Claude Haiku 4.5"
+    },
+    {
+      "id": "claude-haiku-5-5",
+      "name": "Claude Haiku 5.5"
     }
   ],
   "cw": [
     {
+      "id": "claude-fable-5-1",
+      "name": "Claude Fable 5.1 (web)"
+    },
+    {
+      "id": "claude-fable-5",
+      "name": "Claude Fable 5 (web)"
+    },
+    {
+      "id": "claude-opus-5",
+      "name": "Claude Opus 5 (web)"
+    },
+    {
+      "id": "claude-opus-4-8",
+      "name": "Claude Opus 4.8 (web)"
+    },
+    {
+      "id": "claude-opus-4-7",
+      "name": "Claude Opus 4.7 (web)"
+    },
+    {
+      "id": "claude-opus-4-6",
+      "name": "Claude Opus 4.6 (web)"
+    },
+    {
       "id": "claude-sonnet-5",
-      "name": "Claude 5 Sonnet (web)"
+      "name": "Claude Sonnet 5 (web)"
+    },
+    {
+      "id": "claude-sonnet-5-5",
+      "name": "Claude Sonnet 5.5 (web)"
     },
     {
       "id": "claude-sonnet-4-6",
-      "name": "Claude 4.6 Sonnet (web)"
+      "name": "Claude Sonnet 4.6 (web)"
     },
     {
-      "id": "claude-haiku-4-5",
-      "name": "Claude 4.5 Haiku (web)"
+      "id": "claude-haiku-4-5-20251001",
+      "name": "Claude Haiku 4.5 (web)"
+    }
+  ],
+  "cfp": [
+    {
+      "id": "zai-org/glm-5.2",
+      "name": "GLM 5.2 (Z.ai)"
+    },
+    {
+      "id": "moonshotai/kimi-k2.7-code",
+      "name": "Kimi K2.7 Code (Moonshot)"
+    },
+    {
+      "id": "moonshotai/kimi-k2.6",
+      "name": "Kimi K2.6 (Moonshot)"
+    },
+    {
+      "id": "deepseek-ai/deepseek-v4-pro-0813",
+      "name": "DeepSeek V4 Pro (DeepSeek)"
+    },
+    {
+      "id": "deepseek-ai/deepseek-v4-flash-0731",
+      "name": "DeepSeek V4 Flash (DeepSeek)"
+    },
+    {
+      "id": "zai-org/glm-4.7-flash",
+      "name": "GLM 4.7 Flash (Z.ai)"
+    },
+    {
+      "id": "openai/gpt-oss-120b",
+      "name": "GPT-OSS 120B (OpenAI)"
+    },
+    {
+      "id": "openai/gpt-oss-20b",
+      "name": "GPT-OSS 20B (OpenAI)"
+    },
+    {
+      "id": "meta-llama/llama-3.3-70b-instruct-fp8-fast",
+      "name": "Llama 3.3 70B Instruct (Meta)"
+    },
+    {
+      "id": "meta/llama-3.1-8b-instruct-fp8",
+      "name": "Llama 3.1 8B Instruct (Meta)"
+    },
+    {
+      "id": "meta/llama-4-scout-17b-16e-instruct",
+      "name": "Llama 4 Scout 17B (Meta)"
+    },
+    {
+      "id": "nvidia/nemotron-3-120b-a12b",
+      "name": "Nemotron 3 120B (NVIDIA)"
+    },
+    {
+      "id": "qwen/qwen2.5-coder-32b-instruct",
+      "name": "Qwen2.5 Coder 32B (Qwen)"
+    },
+    {
+      "id": "qwen/qwen3-30b-a3b-fp8",
+      "name": "Qwen3 30B A3B (Qwen)"
+    },
+    {
+      "id": "qwen/qwq-32b",
+      "name": "QwQ 32B (Qwen)"
+    },
+    {
+      "id": "deepseek-ai/deepseek-r1-distill-qwen-32b",
+      "name": "DeepSeek R1 Distill Qwen 32B"
+    },
+    {
+      "id": "google/gemma-4-26b-a4b-it",
+      "name": "Gemma 4 26B A4B (Google)"
+    },
+    {
+      "id": "mistralai/mistral-small-3.1-24b-instruct",
+      "name": "Mistral Small 3.1 24B"
+    },
+    {
+      "id": "ibm-granite/granite-4.0-h-micro",
+      "name": "Granite 4.0 H Micro (IBM)"
+    },
+    {
+      "id": "aisingapore/gemma-sea-lion-v4-27b-it",
+      "name": "Gemma SEA-LION V4 27B (AI Singapore)"
     }
   ],
   "bedrock": [
+    {
+      "id": "anthropic.claude-fable-5-1",
+      "name": "Claude Fable 5.1 (Bedrock)"
+    },
+    {
+      "id": "anthropic.claude-opus-5-5",
+      "name": "Claude Opus 5.5 (Bedrock)"
+    },
     {
       "id": "anthropic.claude-sonnet-4-6",
       "name": "Claude Sonnet 4.6 (Bedrock)"
@@ -1336,6 +1830,10 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
     {
       "id": "anthropic.claude-haiku-4-5",
       "name": "Claude Haiku 4.5 (Bedrock)"
+    },
+    {
+      "id": "anthropic.claude-haiku-5-5",
+      "name": "Claude Haiku 5.5 (Bedrock)"
     },
     {
       "id": "openai.gpt-oss-120b-1:0",
@@ -1422,71 +1920,61 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
   ],
   "if": [
     {
-      "id": "qoder-rome-30ba3b",
-      "name": "Qoder ROME"
+      "id": "qwen3.8-max-preview",
+      "name": "Qwen3.8-Max-Preview"
+    },
+    {
+      "id": "qwen3.7-max",
+      "name": "Qwen3.7-Max"
+    },
+    {
+      "id": "qwen3.7-plus",
+      "name": "Qwen3.7-Plus"
+    },
+    {
+      "id": "kimi-k3",
+      "name": "Kimi-K3"
+    },
+    {
+      "id": "kimi-k2.7-code",
+      "name": "Kimi-K2.7-Code"
     },
     {
       "id": "glm-5.2",
       "name": "GLM-5.2"
     },
     {
+      "id": "deepseek-v4-pro",
+      "name": "DeepSeek-V4-Pro"
+    },
+    {
+      "id": "deepseek-v4-flash",
+      "name": "DeepSeek-V4-Flash"
+    },
+    {
       "id": "minimax-m3",
-      "name": "MiniMax M3"
-    },
-    {
-      "id": "qwen3-coder-plus",
-      "name": "Qwen3 Coder Plus"
-    },
-    {
-      "id": "qwen3-max",
-      "name": "Qwen3 Max"
-    },
-    {
-      "id": "qwen3-vl-plus",
-      "name": "Qwen3 Vision Plus"
-    },
-    {
-      "id": "kimi-k2-0905",
-      "name": "Kimi K2 0905"
-    },
-    {
-      "id": "qwen3-max-preview",
-      "name": "Qwen3 Max Preview"
-    },
-    {
-      "id": "kimi-k2",
-      "name": "Kimi K2"
-    },
-    {
-      "id": "deepseek-v3.2",
-      "name": "DeepSeek-V3.2-Exp"
-    },
-    {
-      "id": "deepseek-r1",
-      "name": "DeepSeek R1"
-    },
-    {
-      "id": "deepseek-v3",
-      "name": "DeepSeek V3"
-    },
-    {
-      "id": "qwen3-32b",
-      "name": "Qwen3 32B"
-    },
-    {
-      "id": "qwen3-235b-a22b-thinking-2507",
-      "name": "Qwen3 235B A22B Thinking 2507"
-    },
-    {
-      "id": "qwen3-235b-a22b-instruct",
-      "name": "Qwen3 235B A22B Instruct"
-    },
-    {
-      "id": "qwen3-235b",
-      "name": "Qwen3 235B"
+      "name": "MiniMax-M3"
     }
   ],
   "mimo": [
+    {
+      "id": "mimo-v2.5-pro",
+      "name": "MiMo-V2.5-Pro"
+    },
+    {
+      "id": "mimo-v2.5",
+      "name": "MiMo-V2.5"
+    }
+  ],
+  "mimotp": [
+    {
+      "id": "mimo-v2.6-pro",
+      "name": "MiMo-V2.6-Pro"
+    },
+    {
+      "id": "mimo-v2.6-flash",
+      "name": "MiMo-V2.6-Flash"
+    },
     {
       "id": "mimo-v2.5-pro",
       "name": "MiMo-V2.5-Pro"
@@ -1557,11 +2045,15 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
   "ds": [
     {
       "id": "deepseek-v4-pro",
-      "name": "DeepSeek V4 Pro"
+      "name": "DeepSeek V4 Pro (0813)"
     },
     {
       "id": "deepseek-v4-flash",
-      "name": "DeepSeek V4 Flash"
+      "name": "DeepSeek V4 Flash (0731)"
+    },
+    {
+      "id": "deepseek-flash",
+      "name": "DeepSeek V4.1 Flash"
     }
   ],
   "ds-web": [
@@ -1630,56 +2122,60 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
   ],
   "kmca": [
     {
-      "id": "kimi-k2.6",
-      "name": "Kimi K2.6"
+      "id": "k3.1-pro",
+      "name": "Kimi K3.1 Pro"
     },
     {
-      "id": "kimi-k2.6-thinking",
-      "name": "Kimi K2.6 Thinking"
+      "id": "k3.1-pro-highspeed",
+      "name": "Kimi K3.1 Pro Highspeed"
     },
     {
-      "id": "kimi-k2.7-code",
-      "name": "Kimi K2.7 Code"
+      "id": "k3",
+      "name": "Kimi K3"
     },
     {
-      "id": "kimi-k2.7-code-highspeed",
-      "name": "Kimi K2.7 Code (High Speed)"
+      "id": "kimi-for-coding",
+      "name": "Kimi K2.8 Preview"
     },
     {
-      "id": "moonshotai/kimi-k2.7-code",
-      "name": "Kimi K2.7 Code"
+      "id": "kimi-for-coding-highspeed",
+      "name": "Kimi K2.8 Preview (High Speed)"
     }
   ],
   "kmc": [
     {
-      "id": "kimi-k2.6",
-      "name": "Kimi K2.6"
+      "id": "k3.1-pro",
+      "name": "Kimi K3.1 Pro"
     },
     {
-      "id": "kimi-k2.6-thinking",
-      "name": "Kimi K2.6 Thinking"
+      "id": "k3.1-pro-highspeed",
+      "name": "Kimi K3.1 Pro Highspeed"
     },
     {
-      "id": "kimi-k2.7-code",
-      "name": "Kimi K2.7 Code"
+      "id": "k3",
+      "name": "Kimi K3"
     },
     {
-      "id": "kimi-k2.7-code-highspeed",
-      "name": "Kimi K2.7 Code (High Speed)"
+      "id": "kimi-for-coding",
+      "name": "Kimi K2.8 Preview"
     },
     {
-      "id": "moonshotai/kimi-k2.7-code",
-      "name": "Kimi K2.7 Code"
+      "id": "kimi-for-coding-highspeed",
+      "name": "Kimi K2.8 Preview (High Speed)"
     }
   ],
   "kimi": [
     {
-      "id": "kimi-k2.6",
-      "name": "Kimi K2.6"
+      "id": "kimi-k3.1-pro",
+      "name": "Kimi K3.1 Pro"
     },
     {
-      "id": "kimi-k2.5",
-      "name": "Kimi K2.5"
+      "id": "kimi-k3.1-pro-highspeed",
+      "name": "Kimi K3.1 Pro Highspeed"
+    },
+    {
+      "id": "kimi-k3",
+      "name": "Kimi K3"
     },
     {
       "id": "kimi-k2.7-code",
@@ -1688,26 +2184,30 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
     {
       "id": "kimi-k2.7-code-highspeed",
       "name": "Kimi K2.7 Code (High Speed)"
+    },
+    {
+      "id": "kimi-k2.6",
+      "name": "Kimi K2.6"
     }
   ],
   "kimi-web": [
     {
-      "id": "k2d6",
-      "name": "K2.6 Instant"
+      "id": "k3",
+      "name": "K3"
     },
     {
-      "id": "k2d6-thinking",
-      "name": "K2.6 Thinking"
+      "id": "k2d6",
+      "name": "K2.6"
     }
   ],
   "groq": [
     {
-      "id": "meta-llama/llama-4-scout-17b-16e-instruct",
-      "name": "Llama 4 Scout"
+      "id": "groq/compound",
+      "name": "Groq Compound"
     },
     {
-      "id": "llama-3.3-70b-versatile",
-      "name": "Llama 3.3 70B"
+      "id": "allam-2-7b",
+      "name": "ALLaM 2 7B"
     },
     {
       "id": "openai/gpt-oss-120b",
@@ -1718,12 +2218,12 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
       "name": "GPT-OSS 20B"
     },
     {
-      "id": "qwen/qwen3-32b",
-      "name": "Qwen3 32B"
-    },
-    {
       "id": "qwen/qwen3.6-27b",
       "name": "Qwen3.6 27B"
+    },
+    {
+      "id": "qwen/qwen3.8-27b",
+      "name": "Qwen3.8 27B"
     },
     {
       "id": "openai/gpt-oss-safeguard-20b",
@@ -1742,6 +2242,42 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
     {
       "id": "Qwen/Qwen2.5-72B-Instruct",
       "name": "Qwen/Qwen2.5-72B-Instruct"
+    }
+  ],
+  "hetzner": [
+    {
+      "id": "Qwen/Qwen3.6-35B-A3B-FP8",
+      "name": "Qwen/Qwen3.6-35B-A3B-FP8"
+    }
+  ],
+  "grokified": [
+    {
+      "id": "grok-4.6",
+      "name": "grok-4.6"
+    },
+    {
+      "id": "grok-4.3",
+      "name": "grok-4.3"
+    },
+    {
+      "id": "grok-build-0.1",
+      "name": "grok-build-0.1"
+    }
+  ],
+  "replicate": [
+    {
+      "id": "meta/meta-llama-3-70b-instruct",
+      "name": "Llama 3 70B Instruct"
+    },
+    {
+      "id": "mistralai/mistral-7b-instruct-v0.2",
+      "name": "Mistral 7B Instruct v0.2"
+    }
+  ],
+  "cerebrium": [
+    {
+      "id": "meta-llama/Meta-Llama-3.1-8B-Instruct",
+      "name": "meta-llama/Meta-Llama-3.1-8B-Instruct"
     }
   ],
   "llm7": [
@@ -1785,43 +2321,47 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
   "cp": [
     {
       "id": "cline-pass/glm-5.2",
-      "name": "GLM-5.2 (ClinePass)"
-    },
-    {
-      "id": "cline-pass/kimi-k2.7-code",
-      "name": "Kimi K2.7 Code (ClinePass)"
-    },
-    {
-      "id": "cline-pass/kimi-k2.6",
-      "name": "Kimi K2.6 (ClinePass)"
-    },
-    {
-      "id": "cline-pass/deepseek-v4-pro",
-      "name": "DeepSeek V4 Pro (ClinePass)"
-    },
-    {
-      "id": "cline-pass/deepseek-v4-flash",
-      "name": "DeepSeek V4 Flash (ClinePass)"
-    },
-    {
-      "id": "cline-pass/mimo-v2.5",
-      "name": "MiMo-V2.5 (ClinePass)"
-    },
-    {
-      "id": "cline-pass/mimo-v2.5-pro",
-      "name": "MiMo-V2.5-Pro (ClinePass)"
+      "name": "GLM-5.2"
     },
     {
       "id": "cline-pass/minimax-m3",
-      "name": "MiniMax M3 (ClinePass)"
+      "name": "MiniMax-M3"
+    },
+    {
+      "id": "cline-pass/deepseek-v4-pro",
+      "name": "DeepSeek V4 Pro"
+    },
+    {
+      "id": "cline-pass/deepseek-v4-flash",
+      "name": "DeepSeek V4 Flash"
+    },
+    {
+      "id": "cline-pass/kimi-k3",
+      "name": "Kimi K3"
+    },
+    {
+      "id": "cline-pass/kimi-k2.7-code",
+      "name": "Kimi K2.7 Code"
+    },
+    {
+      "id": "cline-pass/mimo-v2.5-pro",
+      "name": "MiMo-V2.5-Pro"
+    },
+    {
+      "id": "cline-pass/mimo-v2.5",
+      "name": "MiMo-V2.5"
+    },
+    {
+      "id": "cline-pass/qwen3.8-max",
+      "name": "Qwen3.8 Max"
     },
     {
       "id": "cline-pass/qwen3.7-max",
-      "name": "Qwen3.7 Max (ClinePass)"
+      "name": "Qwen3.7 Max"
     },
     {
       "id": "cline-pass/qwen3.7-plus",
-      "name": "Qwen3.7 Plus (ClinePass)"
+      "name": "Qwen3.7 Plus"
     }
   ],
   "sparkdesk": [
@@ -1838,8 +2378,8 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
       "name": "Spark Pro 128K"
     },
     {
-      "id": "general",
-      "name": "General"
+      "id": "lite",
+      "name": "Spark Lite"
     }
   ],
   "nlpc": [
@@ -1864,74 +2404,48 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
       "name": "Llama 3 8B"
     }
   ],
+  "1min": [
+    {
+      "id": "gpt-4o-mini",
+      "name": "GPT-4o Mini"
+    }
+  ],
   "nvidia": [
     {
-      "id": "z-ai/glm-5.2",
-      "name": "GLM 5.2"
+      "id": "meta/muse-glimmer-30b",
+      "name": "Muse Glimmer 30B"
     },
     {
-      "id": "minimaxai/minimax-m2.7",
-      "name": "MiniMax M2.7"
+      "id": "poolside/laguna-xs-2.1",
+      "name": "Laguna XS 2.1"
     },
     {
       "id": "google/gemma-4-31b-it",
       "name": "Gemma 4 31B"
     },
     {
-      "id": "mistralai/mistral-small-4-119b-2603",
-      "name": "Mistral Small 4 2603"
+      "id": "google/diffusiongemma-26b-a4b-it",
+      "name": "DiffusionGemma 26B A4B IT"
     },
     {
-      "id": "mistralai/mistral-large-3-675b-instruct-2512",
-      "name": "Mistral Large 3 675B"
+      "id": "nvidia/nemotron-3-ultra-550b-a55b",
+      "name": "Nemotron 3 Ultra 550B A55B"
     },
     {
-      "id": "mistralai/devstral-2-123b-instruct-2512",
-      "name": "Devstral 2 123B"
+      "id": "nvidia/nemotron-3.5-super-vl-120b-a12b",
+      "name": "Nemotron 3.5 Super VL 120B A12B"
     },
     {
-      "id": "qwen/qwen3.5-397b-a17b",
-      "name": "Qwen3.5-397B-A17B"
+      "id": "nvidia/nemotron-3.5-lightning-30b-a3b",
+      "name": "Nemotron 3.5 Lightning 30B A3B"
     },
     {
-      "id": "qwen/qwen3.5-122b-a10b",
-      "name": "Qwen3.5-122B-A10B"
-    },
-    {
-      "id": "stepfun-ai/step-3.5-flash",
-      "name": "Step 3.5 Flash"
-    },
-    {
-      "id": "stepfun-ai/step-3.7-flash",
-      "name": "Step 3.7 Flash"
-    },
-    {
-      "id": "deepseek-ai/deepseek-v4-pro",
-      "name": "DeepSeek V4 Pro"
-    },
-    {
-      "id": "deepseek-ai/deepseek-v4-flash",
-      "name": "DeepSeek V4 Flash"
-    },
-    {
-      "id": "moonshotai/kimi-k2.6",
-      "name": "Kimi K2.6"
-    },
-    {
-      "id": "openai/gpt-oss-120b",
-      "name": "GPT OSS 120B"
+      "id": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+      "name": "Nemotron 3 Nano Omni 30B A3B Reasoning"
     },
     {
       "id": "openai/gpt-oss-20b",
       "name": "GPT OSS 20B"
-    },
-    {
-      "id": "nvidia/nemotron-3-super-120b-a12b",
-      "name": "Nemotron 3 Super 120B A12B"
-    },
-    {
-      "id": "nvidia/nemotron-3-ultra-550b-a55b",
-      "name": "Nemotron 3 Ultra 550B"
     }
   ],
   "af": [
@@ -1970,6 +2484,10 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
       "name": "Mistral Large 3"
     },
     {
+      "id": "mistral-large-4",
+      "name": "Mistral Large 4"
+    },
+    {
       "id": "mistral-medium-3-5",
       "name": "Mistral Medium 3.5"
     },
@@ -1978,12 +2496,28 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
       "name": "Mistral Small 4"
     },
     {
-      "id": "devstral-latest",
-      "name": "Devstral 2"
-    },
-    {
       "id": "codestral-latest",
       "name": "Codestral"
+    },
+    {
+      "id": "ministral-14b-latest",
+      "name": "Ministral 3 14B"
+    },
+    {
+      "id": "ministral-8b-latest",
+      "name": "Ministral 3 8B"
+    },
+    {
+      "id": "ministral-3b-latest",
+      "name": "Ministral 3 3B"
+    },
+    {
+      "id": "voxtral-small-latest",
+      "name": "Voxtral Small"
+    },
+    {
+      "id": "labs-leanstral-1-5-1",
+      "name": "Leanstral 1.5.1 (Labs)"
     }
   ],
   "together": [
@@ -2045,7 +2579,115 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
   "cu": [
     {
       "id": "auto",
-      "name": "Auto (Server Picks)"
+      "name": "Auto (current, default)"
+    },
+    {
+      "id": "auto-cost",
+      "name": "Auto (cost)"
+    },
+    {
+      "id": "auto-balance",
+      "name": "Auto (balance)"
+    },
+    {
+      "id": "auto-intelligence",
+      "name": "Auto (intelligence)"
+    },
+    {
+      "id": "cursor-grok-4.7-low-256k",
+      "name": "Cursor Grok 4.7 256K Low"
+    },
+    {
+      "id": "cursor-grok-4.7-low-fast-256k",
+      "name": "Cursor Grok 4.7 256K Low Fast"
+    },
+    {
+      "id": "cursor-grok-4.7-medium-256k",
+      "name": "Cursor Grok 4.7 256K Medium"
+    },
+    {
+      "id": "cursor-grok-4.7-medium-fast-256k",
+      "name": "Cursor Grok 4.7 256K Medium Fast"
+    },
+    {
+      "id": "cursor-grok-4.7-high-256k",
+      "name": "Cursor Grok 4.7 256K High"
+    },
+    {
+      "id": "cursor-grok-4.7-high-fast-256k",
+      "name": "Cursor Grok 4.7 256K High Fast"
+    },
+    {
+      "id": "cursor-grok-4.7-xhigh-256k",
+      "name": "Cursor Grok 4.7 256K Xhigh"
+    },
+    {
+      "id": "cursor-grok-4.7-xhigh-fast-256k",
+      "name": "Cursor Grok 4.7 256K Xhigh Fast"
+    },
+    {
+      "id": "cursor-grok-4.7-low-500k",
+      "name": "Cursor Grok 4.7 500K Low"
+    },
+    {
+      "id": "cursor-grok-4.7-low-fast-500k",
+      "name": "Cursor Grok 4.7 500K Low Fast"
+    },
+    {
+      "id": "cursor-grok-4.7-medium-500k",
+      "name": "Cursor Grok 4.7 500K Medium"
+    },
+    {
+      "id": "cursor-grok-4.7-medium-fast-500k",
+      "name": "Cursor Grok 4.7 500K Medium Fast"
+    },
+    {
+      "id": "cursor-grok-4.7-high-500k",
+      "name": "Cursor Grok 4.7 500K High"
+    },
+    {
+      "id": "cursor-grok-4.7-high-fast-500k",
+      "name": "Cursor Grok 4.7 500K High Fast"
+    },
+    {
+      "id": "cursor-grok-4.7-xhigh-500k",
+      "name": "Cursor Grok 4.7 500K Xhigh"
+    },
+    {
+      "id": "cursor-grok-4.7-xhigh-fast-500k",
+      "name": "Cursor Grok 4.7 500K Xhigh Fast"
+    },
+    {
+      "id": "cursor-grok-4.6-xhigh-fast",
+      "name": "Cursor Grok 4.6 Xhigh Fast"
+    },
+    {
+      "id": "cursor-grok-4.6-xhigh",
+      "name": "Cursor Grok 4.6 Xhigh"
+    },
+    {
+      "id": "cursor-grok-4.6-high-fast",
+      "name": "Cursor Grok 4.6 High Fast"
+    },
+    {
+      "id": "cursor-grok-4.6-high",
+      "name": "Cursor Grok 4.6 High"
+    },
+    {
+      "id": "cursor-grok-4.6-medium-fast",
+      "name": "Cursor Grok 4.6 Medium Fast"
+    },
+    {
+      "id": "cursor-grok-4.6-medium",
+      "name": "Cursor Grok 4.6 Medium"
+    },
+    {
+      "id": "cursor-grok-4.6-low-fast",
+      "name": "Cursor Grok 4.6 Low Fast"
+    },
+    {
+      "id": "cursor-grok-4.6-low",
+      "name": "Cursor Grok 4.6 Low"
     },
     {
       "id": "composer-2.5-fast",
@@ -2056,484 +2698,1678 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
       "name": "Composer 2.5"
     },
     {
-      "id": "composer-2-fast",
-      "name": "Composer 2 Fast"
+      "id": "claude-fable-5-1-thinking-max-1m",
+      "name": "Claude Fable 5.1 1M Max Thinking"
     },
     {
-      "id": "composer-2",
-      "name": "Composer 2"
+      "id": "claude-fable-5-1-thinking-max",
+      "name": "Claude Fable 5.1 Max Thinking"
     },
     {
-      "id": "gpt-5.5-none",
-      "name": "GPT 5.5 None"
+      "id": "claude-fable-5-1-thinking-xhigh-1m",
+      "name": "Claude Fable 5.1 1M Xhigh Thinking"
     },
     {
-      "id": "gpt-5.5-none-fast",
-      "name": "GPT 5.5 None Fast"
+      "id": "claude-fable-5-1-thinking-xhigh",
+      "name": "Claude Fable 5.1 Xhigh Thinking"
     },
     {
-      "id": "gpt-5.5-low",
-      "name": "GPT 5.5 Low"
+      "id": "claude-fable-5-1-thinking-high-1m",
+      "name": "Claude Fable 5.1 1M High Thinking"
     },
     {
-      "id": "gpt-5.5-low-fast",
-      "name": "GPT 5.5 Low Fast"
+      "id": "claude-fable-5-1-thinking-high",
+      "name": "Claude Fable 5.1 High Thinking"
     },
     {
-      "id": "gpt-5.5-medium",
-      "name": "GPT 5.5 Medium"
+      "id": "claude-fable-5-1-thinking-medium-1m",
+      "name": "Claude Fable 5.1 1M Medium Thinking"
     },
     {
-      "id": "gpt-5.5-medium-fast",
-      "name": "GPT 5.5 Medium Fast"
+      "id": "claude-fable-5-1-thinking-medium",
+      "name": "Claude Fable 5.1 Medium Thinking"
     },
     {
-      "id": "gpt-5.5-high",
-      "name": "GPT 5.5 High"
+      "id": "claude-fable-5-1-thinking-low-1m",
+      "name": "Claude Fable 5.1 1M Low Thinking"
     },
     {
-      "id": "gpt-5.5-high-fast",
-      "name": "GPT 5.5 High Fast"
+      "id": "claude-fable-5-1-thinking-low",
+      "name": "Claude Fable 5.1 Low Thinking"
     },
     {
-      "id": "gpt-5.5-extra-high",
-      "name": "GPT 5.5 Extra High"
+      "id": "claude-opus-5-5-max-fast",
+      "name": "Claude Opus 5.5 Max Fast"
     },
     {
-      "id": "gpt-5.5-extra-high-fast",
-      "name": "GPT 5.5 Extra High Fast"
+      "id": "claude-opus-5-5-max",
+      "name": "Claude Opus 5.5 Max"
     },
     {
-      "id": "gpt-5.4-low",
-      "name": "GPT 5.4 Low"
+      "id": "claude-opus-5-5-xhigh-fast",
+      "name": "Claude Opus 5.5 Xhigh Fast"
     },
     {
-      "id": "gpt-5.4-low-fast",
-      "name": "GPT 5.4 Low Fast"
+      "id": "claude-opus-5-5-xhigh",
+      "name": "Claude Opus 5.5 Xhigh"
     },
     {
-      "id": "gpt-5.4-medium",
-      "name": "GPT 5.4 Medium"
+      "id": "claude-opus-5-5-high-fast",
+      "name": "Claude Opus 5.5 High Fast"
     },
     {
-      "id": "gpt-5.4-medium-fast",
-      "name": "GPT 5.4 Medium Fast"
+      "id": "claude-opus-5-5-high",
+      "name": "Claude Opus 5.5 High"
     },
     {
-      "id": "gpt-5.4-high",
-      "name": "GPT 5.4 High"
+      "id": "claude-opus-5-5-medium-fast",
+      "name": "Claude Opus 5.5 Medium Fast"
     },
     {
-      "id": "gpt-5.4-high-fast",
-      "name": "GPT 5.4 High Fast"
+      "id": "claude-opus-5-5-medium",
+      "name": "Claude Opus 5.5 Medium"
     },
     {
-      "id": "gpt-5.4-xhigh",
-      "name": "GPT 5.4 XHigh"
+      "id": "claude-opus-5-5-low-fast",
+      "name": "Claude Opus 5.5 Low Fast"
     },
     {
-      "id": "gpt-5.4-xhigh-fast",
-      "name": "GPT 5.4 XHigh Fast"
+      "id": "claude-opus-5-5-low",
+      "name": "Claude Opus 5.5 Low"
     },
     {
-      "id": "gpt-5.4-mini-none",
-      "name": "GPT 5.4 Mini None"
+      "id": "claude-opus-5-thinking-max-fast-1m",
+      "name": "Claude Opus 5 1M Max Thinking Fast"
     },
     {
-      "id": "gpt-5.4-mini-low",
-      "name": "GPT 5.4 Mini Low"
+      "id": "claude-opus-5-thinking-max-fast",
+      "name": "Claude Opus 5 Max Thinking Fast"
     },
     {
-      "id": "gpt-5.4-mini-medium",
-      "name": "GPT 5.4 Mini Medium"
+      "id": "claude-opus-5-thinking-max-1m",
+      "name": "Claude Opus 5 1M Max Thinking"
     },
     {
-      "id": "gpt-5.4-mini-high",
-      "name": "GPT 5.4 Mini High"
+      "id": "claude-opus-5-thinking-max",
+      "name": "Claude Opus 5 Max Thinking"
     },
     {
-      "id": "gpt-5.4-mini-xhigh",
-      "name": "GPT 5.4 Mini XHigh"
+      "id": "claude-opus-5-thinking-xhigh-fast-1m",
+      "name": "Claude Opus 5 1M Xhigh Thinking Fast"
     },
     {
-      "id": "gpt-5.4-nano-none",
-      "name": "GPT 5.4 Nano None"
+      "id": "claude-opus-5-thinking-xhigh-fast",
+      "name": "Claude Opus 5 Xhigh Thinking Fast"
     },
     {
-      "id": "gpt-5.4-nano-low",
-      "name": "GPT 5.4 Nano Low"
+      "id": "claude-opus-5-thinking-xhigh-1m",
+      "name": "Claude Opus 5 1M Xhigh Thinking"
     },
     {
-      "id": "gpt-5.4-nano-medium",
-      "name": "GPT 5.4 Nano Medium"
+      "id": "claude-opus-5-thinking-xhigh",
+      "name": "Claude Opus 5 Xhigh Thinking"
     },
     {
-      "id": "gpt-5.4-nano-high",
-      "name": "GPT 5.4 Nano High"
+      "id": "claude-opus-5-thinking-high-fast-1m",
+      "name": "Claude Opus 5 1M High Thinking Fast"
     },
     {
-      "id": "gpt-5.4-nano-xhigh",
-      "name": "GPT 5.4 Nano XHigh"
+      "id": "claude-opus-5-thinking-high-fast",
+      "name": "Claude Opus 5 High Thinking Fast"
     },
     {
-      "id": "gpt-5.3-codex-spark-preview-low",
-      "name": "GPT 5.3 Codex Spark Preview Low"
+      "id": "claude-opus-5-thinking-high-1m",
+      "name": "Claude Opus 5 1M High Thinking"
     },
     {
-      "id": "gpt-5.3-codex-spark-preview",
-      "name": "GPT 5.3 Codex Spark Preview"
+      "id": "claude-opus-5-thinking-high",
+      "name": "Claude Opus 5 High Thinking"
     },
     {
-      "id": "gpt-5.3-codex-spark-preview-high",
-      "name": "GPT 5.3 Codex Spark Preview High"
+      "id": "claude-opus-5-high-fast-1m",
+      "name": "Claude Opus 5 1M High Fast"
     },
     {
-      "id": "gpt-5.3-codex-spark-preview-xhigh",
-      "name": "GPT 5.3 Codex Spark Preview XHigh"
+      "id": "claude-opus-5-high-fast",
+      "name": "Claude Opus 5 High Fast"
     },
     {
-      "id": "gpt-5.3-codex-low",
-      "name": "GPT 5.3 Codex Low"
+      "id": "claude-opus-5-high-1m",
+      "name": "Claude Opus 5 1M High"
     },
     {
-      "id": "gpt-5.3-codex-low-fast",
-      "name": "GPT 5.3 Codex Low Fast"
+      "id": "claude-opus-5-high",
+      "name": "Claude Opus 5 High"
     },
     {
-      "id": "gpt-5.3-codex",
-      "name": "GPT 5.3 Codex"
+      "id": "claude-opus-5-thinking-medium-fast-1m",
+      "name": "Claude Opus 5 1M Medium Thinking Fast"
     },
     {
-      "id": "gpt-5.3-codex-fast",
-      "name": "GPT 5.3 Codex Fast"
+      "id": "claude-opus-5-thinking-medium-fast",
+      "name": "Claude Opus 5 Medium Thinking Fast"
     },
     {
-      "id": "gpt-5.3-codex-high",
-      "name": "GPT 5.3 Codex High"
+      "id": "claude-opus-5-thinking-medium-1m",
+      "name": "Claude Opus 5 1M Medium Thinking"
     },
     {
-      "id": "gpt-5.3-codex-high-fast",
-      "name": "GPT 5.3 Codex High Fast"
+      "id": "claude-opus-5-thinking-medium",
+      "name": "Claude Opus 5 Medium Thinking"
     },
     {
-      "id": "gpt-5.3-codex-xhigh",
-      "name": "GPT 5.3 Codex XHigh"
+      "id": "claude-opus-5-medium-fast-1m",
+      "name": "Claude Opus 5 1M Medium Fast"
     },
     {
-      "id": "gpt-5.3-codex-xhigh-fast",
-      "name": "GPT 5.3 Codex XHigh Fast"
+      "id": "claude-opus-5-medium-fast",
+      "name": "Claude Opus 5 Medium Fast"
     },
     {
-      "id": "gpt-5.2-low",
-      "name": "GPT 5.2 Low"
+      "id": "claude-opus-5-medium-1m",
+      "name": "Claude Opus 5 1M Medium"
     },
     {
-      "id": "gpt-5.2-low-fast",
-      "name": "GPT 5.2 Low Fast"
+      "id": "claude-opus-5-medium",
+      "name": "Claude Opus 5 Medium"
     },
     {
-      "id": "gpt-5.2",
-      "name": "GPT 5.2"
+      "id": "claude-opus-5-thinking-low-fast-1m",
+      "name": "Claude Opus 5 1M Low Thinking Fast"
     },
     {
-      "id": "gpt-5.2-fast",
-      "name": "GPT 5.2 Fast"
+      "id": "claude-opus-5-thinking-low-fast",
+      "name": "Claude Opus 5 Low Thinking Fast"
     },
     {
-      "id": "gpt-5.2-high",
-      "name": "GPT 5.2 High"
+      "id": "claude-opus-5-thinking-low-1m",
+      "name": "Claude Opus 5 1M Low Thinking"
     },
     {
-      "id": "gpt-5.2-high-fast",
-      "name": "GPT 5.2 High Fast"
+      "id": "claude-opus-5-thinking-low",
+      "name": "Claude Opus 5 Low Thinking"
     },
     {
-      "id": "gpt-5.2-xhigh",
-      "name": "GPT 5.2 XHigh"
+      "id": "claude-opus-5-low-fast-1m",
+      "name": "Claude Opus 5 1M Low Fast"
     },
     {
-      "id": "gpt-5.2-xhigh-fast",
-      "name": "GPT 5.2 XHigh Fast"
+      "id": "claude-opus-5-low-fast",
+      "name": "Claude Opus 5 Low Fast"
     },
     {
-      "id": "claude-opus-4-8-low",
-      "name": "Claude Opus 4.8 Low"
+      "id": "claude-opus-5-low-1m",
+      "name": "Claude Opus 5 1M Low"
     },
     {
-      "id": "claude-opus-4-8-low-fast",
-      "name": "Claude Opus 4.8 Low Fast"
+      "id": "claude-opus-5-low",
+      "name": "Claude Opus 5 Low"
     },
     {
-      "id": "claude-opus-4-8-medium",
-      "name": "Claude Opus 4.8 Medium"
+      "id": "claude-opus-4-8-thinking-max-fast-1m",
+      "name": "Claude Opus 4.8 1M Max Thinking Fast"
     },
     {
-      "id": "claude-opus-4-8-medium-fast",
-      "name": "Claude Opus 4.8 Medium Fast"
+      "id": "claude-opus-4-8-thinking-max-fast",
+      "name": "Claude Opus 4.8 Max Thinking Fast"
     },
     {
-      "id": "claude-opus-4-8-high",
-      "name": "Claude Opus 4.8 High"
+      "id": "claude-opus-4-8-thinking-max-1m",
+      "name": "Claude Opus 4.8 1M Max Thinking"
     },
     {
-      "id": "claude-opus-4-8-high-fast",
-      "name": "Claude Opus 4.8 High Fast"
+      "id": "claude-opus-4-8-thinking-max",
+      "name": "Claude Opus 4.8 Max Thinking"
     },
     {
-      "id": "claude-opus-4-8-xhigh",
-      "name": "Claude Opus 4.8 XHigh"
-    },
-    {
-      "id": "claude-opus-4-8-xhigh-fast",
-      "name": "Claude Opus 4.8 XHigh Fast"
-    },
-    {
-      "id": "claude-opus-4-8-max",
-      "name": "Claude Opus 4.8 Max"
+      "id": "claude-opus-4-8-max-fast-1m",
+      "name": "Claude Opus 4.8 1M Max Fast"
     },
     {
       "id": "claude-opus-4-8-max-fast",
       "name": "Claude Opus 4.8 Max Fast"
     },
     {
-      "id": "claude-opus-4-8-thinking-low",
-      "name": "Claude Opus 4.8 Thinking Low"
+      "id": "claude-opus-4-8-max-1m",
+      "name": "Claude Opus 4.8 1M Max"
     },
     {
-      "id": "claude-opus-4-8-thinking-low-fast",
-      "name": "Claude Opus 4.8 Thinking Low Fast"
+      "id": "claude-opus-4-8-max",
+      "name": "Claude Opus 4.8 Max"
     },
     {
-      "id": "claude-opus-4-8-thinking-medium",
-      "name": "Claude Opus 4.8 Thinking Medium"
-    },
-    {
-      "id": "claude-opus-4-8-thinking-medium-fast",
-      "name": "Claude Opus 4.8 Thinking Medium Fast"
-    },
-    {
-      "id": "claude-opus-4-8-thinking-high",
-      "name": "Claude Opus 4.8 Thinking High"
-    },
-    {
-      "id": "claude-opus-4-8-thinking-high-fast",
-      "name": "Claude Opus 4.8 Thinking High Fast"
-    },
-    {
-      "id": "claude-opus-4-8-thinking-xhigh",
-      "name": "Claude Opus 4.8 Thinking XHigh"
+      "id": "claude-opus-4-8-thinking-xhigh-fast-1m",
+      "name": "Claude Opus 4.8 1M Xhigh Thinking Fast"
     },
     {
       "id": "claude-opus-4-8-thinking-xhigh-fast",
-      "name": "Claude Opus 4.8 Thinking XHigh Fast"
+      "name": "Claude Opus 4.8 Xhigh Thinking Fast"
     },
     {
-      "id": "claude-opus-4-8-thinking-max",
-      "name": "Claude Opus 4.8 Thinking Max"
+      "id": "claude-opus-4-8-thinking-xhigh-1m",
+      "name": "Claude Opus 4.8 1M Xhigh Thinking"
     },
     {
-      "id": "claude-opus-4-8-thinking-max-fast",
-      "name": "Claude Opus 4.8 Thinking Max Fast"
+      "id": "claude-opus-4-8-thinking-xhigh",
+      "name": "Claude Opus 4.8 Xhigh Thinking"
     },
     {
-      "id": "claude-fable-5-low",
-      "name": "Claude Fable 5 Low"
+      "id": "claude-opus-4-8-xhigh-fast-1m",
+      "name": "Claude Opus 4.8 1M Xhigh Fast"
     },
     {
-      "id": "claude-fable-5-medium",
-      "name": "Claude Fable 5 Medium"
+      "id": "claude-opus-4-8-xhigh-fast",
+      "name": "Claude Opus 4.8 Xhigh Fast"
     },
     {
-      "id": "claude-fable-5-high",
-      "name": "Claude Fable 5 High"
+      "id": "claude-opus-4-8-xhigh-1m",
+      "name": "Claude Opus 4.8 1M Xhigh"
     },
     {
-      "id": "claude-fable-5-xhigh",
-      "name": "Claude Fable 5 XHigh"
+      "id": "claude-opus-4-8-xhigh",
+      "name": "Claude Opus 4.8 Xhigh"
     },
     {
-      "id": "claude-fable-5-max",
-      "name": "Claude Fable 5 Max"
+      "id": "claude-opus-4-8-thinking-high-fast-1m",
+      "name": "Claude Opus 4.8 1M High Thinking Fast"
     },
     {
-      "id": "claude-fable-5-thinking-low",
-      "name": "Claude Fable 5 Thinking Low"
+      "id": "claude-opus-4-8-thinking-high-fast",
+      "name": "Claude Opus 4.8 High Thinking Fast"
     },
     {
-      "id": "claude-fable-5-thinking-medium",
-      "name": "Claude Fable 5 Thinking Medium"
+      "id": "claude-opus-4-8-thinking-high-1m",
+      "name": "Claude Opus 4.8 1M High Thinking"
     },
     {
-      "id": "claude-fable-5-thinking-high",
-      "name": "Claude Fable 5 Thinking High"
+      "id": "claude-opus-4-8-thinking-high",
+      "name": "Claude Opus 4.8 High Thinking"
     },
     {
-      "id": "claude-fable-5-thinking-xhigh",
-      "name": "Claude Fable 5 Thinking XHigh"
+      "id": "claude-opus-4-8-high-fast-1m",
+      "name": "Claude Opus 4.8 1M High Fast"
     },
     {
-      "id": "claude-fable-5-thinking-max",
-      "name": "Claude Fable 5 Thinking Max"
+      "id": "claude-opus-4-8-high-fast",
+      "name": "Claude Opus 4.8 High Fast"
     },
     {
-      "id": "claude-sonnet-5-low",
-      "name": "Claude Sonnet 5 Low"
+      "id": "claude-opus-4-8-high-1m",
+      "name": "Claude Opus 4.8 1M High"
     },
     {
-      "id": "claude-sonnet-5-medium",
-      "name": "Claude Sonnet 5 Medium"
+      "id": "claude-opus-4-8-high",
+      "name": "Claude Opus 4.8 High"
     },
     {
-      "id": "claude-sonnet-5-high",
-      "name": "Claude Sonnet 5 High"
+      "id": "claude-opus-4-8-thinking-medium-fast-1m",
+      "name": "Claude Opus 4.8 1M Medium Thinking Fast"
     },
     {
-      "id": "claude-sonnet-5-xhigh",
-      "name": "Claude Sonnet 5 XHigh"
+      "id": "claude-opus-4-8-thinking-medium-fast",
+      "name": "Claude Opus 4.8 Medium Thinking Fast"
+    },
+    {
+      "id": "claude-opus-4-8-thinking-medium-1m",
+      "name": "Claude Opus 4.8 1M Medium Thinking"
+    },
+    {
+      "id": "claude-opus-4-8-thinking-medium",
+      "name": "Claude Opus 4.8 Medium Thinking"
+    },
+    {
+      "id": "claude-opus-4-8-medium-fast-1m",
+      "name": "Claude Opus 4.8 1M Medium Fast"
+    },
+    {
+      "id": "claude-opus-4-8-medium-fast",
+      "name": "Claude Opus 4.8 Medium Fast"
+    },
+    {
+      "id": "claude-opus-4-8-medium-1m",
+      "name": "Claude Opus 4.8 1M Medium"
+    },
+    {
+      "id": "claude-opus-4-8-medium",
+      "name": "Claude Opus 4.8 Medium"
+    },
+    {
+      "id": "claude-opus-4-8-thinking-low-fast-1m",
+      "name": "Claude Opus 4.8 1M Low Thinking Fast"
+    },
+    {
+      "id": "claude-opus-4-8-thinking-low-fast",
+      "name": "Claude Opus 4.8 Low Thinking Fast"
+    },
+    {
+      "id": "claude-opus-4-8-thinking-low-1m",
+      "name": "Claude Opus 4.8 1M Low Thinking"
+    },
+    {
+      "id": "claude-opus-4-8-thinking-low",
+      "name": "Claude Opus 4.8 Low Thinking"
+    },
+    {
+      "id": "claude-opus-4-8-low-fast-1m",
+      "name": "Claude Opus 4.8 1M Low Fast"
+    },
+    {
+      "id": "claude-opus-4-8-low-fast",
+      "name": "Claude Opus 4.8 Low Fast"
+    },
+    {
+      "id": "claude-opus-4-8-low-1m",
+      "name": "Claude Opus 4.8 1M Low"
+    },
+    {
+      "id": "claude-opus-4-8-low",
+      "name": "Claude Opus 4.8 Low"
+    },
+    {
+      "id": "claude-sonnet-5-thinking-max-1m",
+      "name": "Claude Sonnet 5 1M Max Thinking"
+    },
+    {
+      "id": "claude-sonnet-5-thinking-max",
+      "name": "Claude Sonnet 5 Max Thinking"
+    },
+    {
+      "id": "claude-sonnet-5-max-1m",
+      "name": "Claude Sonnet 5 1M Max"
     },
     {
       "id": "claude-sonnet-5-max",
       "name": "Claude Sonnet 5 Max"
     },
     {
-      "id": "claude-sonnet-5-thinking-low",
-      "name": "Claude Sonnet 5 Thinking Low"
-    },
-    {
-      "id": "claude-sonnet-5-thinking-medium",
-      "name": "Claude Sonnet 5 Thinking Medium"
-    },
-    {
-      "id": "claude-sonnet-5-thinking-high",
-      "name": "Claude Sonnet 5 Thinking High"
+      "id": "claude-sonnet-5-thinking-xhigh-1m",
+      "name": "Claude Sonnet 5 1M Xhigh Thinking"
     },
     {
       "id": "claude-sonnet-5-thinking-xhigh",
-      "name": "Claude Sonnet 5 Thinking XHigh"
+      "name": "Claude Sonnet 5 Xhigh Thinking"
     },
     {
-      "id": "claude-sonnet-5-thinking-max",
-      "name": "Claude Sonnet 5 Thinking Max"
+      "id": "claude-sonnet-5-xhigh-1m",
+      "name": "Claude Sonnet 5 1M Xhigh"
     },
     {
-      "id": "claude-opus-4-7-low",
-      "name": "Claude Opus 4.7 Low"
+      "id": "claude-sonnet-5-xhigh",
+      "name": "Claude Sonnet 5 Xhigh"
     },
     {
-      "id": "claude-opus-4-7-medium",
-      "name": "Claude Opus 4.7 Medium"
+      "id": "claude-sonnet-5-thinking-high-1m",
+      "name": "Claude Sonnet 5 1M High Thinking"
     },
     {
-      "id": "claude-opus-4-7-high",
-      "name": "Claude Opus 4.7 High"
+      "id": "claude-sonnet-5-thinking-high",
+      "name": "Claude Sonnet 5 High Thinking"
     },
     {
-      "id": "claude-opus-4-7-xhigh",
-      "name": "Claude Opus 4.7 XHigh"
+      "id": "claude-sonnet-5-high-1m",
+      "name": "Claude Sonnet 5 1M High"
     },
     {
-      "id": "claude-opus-4-7-max",
-      "name": "Claude Opus 4.7 Max"
+      "id": "claude-sonnet-5-high",
+      "name": "Claude Sonnet 5 High"
     },
     {
-      "id": "claude-opus-4-7-thinking-low",
-      "name": "Claude Opus 4.7 Thinking Low"
+      "id": "claude-sonnet-5-thinking-medium-1m",
+      "name": "Claude Sonnet 5 1M Medium Thinking"
     },
     {
-      "id": "claude-opus-4-7-thinking-medium",
-      "name": "Claude Opus 4.7 Thinking Medium"
+      "id": "claude-sonnet-5-thinking-medium",
+      "name": "Claude Sonnet 5 Medium Thinking"
     },
     {
-      "id": "claude-opus-4-7-thinking-high",
-      "name": "Claude Opus 4.7 Thinking High"
+      "id": "claude-sonnet-5-medium-1m",
+      "name": "Claude Sonnet 5 1M Medium"
     },
     {
-      "id": "claude-opus-4-7-thinking-xhigh",
-      "name": "Claude Opus 4.7 Thinking XHigh"
+      "id": "claude-sonnet-5-medium",
+      "name": "Claude Sonnet 5 Medium"
     },
     {
-      "id": "claude-opus-4-7-thinking-max",
-      "name": "Claude Opus 4.7 Thinking Max"
+      "id": "claude-sonnet-5-thinking-low-1m",
+      "name": "Claude Sonnet 5 1M Low Thinking"
     },
     {
-      "id": "claude-4.6-opus-high",
-      "name": "Claude 4.6 Opus High"
+      "id": "claude-sonnet-5-thinking-low",
+      "name": "Claude Sonnet 5 Low Thinking"
     },
     {
-      "id": "claude-4.6-opus-high-thinking",
-      "name": "Claude 4.6 Opus High Thinking"
+      "id": "claude-sonnet-5-low-1m",
+      "name": "Claude Sonnet 5 1M Low"
     },
     {
-      "id": "claude-4.6-opus-high-thinking-fast",
-      "name": "Claude 4.6 Opus High Thinking Fast"
+      "id": "claude-sonnet-5-low",
+      "name": "Claude Sonnet 5 Low"
     },
     {
-      "id": "claude-4.6-opus-max",
-      "name": "Claude 4.6 Opus Max"
+      "id": "claude-4.6-sonnet-max-thinking-1m",
+      "name": "Claude Sonnet 4.6 1M Max Thinking"
     },
     {
-      "id": "claude-4.6-opus-max-thinking",
-      "name": "Claude 4.6 Opus Max Thinking"
+      "id": "claude-4.6-sonnet-max-thinking",
+      "name": "Claude Sonnet 4.6 Max Thinking"
     },
     {
-      "id": "claude-4.6-opus-max-thinking-fast",
-      "name": "Claude 4.6 Opus Max Thinking Fast"
+      "id": "claude-4.6-sonnet-max-1m",
+      "name": "Claude Sonnet 4.6 1M Max"
     },
     {
-      "id": "claude-4.6-sonnet-medium",
-      "name": "Claude 4.6 Sonnet Medium"
+      "id": "claude-4.6-sonnet-max",
+      "name": "Claude Sonnet 4.6 Max"
+    },
+    {
+      "id": "claude-4.6-sonnet-high-thinking-1m",
+      "name": "Claude Sonnet 4.6 1M High Thinking"
+    },
+    {
+      "id": "claude-4.6-sonnet-high-thinking",
+      "name": "Claude Sonnet 4.6 High Thinking"
+    },
+    {
+      "id": "claude-4.6-sonnet-high-1m",
+      "name": "Claude Sonnet 4.6 1M High"
+    },
+    {
+      "id": "claude-4.6-sonnet-high",
+      "name": "Claude Sonnet 4.6 High"
+    },
+    {
+      "id": "claude-4.6-sonnet-medium-thinking-1m",
+      "name": "Claude Sonnet 4.6 1M Medium Thinking"
     },
     {
       "id": "claude-4.6-sonnet-medium-thinking",
-      "name": "Claude 4.6 Sonnet Medium Thinking"
+      "name": "Claude Sonnet 4.6 Medium Thinking"
     },
     {
-      "id": "claude-4.5-sonnet",
-      "name": "Claude 4.5 Sonnet"
+      "id": "claude-4.6-sonnet-medium-1m",
+      "name": "Claude Sonnet 4.6 1M Medium"
     },
     {
-      "id": "claude-4.5-sonnet-thinking",
-      "name": "Claude 4.5 Sonnet Thinking"
+      "id": "claude-4.6-sonnet-medium",
+      "name": "Claude Sonnet 4.6 Medium"
+    },
+    {
+      "id": "claude-4.6-sonnet-low-thinking-1m",
+      "name": "Claude Sonnet 4.6 1M Low Thinking"
+    },
+    {
+      "id": "claude-4.6-sonnet-low-thinking",
+      "name": "Claude Sonnet 4.6 Low Thinking"
+    },
+    {
+      "id": "claude-4.6-sonnet-low-1m",
+      "name": "Claude Sonnet 4.6 1M Low"
+    },
+    {
+      "id": "claude-4.6-sonnet-low",
+      "name": "Claude Sonnet 4.6 Low"
+    },
+    {
+      "id": "claude-4.5-haiku-thinking",
+      "name": "Claude Haiku 4.5 Thinking"
+    },
+    {
+      "id": "claude-4.5-haiku",
+      "name": "Claude Haiku 4.5"
+    },
+    {
+      "id": "gpt-5.6-sol-max-fast",
+      "name": "GPT-5.6 Sol Max Fast"
+    },
+    {
+      "id": "gpt-5.6-sol-max-1m",
+      "name": "GPT-5.6 Sol 1M Max"
+    },
+    {
+      "id": "gpt-5.6-sol-max",
+      "name": "GPT-5.6 Sol Max"
+    },
+    {
+      "id": "gpt-5.6-sol-xhigh-fast",
+      "name": "GPT-5.6 Sol Xhigh Fast"
+    },
+    {
+      "id": "gpt-5.6-sol-xhigh-1m",
+      "name": "GPT-5.6 Sol 1M Xhigh"
+    },
+    {
+      "id": "gpt-5.6-sol-xhigh",
+      "name": "GPT-5.6 Sol Xhigh"
+    },
+    {
+      "id": "gpt-5.6-sol-high-fast",
+      "name": "GPT-5.6 Sol High Fast"
+    },
+    {
+      "id": "gpt-5.6-sol-high-1m",
+      "name": "GPT-5.6 Sol 1M High"
+    },
+    {
+      "id": "gpt-5.6-sol-high",
+      "name": "GPT-5.6 Sol High"
+    },
+    {
+      "id": "gpt-5.6-sol-medium-fast",
+      "name": "GPT-5.6 Sol Medium Fast"
+    },
+    {
+      "id": "gpt-5.6-sol-medium-1m",
+      "name": "GPT-5.6 Sol 1M Medium"
+    },
+    {
+      "id": "gpt-5.6-sol-medium",
+      "name": "GPT-5.6 Sol Medium"
+    },
+    {
+      "id": "gpt-5.6-sol-low-fast",
+      "name": "GPT-5.6 Sol Low Fast"
+    },
+    {
+      "id": "gpt-5.6-sol-low-1m",
+      "name": "GPT-5.6 Sol 1M Low"
+    },
+    {
+      "id": "gpt-5.6-sol-low",
+      "name": "GPT-5.6 Sol Low"
+    },
+    {
+      "id": "gpt-5.6-sol-none-fast",
+      "name": "GPT-5.6 Sol None Fast"
+    },
+    {
+      "id": "gpt-5.6-sol-none-1m",
+      "name": "GPT-5.6 Sol 1M None"
+    },
+    {
+      "id": "gpt-5.6-sol-none",
+      "name": "GPT-5.6 Sol None"
+    },
+    {
+      "id": "gpt-5.6-terra-max-fast",
+      "name": "GPT-5.6 Terra Max Fast"
+    },
+    {
+      "id": "gpt-5.6-terra-max-1m",
+      "name": "GPT-5.6 Terra 1M Max"
+    },
+    {
+      "id": "gpt-5.6-terra-max",
+      "name": "GPT-5.6 Terra Max"
+    },
+    {
+      "id": "gpt-5.6-terra-xhigh-fast",
+      "name": "GPT-5.6 Terra Xhigh Fast"
+    },
+    {
+      "id": "gpt-5.6-terra-xhigh-1m",
+      "name": "GPT-5.6 Terra 1M Xhigh"
+    },
+    {
+      "id": "gpt-5.6-terra-xhigh",
+      "name": "GPT-5.6 Terra Xhigh"
+    },
+    {
+      "id": "gpt-5.6-terra-high-fast",
+      "name": "GPT-5.6 Terra High Fast"
+    },
+    {
+      "id": "gpt-5.6-terra-high-1m",
+      "name": "GPT-5.6 Terra 1M High"
+    },
+    {
+      "id": "gpt-5.6-terra-high",
+      "name": "GPT-5.6 Terra High"
+    },
+    {
+      "id": "gpt-5.6-terra-medium-fast",
+      "name": "GPT-5.6 Terra Medium Fast"
+    },
+    {
+      "id": "gpt-5.6-terra-medium-1m",
+      "name": "GPT-5.6 Terra 1M Medium"
+    },
+    {
+      "id": "gpt-5.6-terra-medium",
+      "name": "GPT-5.6 Terra Medium"
+    },
+    {
+      "id": "gpt-5.6-terra-low-fast",
+      "name": "GPT-5.6 Terra Low Fast"
+    },
+    {
+      "id": "gpt-5.6-terra-low-1m",
+      "name": "GPT-5.6 Terra 1M Low"
+    },
+    {
+      "id": "gpt-5.6-terra-low",
+      "name": "GPT-5.6 Terra Low"
+    },
+    {
+      "id": "gpt-5.6-terra-none-fast",
+      "name": "GPT-5.6 Terra None Fast"
+    },
+    {
+      "id": "gpt-5.6-terra-none-1m",
+      "name": "GPT-5.6 Terra 1M None"
+    },
+    {
+      "id": "gpt-5.6-terra-none",
+      "name": "GPT-5.6 Terra None"
+    },
+    {
+      "id": "gpt-5.6-luna-max-fast",
+      "name": "GPT-5.6 Luna Max Fast"
+    },
+    {
+      "id": "gpt-5.6-luna-max-1m",
+      "name": "GPT-5.6 Luna 1M Max"
+    },
+    {
+      "id": "gpt-5.6-luna-max",
+      "name": "GPT-5.6 Luna Max"
+    },
+    {
+      "id": "gpt-5.6-luna-xhigh-fast",
+      "name": "GPT-5.6 Luna Xhigh Fast"
+    },
+    {
+      "id": "gpt-5.6-luna-xhigh-1m",
+      "name": "GPT-5.6 Luna 1M Xhigh"
+    },
+    {
+      "id": "gpt-5.6-luna-xhigh",
+      "name": "GPT-5.6 Luna Xhigh"
+    },
+    {
+      "id": "gpt-5.6-luna-high-fast",
+      "name": "GPT-5.6 Luna High Fast"
+    },
+    {
+      "id": "gpt-5.6-luna-high-1m",
+      "name": "GPT-5.6 Luna 1M High"
+    },
+    {
+      "id": "gpt-5.6-luna-high",
+      "name": "GPT-5.6 Luna High"
+    },
+    {
+      "id": "gpt-5.6-luna-medium-fast",
+      "name": "GPT-5.6 Luna Medium Fast"
+    },
+    {
+      "id": "gpt-5.6-luna-medium-1m",
+      "name": "GPT-5.6 Luna 1M Medium"
+    },
+    {
+      "id": "gpt-5.6-luna-medium",
+      "name": "GPT-5.6 Luna Medium"
+    },
+    {
+      "id": "gpt-5.6-luna-low-fast",
+      "name": "GPT-5.6 Luna Low Fast"
+    },
+    {
+      "id": "gpt-5.6-luna-low-1m",
+      "name": "GPT-5.6 Luna 1M Low"
+    },
+    {
+      "id": "gpt-5.6-luna-low",
+      "name": "GPT-5.6 Luna Low"
+    },
+    {
+      "id": "gpt-5.6-luna-none-fast",
+      "name": "GPT-5.6 Luna None Fast"
+    },
+    {
+      "id": "gpt-5.6-luna-none-1m",
+      "name": "GPT-5.6 Luna 1M None"
+    },
+    {
+      "id": "gpt-5.6-luna-none",
+      "name": "GPT-5.6 Luna None"
+    },
+    {
+      "id": "gemini-3.7-flash-high",
+      "name": "Gemini 3.7 Flash High"
+    },
+    {
+      "id": "gemini-3.7-flash-medium",
+      "name": "Gemini 3.7 Flash Medium"
+    },
+    {
+      "id": "gemini-3.7-flash-low",
+      "name": "Gemini 3.7 Flash Low"
     },
     {
       "id": "gemini-3.1-pro",
       "name": "Gemini 3.1 Pro"
     },
     {
-      "id": "gemini-3-flash",
-      "name": "Gemini 3 Flash"
+      "id": "kimi-k3-max",
+      "name": "Kimi K3 Max"
     },
     {
-      "id": "grok-4.3",
-      "name": "Grok 4.3"
+      "id": "kimi-k3-high",
+      "name": "Kimi K3 High"
     },
     {
-      "id": "grok-4.5-medium",
-      "name": "Grok 4.5 Medium"
+      "id": "kimi-k3-low",
+      "name": "Kimi K3 Low"
     },
     {
-      "id": "grok-4.5-fast-medium",
-      "name": "Grok 4.5 Fast Medium"
+      "id": "kimi-k2.7-code",
+      "name": "Kimi K2.7 Code"
     },
     {
-      "id": "grok-4.5-high",
-      "name": "Grok 4.5 High"
+      "id": "glm-5.2-max",
+      "name": "GLM 5.2 Max"
     },
     {
-      "id": "grok-4.5-fast-high",
-      "name": "Grok 4.5 Fast High"
+      "id": "glm-5.2-high",
+      "name": "GLM 5.2 High"
+    }
+  ],
+  "cua": [
+    {
+      "id": "auto",
+      "name": "Auto (current, default)"
     },
     {
-      "id": "grok-4.5-xhigh",
-      "name": "Grok 4.5 XHigh"
+      "id": "auto-cost",
+      "name": "Auto (cost)"
     },
     {
-      "id": "grok-4.5-fast-xhigh",
-      "name": "Grok 4.5 Fast XHigh"
+      "id": "auto-balance",
+      "name": "Auto (balance)"
     },
     {
-      "id": "kimi-k2.5",
-      "name": "Kimi K2.5"
+      "id": "auto-intelligence",
+      "name": "Auto (intelligence)"
+    },
+    {
+      "id": "cursor-grok-4.7-low-256k",
+      "name": "Cursor Grok 4.7 256K Low"
+    },
+    {
+      "id": "cursor-grok-4.7-low-fast-256k",
+      "name": "Cursor Grok 4.7 256K Low Fast"
+    },
+    {
+      "id": "cursor-grok-4.7-medium-256k",
+      "name": "Cursor Grok 4.7 256K Medium"
+    },
+    {
+      "id": "cursor-grok-4.7-medium-fast-256k",
+      "name": "Cursor Grok 4.7 256K Medium Fast"
+    },
+    {
+      "id": "cursor-grok-4.7-high-256k",
+      "name": "Cursor Grok 4.7 256K High"
+    },
+    {
+      "id": "cursor-grok-4.7-high-fast-256k",
+      "name": "Cursor Grok 4.7 256K High Fast"
+    },
+    {
+      "id": "cursor-grok-4.7-xhigh-256k",
+      "name": "Cursor Grok 4.7 256K Xhigh"
+    },
+    {
+      "id": "cursor-grok-4.7-xhigh-fast-256k",
+      "name": "Cursor Grok 4.7 256K Xhigh Fast"
+    },
+    {
+      "id": "cursor-grok-4.7-low-500k",
+      "name": "Cursor Grok 4.7 500K Low"
+    },
+    {
+      "id": "cursor-grok-4.7-low-fast-500k",
+      "name": "Cursor Grok 4.7 500K Low Fast"
+    },
+    {
+      "id": "cursor-grok-4.7-medium-500k",
+      "name": "Cursor Grok 4.7 500K Medium"
+    },
+    {
+      "id": "cursor-grok-4.7-medium-fast-500k",
+      "name": "Cursor Grok 4.7 500K Medium Fast"
+    },
+    {
+      "id": "cursor-grok-4.7-high-500k",
+      "name": "Cursor Grok 4.7 500K High"
+    },
+    {
+      "id": "cursor-grok-4.7-high-fast-500k",
+      "name": "Cursor Grok 4.7 500K High Fast"
+    },
+    {
+      "id": "cursor-grok-4.7-xhigh-500k",
+      "name": "Cursor Grok 4.7 500K Xhigh"
+    },
+    {
+      "id": "cursor-grok-4.7-xhigh-fast-500k",
+      "name": "Cursor Grok 4.7 500K Xhigh Fast"
+    },
+    {
+      "id": "cursor-grok-4.6-xhigh-fast",
+      "name": "Cursor Grok 4.6 Xhigh Fast"
+    },
+    {
+      "id": "cursor-grok-4.6-xhigh",
+      "name": "Cursor Grok 4.6 Xhigh"
+    },
+    {
+      "id": "cursor-grok-4.6-high-fast",
+      "name": "Cursor Grok 4.6 High Fast"
+    },
+    {
+      "id": "cursor-grok-4.6-high",
+      "name": "Cursor Grok 4.6 High"
+    },
+    {
+      "id": "cursor-grok-4.6-medium-fast",
+      "name": "Cursor Grok 4.6 Medium Fast"
+    },
+    {
+      "id": "cursor-grok-4.6-medium",
+      "name": "Cursor Grok 4.6 Medium"
+    },
+    {
+      "id": "cursor-grok-4.6-low-fast",
+      "name": "Cursor Grok 4.6 Low Fast"
+    },
+    {
+      "id": "cursor-grok-4.6-low",
+      "name": "Cursor Grok 4.6 Low"
+    },
+    {
+      "id": "composer-2.5-fast",
+      "name": "Composer 2.5 Fast"
+    },
+    {
+      "id": "composer-2.5",
+      "name": "Composer 2.5"
+    },
+    {
+      "id": "claude-fable-5-1-thinking-max-1m",
+      "name": "Claude Fable 5.1 1M Max Thinking"
+    },
+    {
+      "id": "claude-fable-5-1-thinking-max",
+      "name": "Claude Fable 5.1 Max Thinking"
+    },
+    {
+      "id": "claude-fable-5-1-thinking-xhigh-1m",
+      "name": "Claude Fable 5.1 1M Xhigh Thinking"
+    },
+    {
+      "id": "claude-fable-5-1-thinking-xhigh",
+      "name": "Claude Fable 5.1 Xhigh Thinking"
+    },
+    {
+      "id": "claude-fable-5-1-thinking-high-1m",
+      "name": "Claude Fable 5.1 1M High Thinking"
+    },
+    {
+      "id": "claude-fable-5-1-thinking-high",
+      "name": "Claude Fable 5.1 High Thinking"
+    },
+    {
+      "id": "claude-fable-5-1-thinking-medium-1m",
+      "name": "Claude Fable 5.1 1M Medium Thinking"
+    },
+    {
+      "id": "claude-fable-5-1-thinking-medium",
+      "name": "Claude Fable 5.1 Medium Thinking"
+    },
+    {
+      "id": "claude-fable-5-1-thinking-low-1m",
+      "name": "Claude Fable 5.1 1M Low Thinking"
+    },
+    {
+      "id": "claude-fable-5-1-thinking-low",
+      "name": "Claude Fable 5.1 Low Thinking"
+    },
+    {
+      "id": "claude-opus-5-5-max-fast",
+      "name": "Claude Opus 5.5 Max Fast"
+    },
+    {
+      "id": "claude-opus-5-5-max",
+      "name": "Claude Opus 5.5 Max"
+    },
+    {
+      "id": "claude-opus-5-5-xhigh-fast",
+      "name": "Claude Opus 5.5 Xhigh Fast"
+    },
+    {
+      "id": "claude-opus-5-5-xhigh",
+      "name": "Claude Opus 5.5 Xhigh"
+    },
+    {
+      "id": "claude-opus-5-5-high-fast",
+      "name": "Claude Opus 5.5 High Fast"
+    },
+    {
+      "id": "claude-opus-5-5-high",
+      "name": "Claude Opus 5.5 High"
+    },
+    {
+      "id": "claude-opus-5-5-medium-fast",
+      "name": "Claude Opus 5.5 Medium Fast"
+    },
+    {
+      "id": "claude-opus-5-5-medium",
+      "name": "Claude Opus 5.5 Medium"
+    },
+    {
+      "id": "claude-opus-5-5-low-fast",
+      "name": "Claude Opus 5.5 Low Fast"
+    },
+    {
+      "id": "claude-opus-5-5-low",
+      "name": "Claude Opus 5.5 Low"
+    },
+    {
+      "id": "claude-opus-5-thinking-max-fast-1m",
+      "name": "Claude Opus 5 1M Max Thinking Fast"
+    },
+    {
+      "id": "claude-opus-5-thinking-max-fast",
+      "name": "Claude Opus 5 Max Thinking Fast"
+    },
+    {
+      "id": "claude-opus-5-thinking-max-1m",
+      "name": "Claude Opus 5 1M Max Thinking"
+    },
+    {
+      "id": "claude-opus-5-thinking-max",
+      "name": "Claude Opus 5 Max Thinking"
+    },
+    {
+      "id": "claude-opus-5-thinking-xhigh-fast-1m",
+      "name": "Claude Opus 5 1M Xhigh Thinking Fast"
+    },
+    {
+      "id": "claude-opus-5-thinking-xhigh-fast",
+      "name": "Claude Opus 5 Xhigh Thinking Fast"
+    },
+    {
+      "id": "claude-opus-5-thinking-xhigh-1m",
+      "name": "Claude Opus 5 1M Xhigh Thinking"
+    },
+    {
+      "id": "claude-opus-5-thinking-xhigh",
+      "name": "Claude Opus 5 Xhigh Thinking"
+    },
+    {
+      "id": "claude-opus-5-thinking-high-fast-1m",
+      "name": "Claude Opus 5 1M High Thinking Fast"
+    },
+    {
+      "id": "claude-opus-5-thinking-high-fast",
+      "name": "Claude Opus 5 High Thinking Fast"
+    },
+    {
+      "id": "claude-opus-5-thinking-high-1m",
+      "name": "Claude Opus 5 1M High Thinking"
+    },
+    {
+      "id": "claude-opus-5-thinking-high",
+      "name": "Claude Opus 5 High Thinking"
+    },
+    {
+      "id": "claude-opus-5-high-fast-1m",
+      "name": "Claude Opus 5 1M High Fast"
+    },
+    {
+      "id": "claude-opus-5-high-fast",
+      "name": "Claude Opus 5 High Fast"
+    },
+    {
+      "id": "claude-opus-5-high-1m",
+      "name": "Claude Opus 5 1M High"
+    },
+    {
+      "id": "claude-opus-5-high",
+      "name": "Claude Opus 5 High"
+    },
+    {
+      "id": "claude-opus-5-thinking-medium-fast-1m",
+      "name": "Claude Opus 5 1M Medium Thinking Fast"
+    },
+    {
+      "id": "claude-opus-5-thinking-medium-fast",
+      "name": "Claude Opus 5 Medium Thinking Fast"
+    },
+    {
+      "id": "claude-opus-5-thinking-medium-1m",
+      "name": "Claude Opus 5 1M Medium Thinking"
+    },
+    {
+      "id": "claude-opus-5-thinking-medium",
+      "name": "Claude Opus 5 Medium Thinking"
+    },
+    {
+      "id": "claude-opus-5-medium-fast-1m",
+      "name": "Claude Opus 5 1M Medium Fast"
+    },
+    {
+      "id": "claude-opus-5-medium-fast",
+      "name": "Claude Opus 5 Medium Fast"
+    },
+    {
+      "id": "claude-opus-5-medium-1m",
+      "name": "Claude Opus 5 1M Medium"
+    },
+    {
+      "id": "claude-opus-5-medium",
+      "name": "Claude Opus 5 Medium"
+    },
+    {
+      "id": "claude-opus-5-thinking-low-fast-1m",
+      "name": "Claude Opus 5 1M Low Thinking Fast"
+    },
+    {
+      "id": "claude-opus-5-thinking-low-fast",
+      "name": "Claude Opus 5 Low Thinking Fast"
+    },
+    {
+      "id": "claude-opus-5-thinking-low-1m",
+      "name": "Claude Opus 5 1M Low Thinking"
+    },
+    {
+      "id": "claude-opus-5-thinking-low",
+      "name": "Claude Opus 5 Low Thinking"
+    },
+    {
+      "id": "claude-opus-5-low-fast-1m",
+      "name": "Claude Opus 5 1M Low Fast"
+    },
+    {
+      "id": "claude-opus-5-low-fast",
+      "name": "Claude Opus 5 Low Fast"
+    },
+    {
+      "id": "claude-opus-5-low-1m",
+      "name": "Claude Opus 5 1M Low"
+    },
+    {
+      "id": "claude-opus-5-low",
+      "name": "Claude Opus 5 Low"
+    },
+    {
+      "id": "claude-opus-4-8-thinking-max-fast-1m",
+      "name": "Claude Opus 4.8 1M Max Thinking Fast"
+    },
+    {
+      "id": "claude-opus-4-8-thinking-max-fast",
+      "name": "Claude Opus 4.8 Max Thinking Fast"
+    },
+    {
+      "id": "claude-opus-4-8-thinking-max-1m",
+      "name": "Claude Opus 4.8 1M Max Thinking"
+    },
+    {
+      "id": "claude-opus-4-8-thinking-max",
+      "name": "Claude Opus 4.8 Max Thinking"
+    },
+    {
+      "id": "claude-opus-4-8-max-fast-1m",
+      "name": "Claude Opus 4.8 1M Max Fast"
+    },
+    {
+      "id": "claude-opus-4-8-max-fast",
+      "name": "Claude Opus 4.8 Max Fast"
+    },
+    {
+      "id": "claude-opus-4-8-max-1m",
+      "name": "Claude Opus 4.8 1M Max"
+    },
+    {
+      "id": "claude-opus-4-8-max",
+      "name": "Claude Opus 4.8 Max"
+    },
+    {
+      "id": "claude-opus-4-8-thinking-xhigh-fast-1m",
+      "name": "Claude Opus 4.8 1M Xhigh Thinking Fast"
+    },
+    {
+      "id": "claude-opus-4-8-thinking-xhigh-fast",
+      "name": "Claude Opus 4.8 Xhigh Thinking Fast"
+    },
+    {
+      "id": "claude-opus-4-8-thinking-xhigh-1m",
+      "name": "Claude Opus 4.8 1M Xhigh Thinking"
+    },
+    {
+      "id": "claude-opus-4-8-thinking-xhigh",
+      "name": "Claude Opus 4.8 Xhigh Thinking"
+    },
+    {
+      "id": "claude-opus-4-8-xhigh-fast-1m",
+      "name": "Claude Opus 4.8 1M Xhigh Fast"
+    },
+    {
+      "id": "claude-opus-4-8-xhigh-fast",
+      "name": "Claude Opus 4.8 Xhigh Fast"
+    },
+    {
+      "id": "claude-opus-4-8-xhigh-1m",
+      "name": "Claude Opus 4.8 1M Xhigh"
+    },
+    {
+      "id": "claude-opus-4-8-xhigh",
+      "name": "Claude Opus 4.8 Xhigh"
+    },
+    {
+      "id": "claude-opus-4-8-thinking-high-fast-1m",
+      "name": "Claude Opus 4.8 1M High Thinking Fast"
+    },
+    {
+      "id": "claude-opus-4-8-thinking-high-fast",
+      "name": "Claude Opus 4.8 High Thinking Fast"
+    },
+    {
+      "id": "claude-opus-4-8-thinking-high-1m",
+      "name": "Claude Opus 4.8 1M High Thinking"
+    },
+    {
+      "id": "claude-opus-4-8-thinking-high",
+      "name": "Claude Opus 4.8 High Thinking"
+    },
+    {
+      "id": "claude-opus-4-8-high-fast-1m",
+      "name": "Claude Opus 4.8 1M High Fast"
+    },
+    {
+      "id": "claude-opus-4-8-high-fast",
+      "name": "Claude Opus 4.8 High Fast"
+    },
+    {
+      "id": "claude-opus-4-8-high-1m",
+      "name": "Claude Opus 4.8 1M High"
+    },
+    {
+      "id": "claude-opus-4-8-high",
+      "name": "Claude Opus 4.8 High"
+    },
+    {
+      "id": "claude-opus-4-8-thinking-medium-fast-1m",
+      "name": "Claude Opus 4.8 1M Medium Thinking Fast"
+    },
+    {
+      "id": "claude-opus-4-8-thinking-medium-fast",
+      "name": "Claude Opus 4.8 Medium Thinking Fast"
+    },
+    {
+      "id": "claude-opus-4-8-thinking-medium-1m",
+      "name": "Claude Opus 4.8 1M Medium Thinking"
+    },
+    {
+      "id": "claude-opus-4-8-thinking-medium",
+      "name": "Claude Opus 4.8 Medium Thinking"
+    },
+    {
+      "id": "claude-opus-4-8-medium-fast-1m",
+      "name": "Claude Opus 4.8 1M Medium Fast"
+    },
+    {
+      "id": "claude-opus-4-8-medium-fast",
+      "name": "Claude Opus 4.8 Medium Fast"
+    },
+    {
+      "id": "claude-opus-4-8-medium-1m",
+      "name": "Claude Opus 4.8 1M Medium"
+    },
+    {
+      "id": "claude-opus-4-8-medium",
+      "name": "Claude Opus 4.8 Medium"
+    },
+    {
+      "id": "claude-opus-4-8-thinking-low-fast-1m",
+      "name": "Claude Opus 4.8 1M Low Thinking Fast"
+    },
+    {
+      "id": "claude-opus-4-8-thinking-low-fast",
+      "name": "Claude Opus 4.8 Low Thinking Fast"
+    },
+    {
+      "id": "claude-opus-4-8-thinking-low-1m",
+      "name": "Claude Opus 4.8 1M Low Thinking"
+    },
+    {
+      "id": "claude-opus-4-8-thinking-low",
+      "name": "Claude Opus 4.8 Low Thinking"
+    },
+    {
+      "id": "claude-opus-4-8-low-fast-1m",
+      "name": "Claude Opus 4.8 1M Low Fast"
+    },
+    {
+      "id": "claude-opus-4-8-low-fast",
+      "name": "Claude Opus 4.8 Low Fast"
+    },
+    {
+      "id": "claude-opus-4-8-low-1m",
+      "name": "Claude Opus 4.8 1M Low"
+    },
+    {
+      "id": "claude-opus-4-8-low",
+      "name": "Claude Opus 4.8 Low"
+    },
+    {
+      "id": "claude-sonnet-5-thinking-max-1m",
+      "name": "Claude Sonnet 5 1M Max Thinking"
+    },
+    {
+      "id": "claude-sonnet-5-thinking-max",
+      "name": "Claude Sonnet 5 Max Thinking"
+    },
+    {
+      "id": "claude-sonnet-5-max-1m",
+      "name": "Claude Sonnet 5 1M Max"
+    },
+    {
+      "id": "claude-sonnet-5-max",
+      "name": "Claude Sonnet 5 Max"
+    },
+    {
+      "id": "claude-sonnet-5-thinking-xhigh-1m",
+      "name": "Claude Sonnet 5 1M Xhigh Thinking"
+    },
+    {
+      "id": "claude-sonnet-5-thinking-xhigh",
+      "name": "Claude Sonnet 5 Xhigh Thinking"
+    },
+    {
+      "id": "claude-sonnet-5-xhigh-1m",
+      "name": "Claude Sonnet 5 1M Xhigh"
+    },
+    {
+      "id": "claude-sonnet-5-xhigh",
+      "name": "Claude Sonnet 5 Xhigh"
+    },
+    {
+      "id": "claude-sonnet-5-thinking-high-1m",
+      "name": "Claude Sonnet 5 1M High Thinking"
+    },
+    {
+      "id": "claude-sonnet-5-thinking-high",
+      "name": "Claude Sonnet 5 High Thinking"
+    },
+    {
+      "id": "claude-sonnet-5-high-1m",
+      "name": "Claude Sonnet 5 1M High"
+    },
+    {
+      "id": "claude-sonnet-5-high",
+      "name": "Claude Sonnet 5 High"
+    },
+    {
+      "id": "claude-sonnet-5-thinking-medium-1m",
+      "name": "Claude Sonnet 5 1M Medium Thinking"
+    },
+    {
+      "id": "claude-sonnet-5-thinking-medium",
+      "name": "Claude Sonnet 5 Medium Thinking"
+    },
+    {
+      "id": "claude-sonnet-5-medium-1m",
+      "name": "Claude Sonnet 5 1M Medium"
+    },
+    {
+      "id": "claude-sonnet-5-medium",
+      "name": "Claude Sonnet 5 Medium"
+    },
+    {
+      "id": "claude-sonnet-5-thinking-low-1m",
+      "name": "Claude Sonnet 5 1M Low Thinking"
+    },
+    {
+      "id": "claude-sonnet-5-thinking-low",
+      "name": "Claude Sonnet 5 Low Thinking"
+    },
+    {
+      "id": "claude-sonnet-5-low-1m",
+      "name": "Claude Sonnet 5 1M Low"
+    },
+    {
+      "id": "claude-sonnet-5-low",
+      "name": "Claude Sonnet 5 Low"
+    },
+    {
+      "id": "claude-4.6-sonnet-max-thinking-1m",
+      "name": "Claude Sonnet 4.6 1M Max Thinking"
+    },
+    {
+      "id": "claude-4.6-sonnet-max-thinking",
+      "name": "Claude Sonnet 4.6 Max Thinking"
+    },
+    {
+      "id": "claude-4.6-sonnet-max-1m",
+      "name": "Claude Sonnet 4.6 1M Max"
+    },
+    {
+      "id": "claude-4.6-sonnet-max",
+      "name": "Claude Sonnet 4.6 Max"
+    },
+    {
+      "id": "claude-4.6-sonnet-high-thinking-1m",
+      "name": "Claude Sonnet 4.6 1M High Thinking"
+    },
+    {
+      "id": "claude-4.6-sonnet-high-thinking",
+      "name": "Claude Sonnet 4.6 High Thinking"
+    },
+    {
+      "id": "claude-4.6-sonnet-high-1m",
+      "name": "Claude Sonnet 4.6 1M High"
+    },
+    {
+      "id": "claude-4.6-sonnet-high",
+      "name": "Claude Sonnet 4.6 High"
+    },
+    {
+      "id": "claude-4.6-sonnet-medium-thinking-1m",
+      "name": "Claude Sonnet 4.6 1M Medium Thinking"
+    },
+    {
+      "id": "claude-4.6-sonnet-medium-thinking",
+      "name": "Claude Sonnet 4.6 Medium Thinking"
+    },
+    {
+      "id": "claude-4.6-sonnet-medium-1m",
+      "name": "Claude Sonnet 4.6 1M Medium"
+    },
+    {
+      "id": "claude-4.6-sonnet-medium",
+      "name": "Claude Sonnet 4.6 Medium"
+    },
+    {
+      "id": "claude-4.6-sonnet-low-thinking-1m",
+      "name": "Claude Sonnet 4.6 1M Low Thinking"
+    },
+    {
+      "id": "claude-4.6-sonnet-low-thinking",
+      "name": "Claude Sonnet 4.6 Low Thinking"
+    },
+    {
+      "id": "claude-4.6-sonnet-low-1m",
+      "name": "Claude Sonnet 4.6 1M Low"
+    },
+    {
+      "id": "claude-4.6-sonnet-low",
+      "name": "Claude Sonnet 4.6 Low"
+    },
+    {
+      "id": "claude-4.5-haiku-thinking",
+      "name": "Claude Haiku 4.5 Thinking"
+    },
+    {
+      "id": "claude-4.5-haiku",
+      "name": "Claude Haiku 4.5"
+    },
+    {
+      "id": "gpt-5.6-sol-max-fast",
+      "name": "GPT-5.6 Sol Max Fast"
+    },
+    {
+      "id": "gpt-5.6-sol-max-1m",
+      "name": "GPT-5.6 Sol 1M Max"
+    },
+    {
+      "id": "gpt-5.6-sol-max",
+      "name": "GPT-5.6 Sol Max"
+    },
+    {
+      "id": "gpt-5.6-sol-xhigh-fast",
+      "name": "GPT-5.6 Sol Xhigh Fast"
+    },
+    {
+      "id": "gpt-5.6-sol-xhigh-1m",
+      "name": "GPT-5.6 Sol 1M Xhigh"
+    },
+    {
+      "id": "gpt-5.6-sol-xhigh",
+      "name": "GPT-5.6 Sol Xhigh"
+    },
+    {
+      "id": "gpt-5.6-sol-high-fast",
+      "name": "GPT-5.6 Sol High Fast"
+    },
+    {
+      "id": "gpt-5.6-sol-high-1m",
+      "name": "GPT-5.6 Sol 1M High"
+    },
+    {
+      "id": "gpt-5.6-sol-high",
+      "name": "GPT-5.6 Sol High"
+    },
+    {
+      "id": "gpt-5.6-sol-medium-fast",
+      "name": "GPT-5.6 Sol Medium Fast"
+    },
+    {
+      "id": "gpt-5.6-sol-medium-1m",
+      "name": "GPT-5.6 Sol 1M Medium"
+    },
+    {
+      "id": "gpt-5.6-sol-medium",
+      "name": "GPT-5.6 Sol Medium"
+    },
+    {
+      "id": "gpt-5.6-sol-low-fast",
+      "name": "GPT-5.6 Sol Low Fast"
+    },
+    {
+      "id": "gpt-5.6-sol-low-1m",
+      "name": "GPT-5.6 Sol 1M Low"
+    },
+    {
+      "id": "gpt-5.6-sol-low",
+      "name": "GPT-5.6 Sol Low"
+    },
+    {
+      "id": "gpt-5.6-sol-none-fast",
+      "name": "GPT-5.6 Sol None Fast"
+    },
+    {
+      "id": "gpt-5.6-sol-none-1m",
+      "name": "GPT-5.6 Sol 1M None"
+    },
+    {
+      "id": "gpt-5.6-sol-none",
+      "name": "GPT-5.6 Sol None"
+    },
+    {
+      "id": "gpt-5.6-terra-max-fast",
+      "name": "GPT-5.6 Terra Max Fast"
+    },
+    {
+      "id": "gpt-5.6-terra-max-1m",
+      "name": "GPT-5.6 Terra 1M Max"
+    },
+    {
+      "id": "gpt-5.6-terra-max",
+      "name": "GPT-5.6 Terra Max"
+    },
+    {
+      "id": "gpt-5.6-terra-xhigh-fast",
+      "name": "GPT-5.6 Terra Xhigh Fast"
+    },
+    {
+      "id": "gpt-5.6-terra-xhigh-1m",
+      "name": "GPT-5.6 Terra 1M Xhigh"
+    },
+    {
+      "id": "gpt-5.6-terra-xhigh",
+      "name": "GPT-5.6 Terra Xhigh"
+    },
+    {
+      "id": "gpt-5.6-terra-high-fast",
+      "name": "GPT-5.6 Terra High Fast"
+    },
+    {
+      "id": "gpt-5.6-terra-high-1m",
+      "name": "GPT-5.6 Terra 1M High"
+    },
+    {
+      "id": "gpt-5.6-terra-high",
+      "name": "GPT-5.6 Terra High"
+    },
+    {
+      "id": "gpt-5.6-terra-medium-fast",
+      "name": "GPT-5.6 Terra Medium Fast"
+    },
+    {
+      "id": "gpt-5.6-terra-medium-1m",
+      "name": "GPT-5.6 Terra 1M Medium"
+    },
+    {
+      "id": "gpt-5.6-terra-medium",
+      "name": "GPT-5.6 Terra Medium"
+    },
+    {
+      "id": "gpt-5.6-terra-low-fast",
+      "name": "GPT-5.6 Terra Low Fast"
+    },
+    {
+      "id": "gpt-5.6-terra-low-1m",
+      "name": "GPT-5.6 Terra 1M Low"
+    },
+    {
+      "id": "gpt-5.6-terra-low",
+      "name": "GPT-5.6 Terra Low"
+    },
+    {
+      "id": "gpt-5.6-terra-none-fast",
+      "name": "GPT-5.6 Terra None Fast"
+    },
+    {
+      "id": "gpt-5.6-terra-none-1m",
+      "name": "GPT-5.6 Terra 1M None"
+    },
+    {
+      "id": "gpt-5.6-terra-none",
+      "name": "GPT-5.6 Terra None"
+    },
+    {
+      "id": "gpt-5.6-luna-max-fast",
+      "name": "GPT-5.6 Luna Max Fast"
+    },
+    {
+      "id": "gpt-5.6-luna-max-1m",
+      "name": "GPT-5.6 Luna 1M Max"
+    },
+    {
+      "id": "gpt-5.6-luna-max",
+      "name": "GPT-5.6 Luna Max"
+    },
+    {
+      "id": "gpt-5.6-luna-xhigh-fast",
+      "name": "GPT-5.6 Luna Xhigh Fast"
+    },
+    {
+      "id": "gpt-5.6-luna-xhigh-1m",
+      "name": "GPT-5.6 Luna 1M Xhigh"
+    },
+    {
+      "id": "gpt-5.6-luna-xhigh",
+      "name": "GPT-5.6 Luna Xhigh"
+    },
+    {
+      "id": "gpt-5.6-luna-high-fast",
+      "name": "GPT-5.6 Luna High Fast"
+    },
+    {
+      "id": "gpt-5.6-luna-high-1m",
+      "name": "GPT-5.6 Luna 1M High"
+    },
+    {
+      "id": "gpt-5.6-luna-high",
+      "name": "GPT-5.6 Luna High"
+    },
+    {
+      "id": "gpt-5.6-luna-medium-fast",
+      "name": "GPT-5.6 Luna Medium Fast"
+    },
+    {
+      "id": "gpt-5.6-luna-medium-1m",
+      "name": "GPT-5.6 Luna 1M Medium"
+    },
+    {
+      "id": "gpt-5.6-luna-medium",
+      "name": "GPT-5.6 Luna Medium"
+    },
+    {
+      "id": "gpt-5.6-luna-low-fast",
+      "name": "GPT-5.6 Luna Low Fast"
+    },
+    {
+      "id": "gpt-5.6-luna-low-1m",
+      "name": "GPT-5.6 Luna 1M Low"
+    },
+    {
+      "id": "gpt-5.6-luna-low",
+      "name": "GPT-5.6 Luna Low"
+    },
+    {
+      "id": "gpt-5.6-luna-none-fast",
+      "name": "GPT-5.6 Luna None Fast"
+    },
+    {
+      "id": "gpt-5.6-luna-none-1m",
+      "name": "GPT-5.6 Luna 1M None"
+    },
+    {
+      "id": "gpt-5.6-luna-none",
+      "name": "GPT-5.6 Luna None"
+    },
+    {
+      "id": "gemini-3.7-flash-high",
+      "name": "Gemini 3.7 Flash High"
+    },
+    {
+      "id": "gemini-3.7-flash-medium",
+      "name": "Gemini 3.7 Flash Medium"
+    },
+    {
+      "id": "gemini-3.7-flash-low",
+      "name": "Gemini 3.7 Flash Low"
+    },
+    {
+      "id": "gemini-3.1-pro",
+      "name": "Gemini 3.1 Pro"
+    },
+    {
+      "id": "kimi-k3-max",
+      "name": "Kimi K3 Max"
+    },
+    {
+      "id": "kimi-k3-high",
+      "name": "Kimi K3 High"
+    },
+    {
+      "id": "kimi-k3-low",
+      "name": "Kimi K3 Low"
+    },
+    {
+      "id": "kimi-k2.7-code",
+      "name": "Kimi K2.7 Code"
+    },
+    {
+      "id": "glm-5.2-max",
+      "name": "GLM 5.2 Max"
+    },
+    {
+      "id": "glm-5.2-high",
+      "name": "GLM 5.2 High"
     }
   ],
   "volcengine": [
@@ -2566,18 +4402,152 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
       "name": "DeepSeek-V4-Pro"
     }
   ],
-  "hc": [
+  "veap": [
     {
-      "id": "meta-llama/llama-3.3-70b-instruct",
-      "name": "Llama 3.3 70B"
+      "id": "doubao-seed-evolving",
+      "name": "Doubao Seed Evolving (Agent Plan)"
     },
     {
-      "id": "mistralai/mistral-7b-instruct",
-      "name": "Mistral 7B"
+      "id": "doubao-seed-2-1-turbo-260628",
+      "name": "Doubao Seed 2.1 Turbo (Agent Plan)"
     },
     {
-      "id": "deepseek-ai/deepseek-coder-33b",
-      "name": "DeepSeek Coder 33B"
+      "id": "doubao-seed-2-0-lite-260215",
+      "name": "Doubao Seed 2.0 Lite (Agent Plan)"
+    },
+    {
+      "id": "doubao-seed-2-0-mini-260215",
+      "name": "Doubao Seed 2.0 Mini (Agent Plan)"
+    },
+    {
+      "id": "deepseek-v4-flash-ga-260731",
+      "name": "DeepSeek V4 Flash GA (Agent Plan)"
+    },
+    {
+      "id": "kimi-k3",
+      "name": "Kimi K3 (Agent Plan)"
+    },
+    {
+      "id": "glm-5-2-260617",
+      "name": "GLM 5.2 (Agent Plan)"
+    },
+    {
+      "id": "kimi-k2.7-code",
+      "name": "Kimi K2.7 Code (Agent Plan)"
+    },
+    {
+      "id": "minimax-m3",
+      "name": "MiniMax M3 (Agent Plan)"
+    },
+    {
+      "id": "deepseek-v4-pro-260425",
+      "name": "DeepSeek V4 Pro (Agent Plan)"
+    },
+    {
+      "id": "minimax-m2.7",
+      "name": "MiniMax M2.7 (Agent Plan)"
+    },
+    {
+      "id": "kimi-k2.6",
+      "name": "Kimi K2.6 (Agent Plan)"
+    }
+  ],
+  "vecp": [
+    {
+      "id": "doubao-seed-2-1-turbo",
+      "name": "Doubao Seed 2.1 Turbo (Coding Plan)"
+    },
+    {
+      "id": "doubao-seed-2.0-lite",
+      "name": "Doubao Seed 2.0 Lite (Coding Plan)"
+    },
+    {
+      "id": "deepseek-v4-flash",
+      "name": "DeepSeek V4 Flash (Coding Plan)"
+    },
+    {
+      "id": "glm-5.2",
+      "name": "GLM 5.2 (Coding Plan)"
+    },
+    {
+      "id": "kimi-k2.7-code",
+      "name": "Kimi K2.7 Code (Coding Plan)"
+    },
+    {
+      "id": "minimax-m3",
+      "name": "MiniMax M3 (Coding Plan)"
+    },
+    {
+      "id": "deepseek-v4-pro",
+      "name": "DeepSeek V4 Pro (Coding Plan)"
+    },
+    {
+      "id": "minimax-m2.7",
+      "name": "MiniMax M2.7 (Coding Plan)"
+    },
+    {
+      "id": "kimi-k2.6",
+      "name": "Kimi K2.6 (Coding Plan)"
+    }
+  ],
+  "fta": [
+    {
+      "id": "fta/zai/glm-5.3",
+      "name": "GLM 5.3 (zai)"
+    },
+    {
+      "id": "fta/kimi/k3",
+      "name": "Kimi K3"
+    }
+  ],
+  "g4fgroq": [
+    {
+      "id": "llama-3.3-70b-versatile",
+      "name": "Llama 3.3 70B (g4f/Groq)"
+    },
+    {
+      "id": "llama-3.1-8b-instant",
+      "name": "Llama 3.1 8B Instant (g4f/Groq)"
+    }
+  ],
+  "g4fgem": [
+    {
+      "id": "models/gemini-2.5-flash",
+      "name": "Gemini 2.5 Flash (g4f)"
+    },
+    {
+      "id": "models/gemini-2.5-pro",
+      "name": "Gemini 2.5 Pro (g4f)"
+    }
+  ],
+  "g4fpol": [
+    {
+      "id": "openai",
+      "name": "OpenAI (g4f/Pollinations)"
+    },
+    {
+      "id": "openai-fast",
+      "name": "OpenAI Fast (g4f/Pollinations)"
+    }
+  ],
+  "g4foll": [
+    {
+      "id": "gemma3:4b",
+      "name": "Gemma 3 4B (g4f/Ollama)"
+    }
+  ],
+  "g4fnv": [
+    {
+      "id": "nvidia/nemotron-3-nano-30b-a3b",
+      "name": "Nemotron 3 Nano 30B (g4f/NVIDIA)"
+    },
+    {
+      "id": "z-ai/glm-5.2",
+      "name": "GLM 5.2 (g4f/NVIDIA)"
+    },
+    {
+      "id": "minimaxai/minimax-m2.7",
+      "name": "MiniMax M2.7 (g4f/NVIDIA)"
     }
   ],
   "tencent": [
@@ -2622,36 +4592,6 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
       "name": "jamba-mini-2"
     }
   ],
-  "ant-ling": [
-    {
-      "id": "Ling-3.2-flash",
-      "name": "Ling 3.2 Flash"
-    },
-    {
-      "id": "Ling-3.1-flash",
-      "name": "Ling 3.1 Flash"
-    },
-    {
-      "id": "Ling-3.0-flash-VL",
-      "name": "Ling 3.0 Flash VL"
-    },
-    {
-      "id": "Ling-3.0-flash",
-      "name": "Ling 3.0 Flash"
-    },
-    {
-      "id": "Ling-3.0-tiny",
-      "name": "Ling 3.0 Tiny"
-    },
-    {
-      "id": "Ming-3.0-audio-flash",
-      "name": "Ming 3.0 Audio Flash"
-    },
-    {
-      "id": "AntAngelMed",
-      "name": "AntAngelMed"
-    }
-  ],
   "publicai": [
     {
       "id": "swiss-ai/apertus-70b-instruct",
@@ -2694,35 +4634,23 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
   ],
   "antigravity": [
     {
-      "id": "claude-sonnet-5",
-      "name": "Claude Sonnet 5 (Thinking)"
+      "id": "gemini-3.8-flash-high",
+      "name": "Gemini 3.8 Flash (High)"
     },
     {
-      "id": "claude-opus-4-6-thinking",
-      "name": "Claude Opus 4.6 (Thinking)"
+      "id": "gemini-3.8-flash-medium",
+      "name": "Gemini 3.8 Flash (Medium)"
     },
     {
-      "id": "claude-sonnet-4-6",
-      "name": "Claude Sonnet 4.6 (Thinking)"
+      "id": "gemini-3.8-flash-low",
+      "name": "Gemini 3.8 Flash (Low)"
     },
     {
-      "id": "gemini-3.5-flash-low",
-      "name": "Gemini 3.5 Flash (Low)"
+      "id": "gemini-3.7-flash-tiered",
+      "name": "Gemini 3.7 Flash (Tiered)"
     },
     {
-      "id": "gemini-3.5-flash-medium",
-      "name": "Gemini 3.5 Flash (Medium)"
-    },
-    {
-      "id": "gemini-3.5-flash-high",
-      "name": "Gemini 3.5 Flash (High)"
-    },
-    {
-      "id": "gemini-3-pro-preview",
-      "name": "Gemini 3.1 Pro"
-    },
-    {
-      "id": "gemini-3.1-pro-high",
+      "id": "gemini-pro-agent",
       "name": "Gemini 3.1 Pro (High)"
     },
     {
@@ -2734,43 +4662,71 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
       "name": "Gemini 3.1 Flash Lite"
     },
     {
-      "id": "gemini-2.5-pro",
-      "name": "Gemini 2.5 Pro"
+      "id": "claude-opus-4-6-thinking",
+      "name": "Claude Opus 4.6 (Thinking)"
     },
     {
-      "id": "gemini-2.5-flash",
-      "name": "Gemini 2.5 Flash"
-    },
-    {
-      "id": "gemini-2.5-flash-lite",
-      "name": "Gemini 2.5 Flash Lite"
-    },
-    {
-      "id": "gemini-2.5-flash-thinking",
-      "name": "Gemini 2.5 Flash Thinking"
-    },
-    {
-      "id": "gemini-pro-agent",
-      "name": "Gemini 3.1 Pro (High)"
+      "id": "claude-sonnet-4-6",
+      "name": "Claude Sonnet 4.6 (Thinking)"
     },
     {
       "id": "gpt-oss-120b-medium",
       "name": "GPT-OSS 120B (Medium)"
     },
     {
-      "id": "gemini-3-pro-image-preview",
-      "name": "Gemini 3 Pro Image"
+      "id": "gemini-4-argon-high",
+      "name": "Gemini 4 Argon (High)"
     },
     {
-      "id": "gemini-3.1-flash-image",
-      "name": "Gemini 3.1 Flash Image"
+      "id": "gemini-4-argon-medium",
+      "name": "Gemini 4 Argon (Medium)"
     },
     {
-      "id": "gemini-2.5-computer-use-preview-10-2025",
-      "name": "Gemini 2.5 Computer Use Preview (10/2025)"
+      "id": "gemini-4-argon-low",
+      "name": "Gemini 4 Argon (Low)"
+    },
+    {
+      "id": "claude-opus-5-5-high",
+      "name": "Claude Opus 5.5 (High)"
+    },
+    {
+      "id": "claude-opus-5-5-medium",
+      "name": "Claude Opus 5.5 (Medium)"
+    },
+    {
+      "id": "claude-opus-5-5-low",
+      "name": "Claude Opus 5.5 (Low)"
+    },
+    {
+      "id": "claude-sonnet-5-5-high",
+      "name": "Claude Sonnet 5.5 (High)"
+    },
+    {
+      "id": "claude-sonnet-5-5-medium",
+      "name": "Claude Sonnet 5.5 (Medium)"
+    },
+    {
+      "id": "claude-sonnet-5-5-low",
+      "name": "Claude Sonnet 5.5 (Low)"
     }
   ],
   "openai": [
+    {
+      "id": "gpt-6.1-sol",
+      "name": "GPT-6.1 Sol"
+    },
+    {
+      "id": "gpt-6-astra",
+      "name": "GPT-6 Astra"
+    },
+    {
+      "id": "gpt-6-sol",
+      "name": "GPT-6 Sol"
+    },
+    {
+      "id": "gpt-6-luna",
+      "name": "GPT-6 Luna"
+    },
     {
       "id": "gpt-5.6",
       "name": "GPT-5.6"
@@ -2896,61 +4852,111 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
       "name": "DeepSeek V3"
     }
   ],
-  "pepper": [
-    {
-      "id": "pepper-1",
-      "name": "Pepper (Chipotle AI 🌯)"
-    }
-  ],
   "faik": [
-    {
-      "id": "openai/gpt-5",
-      "name": "GPT-5 (via FreeAIAPIKey)"
-    },
     {
       "id": "openai/gpt-4o",
       "name": "GPT-4o (via FreeAIAPIKey)"
     },
     {
-      "id": "openai/gpt-5.2-codex",
-      "name": "GPT-5.2 Codex (via FreeAIAPIKey)"
+      "id": "openai/gpt-5.4",
+      "name": "GPT-5.4 (via FreeAIAPIKey)"
+    },
+    {
+      "id": "openai/gpt-5.5",
+      "name": "GPT-5.5 (via FreeAIAPIKey)"
+    },
+    {
+      "id": "openai/gpt-5.6-sol",
+      "name": "GPT-5.6 Sol (via FreeAIAPIKey)"
     },
     {
       "id": "anthropic/claude-opus-4.6",
       "name": "Claude Opus 4.6 (via FreeAIAPIKey)"
     },
     {
+      "id": "anthropic/claude-opus-4.7",
+      "name": "Claude Opus 4.7 (via FreeAIAPIKey)"
+    },
+    {
+      "id": "anthropic/claude-opus-4.8",
+      "name": "Claude Opus 4.8 (via FreeAIAPIKey)"
+    },
+    {
+      "id": "anthropic/claude-opus-5",
+      "name": "Claude Opus 5 (via FreeAIAPIKey)"
+    },
+    {
       "id": "anthropic/claude-sonnet-4.6",
       "name": "Claude Sonnet 4.6 (via FreeAIAPIKey)"
     },
     {
-      "id": "Alibaba/qwen3.5",
-      "name": "Qwen 3.5 (via FreeAIAPIKey)"
-    },
-    {
-      "id": "Alibaba/qwen3-vl:235b",
-      "name": "Qwen 3 VL 235B (via FreeAIAPIKey)"
+      "id": "anthropic/claude-sonnet-5",
+      "name": "Claude Sonnet 5 (via FreeAIAPIKey)"
     }
   ],
-  "qw": [
+  "qwc": [
     {
-      "id": "qwen3-coder-plus",
-      "name": "Qwen3 Coder Plus"
+      "id": "qwen3.8-max",
+      "name": "Qwen3.8 Max"
     },
     {
-      "id": "qwen3-coder-flash",
-      "name": "Qwen3 Coder Flash"
+      "id": "qwen3.7-max-2026-06-08",
+      "name": "Qwen3.7 Max (2026-06-08)"
     },
     {
-      "id": "vision-model",
-      "name": "Qwen3 Vision Model"
+      "id": "qwen3.7-plus",
+      "name": "Qwen3.7 Plus"
     },
     {
-      "id": "coder-model",
-      "name": "Qwen3.6 (Coder Model)"
+      "id": "qwen3.6-plus",
+      "name": "Qwen3.6 Plus"
+    },
+    {
+      "id": "qwen3.6-27b",
+      "name": "Qwen3.6 27B"
+    },
+    {
+      "id": "qwen3.6-35b-a3b",
+      "name": "Qwen3.6 35B A3B"
+    },
+    {
+      "id": "qwen3.5-plus-2026-04-20",
+      "name": "Qwen3.5 Plus (2026-04-20)"
+    },
+    {
+      "id": "qwen3.5-122b-a10b",
+      "name": "Qwen3.5 122B A10B"
+    },
+    {
+      "id": "qwen3.5-397b-a17b",
+      "name": "Qwen3.5 397B A17B"
+    },
+    {
+      "id": "glm-5.2",
+      "name": "GLM 5.2"
+    },
+    {
+      "id": "glm-5.2-fast-preview",
+      "name": "GLM 5.2 Fast Preview"
+    },
+    {
+      "id": "deepseek-v4-pro",
+      "name": "DeepSeek V4 Pro"
+    },
+    {
+      "id": "deepseek-v4-flash",
+      "name": "DeepSeek V4 Flash"
+    },
+    {
+      "id": "kimi-k2.7-code",
+      "name": "Kimi K2.7 Code"
     }
   ],
-  "qwen-web": [
+  "qct": [
+    {
+      "id": "qwen3.8-max",
+      "name": "Qwen3.8 Max"
+    },
     {
       "id": "qwen3.7-max",
       "name": "Qwen3.7 Max"
@@ -2960,22 +4966,42 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
       "name": "Qwen3.7 Plus"
     },
     {
-      "id": "qwen3.6-plus",
-      "name": "Qwen3.6 Plus"
+      "id": "qwen3.8-flash",
+      "name": "Qwen3.8 Flash"
+    },
+    {
+      "id": "qwen3.6-flash",
+      "name": "Qwen3.6 Flash"
+    },
+    {
+      "id": "glm-5.2",
+      "name": "GLM 5.2"
+    },
+    {
+      "id": "deepseek-v4-pro",
+      "name": "DeepSeek V4 Pro"
+    },
+    {
+      "id": "deepseek-v4.1-flash",
+      "name": "DeepSeek V4.1 Flash"
+    },
+    {
+      "id": "deepseek-v4-flash-0731",
+      "name": "DeepSeek V4 Flash"
     }
   ],
   "zw": [
     {
-      "id": "glm-4.6",
-      "name": "GLM-4.6"
+      "id": "glm-5.3-flash",
+      "name": "GLM-5.3-Flash"
     },
     {
-      "id": "glm-4.5",
-      "name": "GLM-4.5"
+      "id": "glm-5.3",
+      "name": "GLM-5.3"
     },
     {
-      "id": "glm-4.5v",
-      "name": "GLM-4.5V (Vision)"
+      "id": "glm-5.2",
+      "name": "GLM-5.2"
     }
   ],
   "modal": [
@@ -3035,11 +5061,11 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
   "gw": [
     {
       "id": "fast",
-      "name": "Grok 4.20"
+      "name": "Grok 4.7"
     },
     {
       "id": "expert",
-      "name": "Grok 4.20 Thinking"
+      "name": "Grok 4.7 Thinking"
     },
     {
       "id": "heavy",
@@ -3052,48 +5078,44 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
   ],
   "kie": [
     {
-      "id": "claude-opus-4-8",
-      "name": "Claude 4.8 Opus"
+      "id": "claude-fable-5",
+      "name": "Claude 5 Fable"
     },
     {
-      "id": "claude-opus-4-7",
-      "name": "Claude 4.7 Opus"
+      "id": "claude-opus-5",
+      "name": "Claude 5 Opus"
     },
     {
-      "id": "claude-sonnet-4-6",
-      "name": "Claude 4.6 Sonnet"
+      "id": "claude-sonnet-5",
+      "name": "Claude 5 Sonnet"
     },
     {
       "id": "claude-haiku-4-5",
       "name": "Claude 4.5 Haiku"
     },
     {
-      "id": "gpt-5-5",
-      "name": "GPT 5.5"
+      "id": "gpt-5-6-sol",
+      "name": "GPT 5.6 Sol"
     },
     {
-      "id": "gpt-5-4",
-      "name": "GPT 5.4"
+      "id": "gpt-5-6-terra",
+      "name": "GPT 5.6 Terra"
     },
     {
-      "id": "gpt-5-2",
-      "name": "GPT 5.2"
+      "id": "gpt-5-6-luna",
+      "name": "GPT 5.6 Luna"
     },
     {
       "id": "gemini-3-1-pro",
       "name": "Gemini 3.1 Pro"
     },
     {
-      "id": "gemini-2-5-pro",
-      "name": "Gemini 2.5 Pro"
+      "id": "gemini-3-7-flash",
+      "name": "Gemini 3.7 Flash"
     },
     {
-      "id": "gemini-3-flash",
-      "name": "Gemini 3 Flash"
-    },
-    {
-      "id": "gemini-3-5-flash",
-      "name": "Gemini 3.5 Flash"
+      "id": "grok-4-6",
+      "name": "Grok 4.6"
     }
   ],
   "monster": [
@@ -3166,6 +5188,32 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
     {
       "id": "qwen25-coder-32b-instruct",
       "name": "qwen25-coder-32b-instruct"
+    }
+  ],
+  "runcrate": [
+    {
+      "id": "deepseek-ai/DeepSeek-V4.1-Flash",
+      "name": "deepseek-ai/DeepSeek-V4.1-Flash"
+    },
+    {
+      "id": "deepseek-ai/DeepSeek-V4.1-Flash-1017",
+      "name": "deepseek-ai/DeepSeek-V4.1-Flash-1017"
+    },
+    {
+      "id": "zai-org/GLM-5.3",
+      "name": "zai-org/GLM-5.3"
+    },
+    {
+      "id": "zai-org/GLM-5.3-Flash",
+      "name": "zai-org/GLM-5.3-Flash"
+    },
+    {
+      "id": "Qwen/Qwen3.8-Flash",
+      "name": "Qwen/Qwen3.8-Flash"
+    },
+    {
+      "id": "openai/gpt-oss-120b",
+      "name": "openai/gpt-oss-120b"
     }
   ],
   "t3chat": [
@@ -3262,6 +5310,120 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
       "name": "Kimi K2 (via t3.chat)"
     }
   ],
+  "cnl": [
+    {
+      "id": "claude-opus-5",
+      "name": "Claude Opus 5"
+    },
+    {
+      "id": "claude-opus-4-8",
+      "name": "Claude Opus 4 8"
+    },
+    {
+      "id": "claude-fable-5",
+      "name": "Claude Fable 5"
+    },
+    {
+      "id": "claude-sonnet-5",
+      "name": "Claude Sonnet 5"
+    },
+    {
+      "id": "claude-sonnet-4-6",
+      "name": "Claude Sonnet 4 6"
+    },
+    {
+      "id": "claude-haiku-4-5",
+      "name": "Claude Haiku 4 5"
+    },
+    {
+      "id": "gpt-5.5",
+      "name": "GPT 5.5"
+    },
+    {
+      "id": "gpt-5.5-pro",
+      "name": "GPT 5.5 Pro"
+    },
+    {
+      "id": "gpt-5.6-sol",
+      "name": "GPT 5.6 Sol"
+    },
+    {
+      "id": "gpt-5.6-terra",
+      "name": "GPT 5.6 Terra"
+    },
+    {
+      "id": "gpt-5.6-luna",
+      "name": "GPT 5.6 Luna"
+    },
+    {
+      "id": "deepseek/deepseek-v4-pro",
+      "name": "Deepseek V4 Pro"
+    },
+    {
+      "id": "openrouter/fusion",
+      "name": "Fusion"
+    },
+    {
+      "id": "z-ai/glm-5.2",
+      "name": "GLM 5.2"
+    },
+    {
+      "id": "tencent/hy3",
+      "name": "Hy3"
+    },
+    {
+      "id": "moonshotai/kimi-k3",
+      "name": "Kimi K3"
+    },
+    {
+      "id": "moonshotai/kimi-k2.7-code",
+      "name": "Kimi K2.7 Code"
+    },
+    {
+      "id": "qwen/qwen3.7-plus",
+      "name": "Qwen3.7 Plus"
+    },
+    {
+      "id": "qwen/qwen3.7-max",
+      "name": "Qwen3.7 Max"
+    },
+    {
+      "id": "minimax/minimax-m3",
+      "name": "Minimax M3"
+    },
+    {
+      "id": "stepfun/step-3.7-flash",
+      "name": "Step 3.7 Flash"
+    },
+    {
+      "id": "google/gemini-3.7-flash",
+      "name": "Gemini 3.7 Flash"
+    },
+    {
+      "id": "google/gemini-3.1-pro-preview",
+      "name": "Gemini 3.1 Pro Preview"
+    },
+    {
+      "id": "google/gemini-3.1-flash-lite",
+      "name": "Gemini 3.1 Flash Lite"
+    },
+    {
+      "id": "x-ai/grok-4.3",
+      "name": "Grok 4.3"
+    },
+    {
+      "id": "deepseek/deepseek-v4-flash",
+      "name": "Deepseek V4 Flash"
+    },
+    {
+      "id": "xiaomi/mimo-v2.5",
+      "name": "Mimo V2.5"
+    },
+    {
+      "id": "xiaomi/mimo-v2.5-pro",
+      "name": "Mimo V2.5 Pro"
+    }
+  ],
   "iflytek": [
     {
       "id": "4.0Ultra",
@@ -3290,10 +5452,6 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
   ],
   "crof": [
     {
-      "id": "deepseek-v4-pro-precision",
-      "name": "DeepSeek V4 Pro (Precision)"
-    },
-    {
       "id": "deepseek-v4-pro",
       "name": "DeepSeek V4 Pro"
     },
@@ -3302,44 +5460,36 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
       "name": "DeepSeek V4 Flash"
     },
     {
-      "id": "deepseek-v3.2",
-      "name": "DeepSeek V3.2"
+      "id": "deepseek-v4-flash-0731",
+      "name": "DeepSeek V4 Flash 0731"
     },
     {
-      "id": "kimi-k2.6-precision",
-      "name": "Kimi K2.6 (Precision)"
+      "id": "deepseek-v3.2",
+      "name": "DeepSeek V3.2"
     },
     {
       "id": "kimi-k2.6",
       "name": "Kimi K2.6"
     },
     {
-      "id": "kimi-k2.5-lightning",
-      "name": "Kimi K2.5 (Lightning)"
+      "id": "kimi-k2.7-code",
+      "name": "Kimi K2.7 Code"
     },
     {
-      "id": "kimi-k2.5",
-      "name": "Kimi K2.5"
+      "id": "kimi-k3",
+      "name": "Kimi K3"
     },
     {
-      "id": "glm-5.1-precision",
-      "name": "GLM 5.1 (Precision)"
+      "id": "kimi-k3-eco",
+      "name": "Kimi K3 Eco"
     },
     {
       "id": "glm-5.1",
       "name": "GLM 5.1"
     },
     {
-      "id": "glm-4.7",
-      "name": "GLM 4.7"
-    },
-    {
-      "id": "glm-4.7-flash",
-      "name": "GLM 4.7 Flash"
-    },
-    {
-      "id": "mimo-v2.5-pro-precision",
-      "name": "Mimo 2.5 Pro (Precision)"
+      "id": "glm-5.2",
+      "name": "GLM 5.2"
     },
     {
       "id": "mimo-v2.5-pro",
@@ -3348,10 +5498,6 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
     {
       "id": "gemma-4-31b-it",
       "name": "Gemma 4 31B"
-    },
-    {
-      "id": "minimax-m2.5",
-      "name": "MiniMax M2.5"
     },
     {
       "id": "qwen3.6-27b",
@@ -3368,12 +5514,16 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
   ],
   "moonshot": [
     {
-      "id": "kimi-k2.6",
-      "name": "kimi-k2.6"
+      "id": "kimi-k3.1-pro",
+      "name": "Kimi K3.1 Pro"
     },
     {
-      "id": "kimi-k2.5",
-      "name": "kimi-k2.5"
+      "id": "kimi-k3.1-pro-highspeed",
+      "name": "Kimi K3.1 Pro Highspeed"
+    },
+    {
+      "id": "kimi-k3",
+      "name": "Kimi K3"
     },
     {
       "id": "kimi-k2.7-code",
@@ -3382,6 +5532,24 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
     {
       "id": "kimi-k2.7-code-highspeed",
       "name": "Kimi K2.7 Code (High Speed)"
+    },
+    {
+      "id": "kimi-k2.6",
+      "name": "Kimi K2.6"
+    }
+  ],
+  "poe": [
+    {
+      "id": "gpt-5.2",
+      "name": "GPT-5.2"
+    },
+    {
+      "id": "claude-opus-4.8",
+      "name": "Claude Opus 4.8"
+    },
+    {
+      "id": "gemini-3.0-pro",
+      "name": "Gemini 3.0 Pro"
     }
   ],
   "bzl": [
@@ -3536,6 +5704,16 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
       "name": "Sonar"
     }
   ],
+  "pplx-agent": [
+    {
+      "id": "openai/gpt-5.6-sol",
+      "name": "GPT-5.6 Sol (Perplexity Agent)"
+    },
+    {
+      "id": "perplexity/kimi-k3",
+      "name": "Kimi K3 (Perplexity Agent)"
+    }
+  ],
   "pplx-web": [
     {
       "id": "pplx-auto",
@@ -3546,16 +5724,16 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
       "name": "Sonar 2 (via Perplexity)"
     },
     {
-      "id": "pplx-gpt-5.4",
-      "name": "GPT-5.4 (via Perplexity)"
+      "id": "pplx-gpt-5.6-terra",
+      "name": "GPT-5.6 Terra (via Perplexity)"
     },
     {
-      "id": "pplx-gpt",
-      "name": "GPT-5.5 (via Perplexity)"
+      "id": "pplx-gpt-5.6-sol",
+      "name": "GPT-5.6 Sol (via Perplexity)"
     },
     {
       "id": "pplx-gemini",
-      "name": "Gemini 3.1 Pro (via Perplexity)"
+      "name": "Gemini 3.7 Flash (via Perplexity)"
     },
     {
       "id": "pplx-sonnet",
@@ -3563,7 +5741,7 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
     },
     {
       "id": "pplx-opus",
-      "name": "Claude Opus 4.8 (via Perplexity)"
+      "name": "Claude Opus 5.0 (via Perplexity)"
     },
     {
       "id": "pplx-glm",
@@ -3571,7 +5749,11 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
     },
     {
       "id": "pplx-kimi",
-      "name": "Kimi K2.6 (via Perplexity)"
+      "name": "Kimi K3 (via Perplexity)"
+    },
+    {
+      "id": "pplx-grok-4.6",
+      "name": "Grok 4.6 (via Perplexity)"
     },
     {
       "id": "pplx-nemotron",
@@ -3582,6 +5764,10 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
     {
       "id": "MiniMax-M3",
       "name": "MiniMax M3"
+    },
+    {
+      "id": "MiniMax-M3.1-Flash",
+      "name": "MiniMax M3.1 Flash"
     },
     {
       "id": "MiniMax-M2.7",
@@ -3604,6 +5790,10 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
     {
       "id": "MiniMax-M3",
       "name": "MiniMax M3"
+    },
+    {
+      "id": "MiniMax-M3.1-Flash",
+      "name": "MiniMax M3.1 Flash"
     },
     {
       "id": "MiniMax-M2.7",
@@ -3720,16 +5910,8 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
   ],
   "unc": [
     {
-      "id": "adamo1139/Hermes-3-Llama-3.1-8B-FP8-Dynamic",
-      "name": "Hermes 3 Llama 3.1 8B (🆓 Free)"
-    },
-    {
-      "id": "qwen3.6:27b",
-      "name": "Qwen3 Coder 27B (🆓 Free)"
-    },
-    {
-      "id": "gemma4:31b",
-      "name": "Gemma 4 31B (🆓 Free)"
+      "id": "turboderp/Qwen3.8-27B-exl3",
+      "name": "Qwen3.8 27B exl3 (🆓 Free)"
     }
   ],
   "nscale": [
@@ -3758,40 +5940,244 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
       "name": "meta-llama/Llama-3.3-70B-Instruct"
     }
   ],
-  "cgpt-web": [
+  "cgpt-codex": [
     {
-      "id": "gpt-5.6-pro",
-      "name": "GPT-5.6 Pro"
+      "id": "luna",
+      "name": "ChatGPT Web — Luna"
     },
     {
-      "id": "gpt-5.6-thinking",
-      "name": "GPT-5.6 Thinking"
+      "id": "think",
+      "name": "ChatGPT Web — Think"
     },
     {
-      "id": "gpt-5.5-pro-extended",
-      "name": "GPT-5.5 Pro Extended"
+      "id": "instant",
+      "name": "ChatGPT Web — Instant"
     },
     {
-      "id": "gpt-5.5-pro",
-      "name": "GPT-5.5 Pro"
+      "id": "medium",
+      "name": "ChatGPT Web — Medium"
     },
     {
-      "id": "gpt-5.5-thinking",
-      "name": "GPT-5.5 Thinking"
+      "id": "high",
+      "name": "ChatGPT Web — High"
     },
     {
-      "id": "gpt-5.5",
-      "name": "GPT-5.5 Instant"
+      "id": "extra-high",
+      "name": "ChatGPT Web — Extra High"
     },
     {
-      "id": "o3",
-      "name": "o3"
+      "id": "pro",
+      "name": "ChatGPT Web — Pro"
+    }
+  ],
+  "chatgpt-web": [
+    {
+      "id": "gpt-6",
+      "name": "GPT-6 Sol — Instant"
+    },
+    {
+      "id": "gpt-6-thinking",
+      "name": "GPT-6 Sol — Thinking"
+    },
+    {
+      "id": "gpt-6-pro",
+      "name": "GPT-6 Astra — Pro"
+    },
+    {
+      "id": "gpt-5-6",
+      "name": "GPT-5.6 Sol — Instant"
+    },
+    {
+      "id": "gpt-5-6-thinking",
+      "name": "GPT-5.6 Sol — Thinking"
+    },
+    {
+      "id": "gpt-5-6-pro",
+      "name": "GPT-5.6 Sol — Pro"
+    },
+    {
+      "id": "gpt-5.6-luna-free",
+      "name": "GPT-5.6 Luna — Free"
+    },
+    {
+      "id": "gpt-5.6-luna-free-thinking",
+      "name": "GPT-5.6 Luna — Free Thinking"
+    },
+    {
+      "id": "gpt-5-5-instant",
+      "name": "GPT-5.5 — Instant"
+    },
+    {
+      "id": "gpt-5-5-thinking",
+      "name": "GPT-5.5 — Thinking"
+    },
+    {
+      "id": "gpt-5-5-pro",
+      "name": "GPT-5.5 — Pro"
     }
   ],
   "openrouter": [
     {
       "id": "auto",
       "name": "Auto (Best Available)"
+    }
+  ],
+  "cinf": [
+    {
+      "id": "aion-labs.aion-2-0",
+      "name": "Aion 2.0"
+    },
+    {
+      "id": "claude-fable-5",
+      "name": "Claude Fable 5"
+    },
+    {
+      "id": "claude-haiku-4.5",
+      "name": "Claude Haiku 4.5"
+    },
+    {
+      "id": "claude-opus-4-7-fast",
+      "name": "Claude Opus 4.7 Fast"
+    },
+    {
+      "id": "claude-opus-4-8-fast",
+      "name": "Claude Opus 4.8 Fast"
+    },
+    {
+      "id": "claude-opus-4.5",
+      "name": "Claude Opus 4.5"
+    },
+    {
+      "id": "claude-opus-4.6",
+      "name": "Claude Opus 4.6"
+    },
+    {
+      "id": "claude-opus-4.7",
+      "name": "Claude Opus 4.7"
+    },
+    {
+      "id": "claude-opus-4.8",
+      "name": "Claude Opus 4.8"
+    },
+    {
+      "id": "claude-opus-5",
+      "name": "Claude Opus 5"
+    },
+    {
+      "id": "claude-opus-5-fast",
+      "name": "Claude Opus 5 Fast"
+    },
+    {
+      "id": "claude-sonnet-4.5",
+      "name": "Claude Sonnet 4.5"
+    },
+    {
+      "id": "claude-sonnet-4.6",
+      "name": "Claude Sonnet 4.6"
+    },
+    {
+      "id": "claude-sonnet-5",
+      "name": "Claude Sonnet 5"
+    },
+    {
+      "id": "deepseek-v4-flash",
+      "name": "DeepSeek V4 Flash"
+    },
+    {
+      "id": "deepseek-v4-pro",
+      "name": "DeepSeek V4 Pro"
+    },
+    {
+      "id": "gemini-2.5-flash",
+      "name": "Gemini 2.5 Flash"
+    },
+    {
+      "id": "gemini-3.7-flash",
+      "name": "Gemini 3.7 Flash"
+    },
+    {
+      "id": "gemini-3-flash-preview",
+      "name": "Gemini 3 Flash Preview"
+    },
+    {
+      "id": "gemini-3.1-flash-lite",
+      "name": "Gemini 3.1 Flash Lite"
+    },
+    {
+      "id": "gemini-3.1-pro",
+      "name": "Gemini 3.1 Pro"
+    },
+    {
+      "id": "gemini-3.1-pro-preview",
+      "name": "Gemini 3.1 Pro Preview"
+    },
+    {
+      "id": "glm-4.5",
+      "name": "GLM-4.5"
+    },
+    {
+      "id": "glm-4.5-air",
+      "name": "GLM-4.5 Air"
+    },
+    {
+      "id": "glm-4.6",
+      "name": "GLM-4.6"
+    },
+    {
+      "id": "glm-4.7",
+      "name": "GLM-4.7"
+    },
+    {
+      "id": "glm-5",
+      "name": "GLM-5"
+    },
+    {
+      "id": "glm-5.1",
+      "name": "GLM-5.1"
+    },
+    {
+      "id": "glm-5.2",
+      "name": "GLM-5.2"
+    },
+    {
+      "id": "google/gemini-3.5-flash-lite",
+      "name": "Gemini 3.5 Flash Lite"
+    },
+    {
+      "id": "gpt-5.4",
+      "name": "GPT-5.4"
+    },
+    {
+      "id": "gpt-5.4-mini",
+      "name": "GPT-5.4 Mini"
+    },
+    {
+      "id": "gpt-5.5",
+      "name": "GPT-5.5"
+    },
+    {
+      "id": "gpt-5.6-luna",
+      "name": "GPT-5.6 Luna"
+    },
+    {
+      "id": "gpt-5.6-sol",
+      "name": "GPT-5.6 Sol"
+    },
+    {
+      "id": "gpt-5.6-terra",
+      "name": "GPT-5.6 Terra"
+    },
+    {
+      "id": "grok-4.5",
+      "name": "Grok 4.5"
+    },
+    {
+      "id": "kimi-k3",
+      "name": "Kimi K3"
+    },
+    {
+      "id": "minimax-m2.7",
+      "name": "MiniMax M2.7"
     }
   ],
   "openvecta": [
@@ -3832,6 +6218,34 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
       "name": "Nemotron 3 Super 120B"
     }
   ],
+  "of": [
+    {
+      "id": "GLM-5.2",
+      "name": "GLM 5.2"
+    },
+    {
+      "id": "Qwen3.8 27b",
+      "name": "Qwen3.8 27B"
+    },
+    {
+      "id": "Llama 3.2 3B",
+      "name": "Llama 3.2 3B"
+    }
+  ],
+  "ofa": [
+    {
+      "id": "GLM-5.2",
+      "name": "GLM 5.2"
+    },
+    {
+      "id": "Qwen3.8 27b",
+      "name": "Qwen3.8 27B"
+    },
+    {
+      "id": "Llama 3.2 3B",
+      "name": "Llama 3.2 3B"
+    }
+  ],
   "orcarouter": [
     {
       "id": "orcarouter/auto",
@@ -3842,8 +6256,8 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
       "name": "GPT-5.5"
     },
     {
-      "id": "google/gemini-3.5-flash",
-      "name": "Gemini 3.5 Flash"
+      "id": "google/gemini-3.6-flash",
+      "name": "Gemini 3.6 Flash"
     },
     {
       "id": "anthropic/claude-opus-4.8",
@@ -3883,10 +6297,162 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
   "m365copilot": [
     {
       "id": "copilot-m365",
-      "name": "Microsoft 365 Copilot (BizChat)"
+      "name": "Auto (Legacy)"
+    },
+    {
+      "id": "copilot-m365-claude-opus",
+      "name": "Claude Opus (Legacy)"
+    },
+    {
+      "id": "copilot-m365-gpt-5-6-reasoning",
+      "name": "GPT 5.6 Reasoning (Legacy)"
+    },
+    {
+      "id": "copilot-m365-gpt-5-5-chat",
+      "name": "GPT 5.5 Chat (Legacy)"
+    },
+    {
+      "id": "m365-copilot",
+      "name": "Auto (Default)"
+    },
+    {
+      "id": "auto",
+      "name": "Auto"
+    },
+    {
+      "id": "quick",
+      "name": "Quick"
+    },
+    {
+      "id": "think-deeper",
+      "name": "Think Deeper"
+    },
+    {
+      "id": "claude",
+      "name": "Claude (Alias)"
+    },
+    {
+      "id": "claude-sonnet",
+      "name": "Claude Sonnet"
+    },
+    {
+      "id": "claude-sonnet-4.5",
+      "name": "Claude Sonnet 4.5 (Alias)"
+    },
+    {
+      "id": "claude-sonnet-4.6",
+      "name": "Claude Sonnet 4.6"
+    },
+    {
+      "id": "claude-sonnet-5.5",
+      "name": "Claude Sonnet 5.5"
+    },
+    {
+      "id": "claude-sonnet-5",
+      "name": "Claude Sonnet 5"
+    },
+    {
+      "id": "claude-sonnet-think-deeper",
+      "name": "Claude Sonnet Think Deeper"
+    },
+    {
+      "id": "claude-opus",
+      "name": "Claude Opus"
+    },
+    {
+      "id": "claude-opus-5",
+      "name": "Claude Opus 5 (Alias)"
+    },
+    {
+      "id": "claude-opus-5.5",
+      "name": "Claude Opus 5.5"
+    },
+    {
+      "id": "claude-opus-4.8",
+      "name": "Claude Opus 4.8"
+    },
+    {
+      "id": "claude-opus-4.5",
+      "name": "Claude Opus 4.5 (Alias)"
+    },
+    {
+      "id": "gpt-5.5",
+      "name": "GPT 5.5"
+    },
+    {
+      "id": "gpt-5.5-quick",
+      "name": "GPT 5.5 Quick"
+    },
+    {
+      "id": "gpt-5.5-think-deeper",
+      "name": "GPT 5.5 Think Deeper"
+    },
+    {
+      "id": "gpt-5.6",
+      "name": "GPT 5.6"
+    },
+    {
+      "id": "gpt-5.6-quick",
+      "name": "GPT 5.6 Quick"
+    },
+    {
+      "id": "gpt-5.6-think-deeper",
+      "name": "GPT 5.6 Think Deeper"
+    },
+    {
+      "id": "gpt-6-think-deeper",
+      "name": "GPT 6 Think Deeper"
+    },
+    {
+      "id": "gpt-6-sol",
+      "name": "GPT 6 Sol"
+    },
+    {
+      "id": "gpt-6.1-sol",
+      "name": "GPT 6.1 Sol"
+    },
+    {
+      "id": "gpt-5.4",
+      "name": "GPT 5.4"
+    },
+    {
+      "id": "gpt-5.4-think-deeper",
+      "name": "GPT 5.4 Think Deeper"
+    },
+    {
+      "id": "gpt-5.4-quick",
+      "name": "GPT 5.4 Quick"
+    },
+    {
+      "id": "gpt-5.3",
+      "name": "GPT 5.3"
+    },
+    {
+      "id": "gpt-5.3-quick",
+      "name": "GPT 5.3 Quick"
+    },
+    {
+      "id": "gpt-5.3-think-deeper",
+      "name": "GPT 5.3 Think Deeper"
+    },
+    {
+      "id": "gpt-5.2",
+      "name": "GPT 5.2"
+    },
+    {
+      "id": "gpt-5.2-quick",
+      "name": "GPT 5.2 Quick"
+    },
+    {
+      "id": "gpt-5.2-think-deeper",
+      "name": "GPT 5.2 Think Deeper"
     }
   ],
   "stepfun": [
+    {
+      "id": "step-5-preview",
+      "name": "Step 5 Preview"
+    },
     {
       "id": "step-3.7-flash",
       "name": "Step 3.7 Flash"
@@ -4208,6 +6774,34 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
   ],
   "agy": [
     {
+      "id": "gemini-3.8-flash-high",
+      "name": "Gemini 3.8 Flash (High)"
+    },
+    {
+      "id": "gemini-3.8-flash-medium",
+      "name": "Gemini 3.8 Flash (Medium)"
+    },
+    {
+      "id": "gemini-3.8-flash-low",
+      "name": "Gemini 3.8 Flash (Low)"
+    },
+    {
+      "id": "gemini-3.7-flash-tiered",
+      "name": "Gemini 3.7 Flash (Tiered)"
+    },
+    {
+      "id": "gemini-pro-agent",
+      "name": "Gemini 3.1 Pro (High)"
+    },
+    {
+      "id": "gemini-3.1-pro-low",
+      "name": "Gemini 3.1 Pro (Low)"
+    },
+    {
+      "id": "gemini-3.1-flash-lite",
+      "name": "Gemini 3.1 Flash Lite"
+    },
+    {
       "id": "claude-opus-4-6-thinking",
       "name": "Claude Opus 4.6 (Thinking)"
     },
@@ -4216,56 +6810,146 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
       "name": "Claude Sonnet 4.6 (Thinking)"
     },
     {
-      "id": "gemini-3.1-pro-high",
-      "name": "Gemini 3.1 Pro (High)"
-    },
-    {
-      "id": "gemini-3.1-pro-low",
-      "name": "Gemini 3.1 Pro (Low)"
-    },
-    {
-      "id": "gemini-pro-agent",
-      "name": "Gemini 3.1 Pro (Agent)"
-    },
-    {
-      "id": "gemini-3.5-flash-low",
-      "name": "Gemini 3.5 Flash (Low)"
-    },
-    {
-      "id": "gemini-3.5-flash-medium",
-      "name": "Gemini 3.5 Flash (Medium)"
-    },
-    {
-      "id": "gemini-3.5-flash-high",
-      "name": "Gemini 3.5 Flash (High)"
-    },
-    {
-      "id": "gemini-3.1-flash-lite",
-      "name": "Gemini 3.1 Flash Lite"
-    },
-    {
-      "id": "gemini-3.1-flash-image",
-      "name": "Gemini 3.1 Flash Image"
-    },
-    {
-      "id": "gemini-2.5-pro",
-      "name": "Gemini 2.5 Pro"
-    },
-    {
-      "id": "gemini-2.5-flash",
-      "name": "Gemini 2.5 Flash"
-    },
-    {
-      "id": "gemini-2.5-flash-thinking",
-      "name": "Gemini 2.5 Flash Thinking"
-    },
-    {
-      "id": "gemini-2.5-flash-lite",
-      "name": "Gemini 2.5 Flash Lite"
-    },
-    {
       "id": "gpt-oss-120b-medium",
       "name": "GPT-OSS 120B (Medium)"
+    },
+    {
+      "id": "gemini-4-argon-high",
+      "name": "Gemini 4 Argon (High)"
+    },
+    {
+      "id": "gemini-4-argon-medium",
+      "name": "Gemini 4 Argon (Medium)"
+    },
+    {
+      "id": "gemini-4-argon-low",
+      "name": "Gemini 4 Argon (Low)"
+    },
+    {
+      "id": "claude-opus-5-5-high",
+      "name": "Claude Opus 5.5 (High)"
+    },
+    {
+      "id": "claude-opus-5-5-medium",
+      "name": "Claude Opus 5.5 (Medium)"
+    },
+    {
+      "id": "claude-opus-5-5-low",
+      "name": "Claude Opus 5.5 (Low)"
+    },
+    {
+      "id": "claude-sonnet-5-5-high",
+      "name": "Claude Sonnet 5.5 (High)"
+    },
+    {
+      "id": "claude-sonnet-5-5-medium",
+      "name": "Claude Sonnet 5.5 (Medium)"
+    },
+    {
+      "id": "claude-sonnet-5-5-low",
+      "name": "Claude Sonnet 5.5 (Low)"
+    }
+  ],
+  "agnes": [
+    {
+      "id": "agnes-2.0-flash",
+      "name": "Agnes 2.0 Flash"
+    },
+    {
+      "id": "agnes-2.5-flash",
+      "name": "Agnes 2.5 Flash"
+    },
+    {
+      "id": "agnes-3.0-flash",
+      "name": "Agnes 3.0 Flash"
+    }
+  ],
+  "agnescn": [
+    {
+      "id": "agnes-2.0-flash",
+      "name": "Agnes 2.0 Flash"
+    },
+    {
+      "id": "agnes-2.5-flash",
+      "name": "Agnes 2.5 Flash"
+    },
+    {
+      "id": "agnes-3.0-flash",
+      "name": "Agnes 3.0 Flash"
+    }
+  ],
+  "aihorde": [
+    {
+      "id": "aphrodite/TheDrummer/Cydonia-24B-v4.3",
+      "name": "Cydonia 24B (AI Horde)"
+    },
+    {
+      "id": "aphrodite/TheDrummer/Skyfall-31B-v4.2",
+      "name": "Skyfall 31B (AI Horde)"
+    },
+    {
+      "id": "google/gemma-4-31b",
+      "name": "Gemma 4 31B (AI Horde)"
+    }
+  ],
+  "ainative": [
+    {
+      "id": "qwen3-235b-cerebras",
+      "name": "Qwen3 235B (Cerebras)"
+    },
+    {
+      "id": "qwen3-32b",
+      "name": "Qwen3 32B"
+    },
+    {
+      "id": "qwen3-14b",
+      "name": "Qwen3 14B"
+    },
+    {
+      "id": "qwen3-8b",
+      "name": "Qwen3 8B"
+    },
+    {
+      "id": "llama-4-maverick",
+      "name": "Llama 4 Maverick"
+    },
+    {
+      "id": "llama3.1-8b-cerebras",
+      "name": "Llama 3.1 8B (Cerebras)"
+    },
+    {
+      "id": "deepseek-r1",
+      "name": "DeepSeek R1"
+    },
+    {
+      "id": "nous-coder",
+      "name": "Nous Coder"
+    },
+    {
+      "id": "gemini-flash",
+      "name": "Gemini Flash"
+    }
+  ],
+  "aion": [
+    {
+      "id": "aion-labs/aion-3.0",
+      "name": "Aion 3.0"
+    },
+    {
+      "id": "aion-labs/aion-3.0-mini",
+      "name": "Aion 3.0 Mini"
+    },
+    {
+      "id": "aion-labs/aion-2.5",
+      "name": "Aion 2.5"
+    },
+    {
+      "id": "aion-labs/aion-2.0",
+      "name": "Aion 2.0"
+    },
+    {
+      "id": "aion-labs/aion-rp-llama-3.1-8b",
+      "name": "Aion RP Llama 3.1 8B"
     }
   ],
   "udio": [
@@ -4282,20 +6966,60 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
   ],
   "vp": [
     {
-      "id": "DeepSeek-V4-Flash",
-      "name": "DeepSeek V4 Flash"
+      "id": "deepseek-ai/deepseek-v3.2-maas",
+      "name": "DeepSeek V3.2"
     },
     {
-      "id": "DeepSeek-V4-Pro",
-      "name": "DeepSeek V4 Pro"
+      "id": "deepseek-ai/deepseek-v3.1-maas",
+      "name": "DeepSeek V3.1"
     },
     {
-      "id": "Qwen3.6-35B-A3B",
-      "name": "Qwen 3.6 35B A3B"
+      "id": "qwen/qwen3-next-80b-a3b-instruct-maas",
+      "name": "Qwen3 Next 80B Instruct"
     },
     {
-      "id": "GLM-5.1-FP8",
-      "name": "GLM 5.1"
+      "id": "zai-org/glm-5-maas",
+      "name": "GLM 5"
+    },
+    {
+      "id": "xai/grok-4.6",
+      "name": "Grok 4.6"
+    },
+    {
+      "id": "xai/grok-4.3",
+      "name": "Grok 4.3"
+    },
+    {
+      "id": "xai/grok-4.20-reasoning",
+      "name": "Grok 4.20 Reasoning"
+    },
+    {
+      "id": "xai/grok-4.20-non-reasoning",
+      "name": "Grok 4.20 Non-Reasoning"
+    },
+    {
+      "id": "claude-fable-5-1",
+      "name": "Claude Fable 5.1"
+    },
+    {
+      "id": "claude-fable-5",
+      "name": "Claude Fable 5"
+    },
+    {
+      "id": "claude-opus-5-5",
+      "name": "Claude Opus 5.5"
+    },
+    {
+      "id": "claude-opus-5",
+      "name": "Claude Opus 5"
+    },
+    {
+      "id": "claude-sonnet-5",
+      "name": "Claude Sonnet 5"
+    },
+    {
+      "id": "claude-sonnet-5-5",
+      "name": "Claude Sonnet 5.5"
     },
     {
       "id": "claude-opus-4-8",
@@ -4312,9 +7036,53 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
     {
       "id": "claude-sonnet-4-6",
       "name": "Claude Sonnet 4.6"
+    },
+    {
+      "id": "claude-sonnet-4-5-v2",
+      "name": "Claude Sonnet 4.5 v2"
+    },
+    {
+      "id": "claude-sonnet-4-5",
+      "name": "Claude Sonnet 4.5"
+    },
+    {
+      "id": "claude-sonnet-4",
+      "name": "Claude Sonnet 4"
+    },
+    {
+      "id": "claude-opus-4-5",
+      "name": "Claude Opus 4.5"
+    },
+    {
+      "id": "claude-haiku-4-5",
+      "name": "Claude Haiku 4.5"
+    },
+    {
+      "id": "claude-haiku-5-5",
+      "name": "Claude Haiku 5.5"
     }
   ],
   "vertex": [
+    {
+      "id": "gemini-4-argon",
+      "name": "Gemini 4 Argon (Vertex)"
+    },
+    {
+      "id": "gemini-3.7-flash",
+      "name": "Gemini 3.7 Flash (Vertex)"
+    },
+    {
+      "id": "gemini-3.6-flash",
+      "name": "Gemini 3.6 Flash (Vertex)"
+    },
+    {
+      "id": "gemini-3.5-flash",
+      "name": "Gemini 3.5 Flash (Vertex)"
+    },
+    {
+      "id": "gemini-3.5-flash-lite",
+      "name": "Gemini 3.5 Flash-Lite (Vertex)"
+    },
     {
       "id": "gemini-3.1-pro-preview",
       "name": "Gemini 3.1 Pro Preview (Vertex)"
@@ -4328,61 +7096,171 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
       "name": "Gemini 3 Flash Preview (Vertex)"
     },
     {
-      "id": "gemma-4-31b-it",
-      "name": "Gemma 4 31B (Vertex)"
+      "id": "gemini-2.5-pro",
+      "name": "Gemini 2.5 Pro (Vertex)"
     },
     {
-      "id": "DeepSeek-V4-Flash",
-      "name": "DeepSeek V4 Flash (Vertex Partner)"
+      "id": "gemini-2.5-flash",
+      "name": "Gemini 2.5 Flash (Vertex)"
     },
     {
-      "id": "DeepSeek-V4-Pro",
-      "name": "DeepSeek V4 Pro (Vertex Partner)"
+      "id": "gemini-2.5-flash-lite",
+      "name": "Gemini 2.5 Flash-Lite (Vertex)"
     },
     {
-      "id": "Qwen3.6-35B-A3B",
-      "name": "Qwen3.6 35B A3B (Vertex Partner)"
+      "id": "deepseek-ai/deepseek-v3.2-maas",
+      "name": "DeepSeek V3.2 (Vertex MaaS)"
     },
     {
-      "id": "GLM-5.1-FP8",
-      "name": "GLM-5.1 (Vertex Partner)"
+      "id": "deepseek-ai/deepseek-v3.1-maas",
+      "name": "DeepSeek V3.1 (Vertex MaaS)"
+    },
+    {
+      "id": "qwen/qwen3-next-80b-a3b-instruct-maas",
+      "name": "Qwen3 Next 80B Instruct (Vertex MaaS)"
+    },
+    {
+      "id": "zai-org/glm-5-maas",
+      "name": "GLM 5 (Vertex MaaS)"
+    },
+    {
+      "id": "xai/grok-4.6",
+      "name": "Grok 4.6"
+    },
+    {
+      "id": "xai/grok-4.3",
+      "name": "Grok 4.3"
+    },
+    {
+      "id": "xai/grok-4.20-reasoning",
+      "name": "Grok 4.20 Reasoning"
+    },
+    {
+      "id": "xai/grok-4.20-non-reasoning",
+      "name": "Grok 4.20 Non-Reasoning"
+    },
+    {
+      "id": "claude-fable-5-1",
+      "name": "Claude Fable 5.1 (Vertex)"
+    },
+    {
+      "id": "claude-fable-5",
+      "name": "Claude Fable 5 (Vertex)"
+    },
+    {
+      "id": "claude-opus-5-5",
+      "name": "Claude Opus 5.5 (Vertex)"
+    },
+    {
+      "id": "claude-opus-5",
+      "name": "Claude Opus 5 (Vertex)"
+    },
+    {
+      "id": "claude-sonnet-5",
+      "name": "Claude Sonnet 5 (Vertex)"
+    },
+    {
+      "id": "claude-sonnet-5-5",
+      "name": "Claude Sonnet 5.5 (Vertex)"
+    },
+    {
+      "id": "claude-opus-4-8",
+      "name": "Claude Opus 4.8 (Vertex)"
     },
     {
       "id": "claude-opus-4-7",
       "name": "Claude Opus 4.7 (Vertex)"
     },
     {
+      "id": "claude-opus-4-6",
+      "name": "Claude Opus 4.6 (Vertex)"
+    },
+    {
       "id": "claude-sonnet-4-6",
       "name": "Claude Sonnet 4.6 (Vertex)"
+    },
+    {
+      "id": "claude-sonnet-4-5-v2",
+      "name": "Claude Sonnet 4.5 v2 (Vertex)"
+    },
+    {
+      "id": "claude-sonnet-4-5",
+      "name": "Claude Sonnet 4.5 (Vertex)"
+    },
+    {
+      "id": "claude-opus-4-5",
+      "name": "Claude Opus 4.5 (Vertex)"
+    },
+    {
+      "id": "claude-haiku-4-5",
+      "name": "Claude Haiku 4.5 (Vertex)"
+    },
+    {
+      "id": "claude-haiku-5-5",
+      "name": "Claude Haiku 5.5 (Vertex)"
     }
   ],
   "ddgw": [
     {
-      "id": "gpt-4o-mini",
-      "name": "GPT-4o Mini"
+      "id": "gpt-5.4-mini",
+      "name": "GPT-5.4 Mini"
     },
     {
-      "id": "gpt-5-mini",
-      "name": "GPT-5 Mini"
+      "id": "gpt-5.6-luna",
+      "name": "GPT-5.6 Luna"
     },
     {
-      "id": "claude-3-5-haiku-20241022",
-      "name": "Claude 3.5 Haiku"
+      "id": "claude-haiku-4-5",
+      "name": "Claude Haiku 4.5"
     },
     {
-      "id": "llama-4-scout",
-      "name": "Llama 4 Scout"
+      "id": "mistral-small-2603",
+      "name": "Mistral Small 4"
     },
     {
-      "id": "mistral-small-2501",
-      "name": "Mistral Small"
+      "id": "tinfoil/gpt-oss-120b",
+      "name": "gpt-oss 120B"
     },
     {
-      "id": "o3-mini",
-      "name": "O3 Mini"
+      "id": "tinfoil/gemma4-31b",
+      "name": "Gemma 4 31B"
     }
   ],
   "xai": [
+    {
+      "id": "grok-4.6",
+      "name": "Grok 4.6"
+    },
+    {
+      "id": "grok-4.3",
+      "name": "Grok 4.3"
+    },
+    {
+      "id": "grok-build-0.1",
+      "name": "Grok Build 0.1"
+    },
+    {
+      "id": "grok-4.20-multi-agent-0309",
+      "name": "Grok 4.20 Multi Agent"
+    },
+    {
+      "id": "grok-4.20-0309-reasoning",
+      "name": "Grok 4.20 Reasoning"
+    },
+    {
+      "id": "grok-4.20-0309-non-reasoning",
+      "name": "Grok 4.20"
+    }
+  ],
+  "xao": [
+    {
+      "id": "grok-4.5",
+      "name": "Grok 4.5"
+    },
+    {
+      "id": "grok-4.6",
+      "name": "Grok 4.6"
+    },
     {
       "id": "grok-4.3",
       "name": "Grok 4.3"
@@ -4414,16 +7292,20 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
       "name": "morph-v3-fast"
     },
     {
+      "id": "morph-glm52-744b",
+      "name": "GLM-5.2 744B (Morph)"
+    },
+    {
       "id": "morph-qwen35-397b",
       "name": "Qwen 3.5 397B (Morph)"
     },
     {
-      "id": "morph-minimax27-230b",
-      "name": "MiniMax M2.7 (Morph)"
-    },
-    {
       "id": "morph-qwen36-27b",
       "name": "Qwen 3.6 27B (Morph)"
+    },
+    {
+      "id": "morph-minimax3-428b",
+      "name": "MiniMax M3 (Morph)"
     },
     {
       "id": "morph-dsv4flash",
@@ -4724,8 +7606,16 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
       "name": "Claude Opus 4.7 (CC)"
     },
     {
+      "id": "claude-fable-5",
+      "name": "Claude Fable 5 (CC)"
+    },
+    {
       "id": "claude-opus-4-6",
       "name": "Claude Opus 4.6 (CC)"
+    },
+    {
+      "id": "claude-sonnet-5-5",
+      "name": "Claude Sonnet 5.5 (CC)"
     },
     {
       "id": "claude-sonnet-4-6",
@@ -4758,6 +7648,14 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
     {
       "id": "deepseek/deepseek-v4-flash",
       "name": "DeepSeek V4 Flash (CC)"
+    },
+    {
+      "id": "deepseek/deepseek-v4-flash-vision-exp",
+      "name": "DeepSeek V4 Flash Vision (exp) (CC)"
+    },
+    {
+      "id": "moonshotai/Kimi-K3.1-Pro",
+      "name": "Kimi K3.1 Pro (CC)"
     },
     {
       "id": "moonshotai/Kimi-K2.6",
@@ -4794,310 +7692,590 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
   ],
   "novita": [
     {
+      "id": "deepseek/deepseek-v4-pro",
+      "name": "DeepSeek V4 Pro"
+    },
+    {
+      "id": "deepseek/deepseek-v4-flash",
+      "name": "DeepSeek V4 Flash"
+    },
+    {
+      "id": "deepseek/deepseek-v3.2",
+      "name": "DeepSeek V3.2"
+    },
+    {
+      "id": "moonshotai/kimi-k3",
+      "name": "Kimi K3"
+    },
+    {
+      "id": "moonshotai/kimi-k2.7-code",
+      "name": "Kimi K2.7 Code"
+    },
+    {
+      "id": "moonshotai/kimi-k2.6",
+      "name": "Kimi K2.6"
+    },
+    {
+      "id": "zai-org/glm-5.2",
+      "name": "GLM 5.2"
+    },
+    {
+      "id": "zai-org/glm-5.1",
+      "name": "GLM 5.1"
+    },
+    {
+      "id": "zai-org/glm-4.7",
+      "name": "GLM 4.7"
+    },
+    {
+      "id": "minimax/minimax-m3",
+      "name": "MiniMax M3"
+    },
+    {
+      "id": "minimax/minimax-m2.7",
+      "name": "MiniMax M2.7"
+    },
+    {
+      "id": "qwen/qwen3.7-max",
+      "name": "Qwen3.7 Max"
+    },
+    {
+      "id": "qwen/qwen3.6-plus",
+      "name": "Qwen3.6 Plus"
+    },
+    {
+      "id": "qwen/qwen3.5-397b-a17b",
+      "name": "Qwen3.5 397B A17B"
+    },
+    {
+      "id": "qwen/qwen3-coder-480b-a35b-instruct",
+      "name": "Qwen3 Coder 480B"
+    },
+    {
+      "id": "xiaomimimo/mimo-v2.5-pro",
+      "name": "MiMo V2.5 Pro"
+    },
+    {
+      "id": "openai/gpt-oss-120b",
+      "name": "OpenAI gpt-oss-120b"
+    },
+    {
+      "id": "google/gemma-4-31b-it",
+      "name": "Gemma 4 31B"
+    },
+    {
       "id": "meta-llama/llama-3.1-8b-instruct",
       "name": "Llama 3.1 8B Instruct"
     }
   ],
-  "ws": [
+  "devin-desktop": [
     {
-      "id": "swe-1.6-fast",
-      "name": "SWE-1.6 Fast"
+      "id": "claude-fable-5-1-max",
+      "name": "Claude Fable 5.1 Max"
     },
     {
-      "id": "swe-1.6",
-      "name": "SWE-1.6"
+      "id": "claude-fable-5-1-xhigh",
+      "name": "Claude Fable 5.1 XHigh"
     },
     {
-      "id": "swe-1.5-fast",
-      "name": "SWE-1.5 Fast"
+      "id": "claude-fable-5-1-high",
+      "name": "Claude Fable 5.1 High"
     },
     {
-      "id": "swe-1.5",
-      "name": "SWE-1.5"
+      "id": "claude-fable-5-1-medium",
+      "name": "Claude Fable 5.1 Medium"
     },
     {
-      "id": "claude-opus-4.7-max",
-      "name": "Claude Opus 4.7 Max"
+      "id": "claude-fable-5-1-low",
+      "name": "Claude Fable 5.1 Low"
     },
     {
-      "id": "claude-opus-4.7-xhigh",
-      "name": "Claude Opus 4.7 XHigh"
+      "id": "claude-opus-5-max-fast",
+      "name": "Claude Opus 5 Max Fast"
     },
     {
-      "id": "claude-opus-4.7-high",
-      "name": "Claude Opus 4.7 High"
+      "id": "claude-opus-5-max",
+      "name": "Claude Opus 5 Max"
     },
     {
-      "id": "claude-opus-4.7-medium",
-      "name": "Claude Opus 4.7 Medium"
+      "id": "claude-opus-5-xhigh-fast",
+      "name": "Claude Opus 5 XHigh Fast"
     },
     {
-      "id": "claude-opus-4.7-low",
-      "name": "Claude Opus 4.7 Low"
+      "id": "claude-opus-5-xhigh",
+      "name": "Claude Opus 5 XHigh"
     },
     {
-      "id": "claude-opus-4.7-review",
-      "name": "Claude Opus 4.7 Review"
+      "id": "claude-opus-5-high-fast",
+      "name": "Claude Opus 5 High Fast"
     },
     {
-      "id": "claude-sonnet-4.6-thinking-1m",
+      "id": "claude-opus-5-high",
+      "name": "Claude Opus 5 High"
+    },
+    {
+      "id": "claude-opus-5-medium-fast",
+      "name": "Claude Opus 5 Medium Fast"
+    },
+    {
+      "id": "claude-opus-5-medium",
+      "name": "Claude Opus 5 Medium"
+    },
+    {
+      "id": "claude-opus-5-low-fast",
+      "name": "Claude Opus 5 Low Fast"
+    },
+    {
+      "id": "claude-opus-5-low",
+      "name": "Claude Opus 5 Low"
+    },
+    {
+      "id": "claude-opus-4-8-max-fast",
+      "name": "Claude Opus 4.8 Max Fast"
+    },
+    {
+      "id": "claude-opus-4-8-max",
+      "name": "Claude Opus 4.8 Max"
+    },
+    {
+      "id": "claude-opus-4-8-xhigh-fast",
+      "name": "Claude Opus 4.8 XHigh Fast"
+    },
+    {
+      "id": "claude-opus-4-8-xhigh",
+      "name": "Claude Opus 4.8 XHigh"
+    },
+    {
+      "id": "claude-opus-4-8-high-fast",
+      "name": "Claude Opus 4.8 High Fast"
+    },
+    {
+      "id": "claude-opus-4-8-high",
+      "name": "Claude Opus 4.8 High"
+    },
+    {
+      "id": "claude-opus-4-8-medium-fast",
+      "name": "Claude Opus 4.8 Medium Fast"
+    },
+    {
+      "id": "claude-opus-4-8-medium",
+      "name": "Claude Opus 4.8 Medium"
+    },
+    {
+      "id": "claude-opus-4-8-low-fast",
+      "name": "Claude Opus 4.8 Low Fast"
+    },
+    {
+      "id": "claude-opus-4-8-low",
+      "name": "Claude Opus 4.8 Low"
+    },
+    {
+      "id": "claude-sonnet-5-max",
+      "name": "Claude Sonnet 5 Max"
+    },
+    {
+      "id": "claude-sonnet-5-xhigh",
+      "name": "Claude Sonnet 5 XHigh"
+    },
+    {
+      "id": "claude-sonnet-5-high",
+      "name": "Claude Sonnet 5 High"
+    },
+    {
+      "id": "claude-sonnet-5-medium",
+      "name": "Claude Sonnet 5 Medium"
+    },
+    {
+      "id": "claude-sonnet-5-low",
+      "name": "Claude Sonnet 5 Low"
+    },
+    {
+      "id": "claude-sonnet-4-6-thinking-1m",
       "name": "Claude Sonnet 4.6 Thinking 1M"
     },
     {
-      "id": "claude-sonnet-4.6-1m",
+      "id": "claude-sonnet-4-6-1m",
       "name": "Claude Sonnet 4.6 1M"
     },
     {
-      "id": "claude-sonnet-4.6-thinking",
+      "id": "claude-sonnet-4-6-thinking",
       "name": "Claude Sonnet 4.6 Thinking"
     },
     {
-      "id": "claude-sonnet-4.6",
+      "id": "claude-sonnet-4-6",
       "name": "Claude Sonnet 4.6"
     },
     {
-      "id": "claude-opus-4.6-thinking",
-      "name": "Claude Opus 4.6 Thinking"
-    },
-    {
-      "id": "claude-opus-4.6",
-      "name": "Claude Opus 4.6"
-    },
-    {
-      "id": "claude-opus-4.5-thinking",
-      "name": "Claude Opus 4.5 Thinking"
-    },
-    {
-      "id": "claude-opus-4.5",
-      "name": "Claude Opus 4.5"
-    },
-    {
-      "id": "claude-sonnet-4.5-thinking",
-      "name": "Claude Sonnet 4.5 Thinking"
-    },
-    {
-      "id": "claude-sonnet-4.5",
-      "name": "Claude Sonnet 4.5"
-    },
-    {
-      "id": "claude-haiku-4.5",
+      "id": "MODEL_PRIVATE_11",
       "name": "Claude Haiku 4.5"
     },
     {
-      "id": "gpt-5.5-xhigh-fast",
-      "name": "GPT-5.5 XHigh Fast"
+      "id": "gpt-5-6-sol-max-priority",
+      "name": "GPT-5.6 Sol Max Thinking Fast"
     },
     {
-      "id": "gpt-5.5-xhigh",
-      "name": "GPT-5.5 XHigh"
+      "id": "gpt-5-6-sol-max",
+      "name": "GPT-5.6 Sol Max Thinking"
     },
     {
-      "id": "gpt-5.5-high-fast",
-      "name": "GPT-5.5 High Fast"
+      "id": "gpt-5-6-sol-xhigh-priority",
+      "name": "GPT-5.6 Sol XHigh Thinking Fast"
     },
     {
-      "id": "gpt-5.5-high",
-      "name": "GPT-5.5 High"
+      "id": "gpt-5-6-sol-xhigh",
+      "name": "GPT-5.6 Sol XHigh Thinking"
     },
     {
-      "id": "gpt-5.5-medium-fast",
-      "name": "GPT-5.5 Medium Fast"
+      "id": "gpt-5-6-sol-high-priority",
+      "name": "GPT-5.6 Sol High Thinking Fast"
     },
     {
-      "id": "gpt-5.5-medium",
-      "name": "GPT-5.5 Medium"
+      "id": "gpt-5-6-sol-high",
+      "name": "GPT-5.6 Sol High Thinking"
     },
     {
-      "id": "gpt-5.5-low-fast",
-      "name": "GPT-5.5 Low Fast"
+      "id": "gpt-5-6-sol-medium-priority",
+      "name": "GPT-5.6 Sol Medium Thinking Fast"
     },
     {
-      "id": "gpt-5.5-low",
-      "name": "GPT-5.5 Low"
+      "id": "gpt-5-6-sol-medium",
+      "name": "GPT-5.6 Sol Medium Thinking"
     },
     {
-      "id": "gpt-5.5-none-fast",
-      "name": "GPT-5.5 None Fast"
+      "id": "gpt-5-6-sol-low-priority",
+      "name": "GPT-5.6 Sol Low Thinking Fast"
     },
     {
-      "id": "gpt-5.5-none",
-      "name": "GPT-5.5 None"
+      "id": "gpt-5-6-sol-low",
+      "name": "GPT-5.6 Sol Low Thinking"
     },
     {
-      "id": "gpt-5.4-xhigh-fast",
-      "name": "GPT-5.4 XHigh Fast"
+      "id": "gpt-5-6-sol-none-priority",
+      "name": "GPT-5.6 Sol No Thinking Fast"
     },
     {
-      "id": "gpt-5.4-xhigh",
-      "name": "GPT-5.4 XHigh"
+      "id": "gpt-5-6-sol-none",
+      "name": "GPT-5.6 Sol No Thinking"
     },
     {
-      "id": "gpt-5.4-high-fast",
-      "name": "GPT-5.4 High Fast"
+      "id": "gpt-5-6-terra-max-priority",
+      "name": "GPT-5.6 Terra Max Thinking Fast"
     },
     {
-      "id": "gpt-5.4-high",
-      "name": "GPT-5.4 High"
+      "id": "gpt-5-6-terra-max",
+      "name": "GPT-5.6 Terra Max Thinking"
     },
     {
-      "id": "gpt-5.4-medium-fast",
-      "name": "GPT-5.4 Medium Fast"
+      "id": "gpt-5-6-terra-xhigh-priority",
+      "name": "GPT-5.6 Terra XHigh Thinking Fast"
     },
     {
-      "id": "gpt-5.4-medium",
-      "name": "GPT-5.4 Medium"
+      "id": "gpt-5-6-terra-xhigh",
+      "name": "GPT-5.6 Terra XHigh Thinking"
     },
     {
-      "id": "gpt-5.4-low-fast",
-      "name": "GPT-5.4 Low Fast"
+      "id": "gpt-5-6-terra-high-priority",
+      "name": "GPT-5.6 Terra High Thinking Fast"
     },
     {
-      "id": "gpt-5.4-low",
-      "name": "GPT-5.4 Low"
+      "id": "gpt-5-6-terra-high",
+      "name": "GPT-5.6 Terra High Thinking"
     },
     {
-      "id": "gpt-5.4-none-fast",
-      "name": "GPT-5.4 None Fast"
+      "id": "gpt-5-6-terra-medium-priority",
+      "name": "GPT-5.6 Terra Medium Thinking Fast"
     },
     {
-      "id": "gpt-5.4-none",
-      "name": "GPT-5.4 None"
+      "id": "gpt-5-6-terra-medium",
+      "name": "GPT-5.6 Terra Medium Thinking"
     },
     {
-      "id": "gpt-5.4-mini-xhigh",
-      "name": "GPT-5.4 Mini XHigh"
+      "id": "gpt-5-6-terra-low-priority",
+      "name": "GPT-5.6 Terra Low Thinking Fast"
     },
     {
-      "id": "gpt-5.4-mini-high",
-      "name": "GPT-5.4 Mini High"
+      "id": "gpt-5-6-terra-low",
+      "name": "GPT-5.6 Terra Low Thinking"
     },
     {
-      "id": "gpt-5.4-mini-medium",
-      "name": "GPT-5.4 Mini Medium"
+      "id": "gpt-5-6-terra-none-priority",
+      "name": "GPT-5.6 Terra No Thinking Fast"
     },
     {
-      "id": "gpt-5.4-mini-low",
-      "name": "GPT-5.4 Mini Low"
+      "id": "gpt-5-6-terra-none",
+      "name": "GPT-5.6 Terra No Thinking"
     },
     {
-      "id": "gpt-5.3-codex-xhigh-fast",
-      "name": "GPT-5.3 Codex XHigh Fast"
+      "id": "gpt-5-6-luna-max-priority",
+      "name": "GPT-5.6 Luna Max Thinking Fast"
     },
     {
-      "id": "gpt-5.3-codex-xhigh",
-      "name": "GPT-5.3 Codex XHigh"
+      "id": "gpt-5-6-luna-max",
+      "name": "GPT-5.6 Luna Max Thinking"
     },
     {
-      "id": "gpt-5.3-codex-high-fast",
-      "name": "GPT-5.3 Codex High Fast"
+      "id": "gpt-5-6-luna-xhigh-priority",
+      "name": "GPT-5.6 Luna XHigh Thinking Fast"
     },
     {
-      "id": "gpt-5.3-codex-high",
-      "name": "GPT-5.3 Codex High"
+      "id": "gpt-5-6-luna-xhigh",
+      "name": "GPT-5.6 Luna XHigh Thinking"
     },
     {
-      "id": "gpt-5.3-codex-medium-fast",
-      "name": "GPT-5.3 Codex Medium Fast"
+      "id": "gpt-5-6-luna-high-priority",
+      "name": "GPT-5.6 Luna High Thinking Fast"
     },
     {
-      "id": "gpt-5.3-codex-medium",
-      "name": "GPT-5.3 Codex Medium"
+      "id": "gpt-5-6-luna-high",
+      "name": "GPT-5.6 Luna High Thinking"
     },
     {
-      "id": "gpt-5.3-codex-low-fast",
-      "name": "GPT-5.3 Codex Low Fast"
+      "id": "gpt-5-6-luna-medium-priority",
+      "name": "GPT-5.6 Luna Medium Thinking Fast"
     },
     {
-      "id": "gpt-5.3-codex-low",
-      "name": "GPT-5.3 Codex Low"
+      "id": "gpt-5-6-luna-medium",
+      "name": "GPT-5.6 Luna Medium Thinking"
     },
     {
-      "id": "gpt-5.2-xhigh",
-      "name": "GPT-5.2 XHigh"
+      "id": "gpt-5-6-luna-low-priority",
+      "name": "GPT-5.6 Luna Low Thinking Fast"
     },
     {
-      "id": "gpt-5.2-high",
-      "name": "GPT-5.2 High"
+      "id": "gpt-5-6-luna-low",
+      "name": "GPT-5.6 Luna Low Thinking"
     },
     {
-      "id": "gpt-5.2-medium",
-      "name": "GPT-5.2 Medium"
+      "id": "gpt-5-6-luna-none-priority",
+      "name": "GPT-5.6 Luna No Thinking Fast"
     },
     {
-      "id": "gpt-5.2-low",
-      "name": "GPT-5.2 Low"
+      "id": "gpt-5-6-luna-none",
+      "name": "GPT-5.6 Luna No Thinking"
     },
     {
-      "id": "gpt-5.2-none",
-      "name": "GPT-5.2 None"
+      "id": "kimi-k3-max",
+      "name": "Kimi K3 Max"
     },
     {
-      "id": "gpt-5",
-      "name": "GPT-5"
+      "id": "kimi-k3-high",
+      "name": "Kimi K3 High"
     },
     {
-      "id": "gpt-4.1",
-      "name": "GPT-4.1"
+      "id": "kimi-k3-low",
+      "name": "Kimi K3 Low"
     },
     {
-      "id": "gpt-4.1-mini",
-      "name": "GPT-4.1 Mini"
+      "id": "kimi-k2-7",
+      "name": "Kimi K2.7"
     },
     {
-      "id": "gpt-4.1-nano",
-      "name": "GPT-4.1 Nano"
+      "id": "glm-5-3-max",
+      "name": "GLM-5.3 Max"
     },
     {
-      "id": "gpt-4o",
-      "name": "GPT-4o"
+      "id": "glm-5-3-high",
+      "name": "GLM-5.3 High"
     },
     {
-      "id": "gpt-4o-mini",
-      "name": "GPT-4o Mini"
+      "id": "glm-5-3-low",
+      "name": "GLM-5.3 Low"
     },
     {
-      "id": "gemini-3.1-pro-high",
-      "name": "Gemini 3.1 Pro High"
+      "id": "glm-5-3-flash-max",
+      "name": "GLM-5.3 Flash Max"
     },
     {
-      "id": "gemini-3.1-pro-low",
-      "name": "Gemini 3.1 Pro Low"
+      "id": "glm-5-3-flash-high",
+      "name": "GLM-5.3 Flash High"
     },
     {
-      "id": "gemini-3.0-flash-high",
-      "name": "Gemini 3 Flash High"
+      "id": "glm-5-3-flash-low",
+      "name": "GLM-5.3 Flash Low"
     },
     {
-      "id": "gemini-3.0-flash-medium",
-      "name": "Gemini 3 Flash Medium"
+      "id": "swe-1-7",
+      "name": "SWE-1.7 Max"
     },
     {
-      "id": "gemini-3.0-flash-low",
-      "name": "Gemini 3 Flash Low"
+      "id": "swe-1-7-medium",
+      "name": "SWE-1.7 Medium"
     },
     {
-      "id": "gemini-3.0-flash-minimal",
-      "name": "Gemini 3 Flash Minimal"
+      "id": "swe-1-7-lightning",
+      "name": "SWE-1.7 Lightning Max"
     },
     {
-      "id": "gemini-2.5-pro",
-      "name": "Gemini 2.5 Pro"
+      "id": "swe-1-7-lightning-medium",
+      "name": "SWE-1.7 Lightning Medium"
     },
     {
-      "id": "deepseek-v4",
-      "name": "DeepSeek V4"
+      "id": "adaptive",
+      "name": "Adaptive"
     },
     {
-      "id": "kimi-k2.6",
-      "name": "Kimi K2.6"
+      "id": "grok-4-6-xhigh",
+      "name": "Grok 4.6 XHigh"
     },
     {
-      "id": "kimi-k2.5",
-      "name": "Kimi K2.5"
+      "id": "grok-4-6-high",
+      "name": "Grok 4.6 High"
+    },
+    {
+      "id": "grok-4-6-medium",
+      "name": "Grok 4.6 Medium"
+    },
+    {
+      "id": "grok-4-6-low",
+      "name": "Grok 4.6 Low"
+    },
+    {
+      "id": "inkling-max",
+      "name": "Inkling Max"
+    },
+    {
+      "id": "inkling-xhigh",
+      "name": "Inkling X-High"
+    },
+    {
+      "id": "inkling-high",
+      "name": "Inkling High"
+    },
+    {
+      "id": "inkling-medium",
+      "name": "Inkling Medium"
+    },
+    {
+      "id": "inkling-low",
+      "name": "Inkling Low"
+    },
+    {
+      "id": "inkling-none",
+      "name": "Inkling None"
+    },
+    {
+      "id": "deepseek-v4-flash-max",
+      "name": "DeepSeek V4 Flash Max"
+    },
+    {
+      "id": "deepseek-v4-flash-high",
+      "name": "DeepSeek V4 Flash High"
+    },
+    {
+      "id": "deepseek-v4-flash-low",
+      "name": "DeepSeek V4 Flash Low"
+    },
+    {
+      "id": "nemotron-3-ultra-high",
+      "name": "Nemotron 3 Ultra High"
+    },
+    {
+      "id": "nemotron-3-ultra-medium",
+      "name": "Nemotron 3 Ultra Medium"
+    },
+    {
+      "id": "nemotron-3-ultra-none",
+      "name": "Nemotron 3 Ultra None"
+    },
+    {
+      "id": "gemini-3-7-flash-high",
+      "name": "Gemini 3.7 Flash High"
+    },
+    {
+      "id": "gemini-3-7-flash-medium",
+      "name": "Gemini 3.7 Flash Medium"
+    },
+    {
+      "id": "gemini-3-7-flash-low",
+      "name": "Gemini 3.7 Flash Low"
+    },
+    {
+      "id": "gemini-3-1-pro-high",
+      "name": "Gemini 3.1 Pro High Thinking"
+    },
+    {
+      "id": "gemini-3-1-pro-low",
+      "name": "Gemini 3.1 Pro Low Thinking"
+    },
+    {
+      "id": "deepseek-v4-pro-max",
+      "name": "DeepSeek V4 Pro Max"
+    },
+    {
+      "id": "deepseek-v4-pro-high",
+      "name": "DeepSeek V4 Pro High"
+    },
+    {
+      "id": "deepseek-v4-pro-low",
+      "name": "DeepSeek V4 Pro Low"
+    }
+  ],
+  "zc": [
+    {
+      "id": "glm-5.3-flash",
+      "name": "GLM 5.3 Flash"
+    },
+    {
+      "id": "glm-5.3",
+      "name": "GLM 5.3"
+    },
+    {
+      "id": "glm-5.3-max",
+      "name": "GLM 5.3 Max"
+    },
+    {
+      "id": "glm-5.2",
+      "name": "GLM 5.2"
     },
     {
       "id": "glm-5.1",
-      "name": "GLM-5.1"
+      "name": "GLM 5.1"
+    },
+    {
+      "id": "glm-5",
+      "name": "GLM 5"
+    },
+    {
+      "id": "glm-5-turbo",
+      "name": "GLM 5 Turbo"
+    },
+    {
+      "id": "glm-4.7-flash",
+      "name": "GLM 4.7 Flash"
+    },
+    {
+      "id": "glm-4.7",
+      "name": "GLM 4.7"
+    },
+    {
+      "id": "glm-4.6v",
+      "name": "GLM 4.6V (Vision)"
+    },
+    {
+      "id": "glm-4.6",
+      "name": "GLM 4.6"
+    },
+    {
+      "id": "glm-4.5v",
+      "name": "GLM 4.5V (Vision)"
+    },
+    {
+      "id": "glm-4.5",
+      "name": "GLM 4.5"
+    },
+    {
+      "id": "glm-4.5-air",
+      "name": "GLM 4.5 Air"
+    }
+  ],
+  "mmcode": [
+    {
+      "id": "MiniMax-M3.1-Flash",
+      "name": "MiniMax M3.1 Flash"
+    },
+    {
+      "id": "MiniMax-M3",
+      "name": "MiniMax M3"
     }
   ],
   "nanogpt": [
@@ -5112,6 +8290,206 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
     {
       "id": "gpt-4o-mini",
       "name": "gpt-4o-mini"
+    }
+  ],
+  "nan": [
+    {
+      "id": "deepseek-v4-flash",
+      "name": "DeepSeek V4 Flash"
+    },
+    {
+      "id": "mimo-v2.5",
+      "name": "MiMo V2.5"
+    },
+    {
+      "id": "mimo-v2.6-flash",
+      "name": "MiMo V2.6 Flash"
+    },
+    {
+      "id": "qwen3.8-flash",
+      "name": "Qwen3.8 Flash"
+    },
+    {
+      "id": "qwen3.6",
+      "name": "Qwen3.6"
+    },
+    {
+      "id": "glm5.3",
+      "name": "GLM 5.3"
+    },
+    {
+      "id": "glm5.3-flash",
+      "name": "GLM 5.3 Flash"
+    },
+    {
+      "id": "gemma4",
+      "name": "Gemma 4"
+    }
+  ],
+  "apmix": [
+    {
+      "id": "claude-haiku-4-5",
+      "name": "claude-haiku-4-5"
+    },
+    {
+      "id": "claude-sonnet-5",
+      "name": "claude-sonnet-5"
+    },
+    {
+      "id": "claude-opus-5",
+      "name": "claude-opus-5"
+    },
+    {
+      "id": "claude-opus-4-8",
+      "name": "claude-opus-4-8"
+    },
+    {
+      "id": "claude-opus-4-7",
+      "name": "claude-opus-4-7"
+    },
+    {
+      "id": "claude-opus-4-6",
+      "name": "claude-opus-4-6"
+    },
+    {
+      "id": "claude-fable-5",
+      "name": "claude-fable-5"
+    },
+    {
+      "id": "claude-sonnet-4-6",
+      "name": "claude-sonnet-4-6"
+    },
+    {
+      "id": "gpt-5.6-terra",
+      "name": "gpt-5.6-terra"
+    },
+    {
+      "id": "gpt-5.6-sol",
+      "name": "gpt-5.6-sol"
+    },
+    {
+      "id": "gpt-5.6-luna",
+      "name": "gpt-5.6-luna"
+    },
+    {
+      "id": "gpt-5.5",
+      "name": "gpt-5.5"
+    },
+    {
+      "id": "gpt-6-astra",
+      "name": "gpt-6-astra"
+    },
+    {
+      "id": "gpt-6-sol",
+      "name": "gpt-6-sol"
+    },
+    {
+      "id": "gpt-6-luna",
+      "name": "gpt-6-luna"
+    },
+    {
+      "id": "gpt-6-luna-free",
+      "name": "gpt-6-luna-free"
+    },
+    {
+      "id": "gemini-3.8-flash",
+      "name": "gemini-3.8-flash"
+    },
+    {
+      "id": "gemini-3.7-flash",
+      "name": "gemini-3.7-flash"
+    },
+    {
+      "id": "gemini-3.6-flash",
+      "name": "gemini-3.6-flash"
+    },
+    {
+      "id": "gemini-3.1-pro",
+      "name": "gemini-3.1-pro"
+    },
+    {
+      "id": "grok-4.5",
+      "name": "grok-4.5"
+    },
+    {
+      "id": "grok-4.6",
+      "name": "grok-4.6"
+    },
+    {
+      "id": "grok-4.7",
+      "name": "grok-4.7"
+    },
+    {
+      "id": "deepseek-v4-pro",
+      "name": "deepseek-v4-pro"
+    },
+    {
+      "id": "deepseek-v4-flash",
+      "name": "deepseek-v4-flash"
+    },
+    {
+      "id": "deepseek-v4.1-flash",
+      "name": "deepseek-v4.1-flash"
+    },
+    {
+      "id": "deepseek-v4-flash-free",
+      "name": "deepseek-v4-flash-free"
+    },
+    {
+      "id": "qwen3.8-flash",
+      "name": "qwen3.8-flash"
+    },
+    {
+      "id": "qwen3.8-max",
+      "name": "qwen3.8-max"
+    },
+    {
+      "id": "glm-5.3-flash",
+      "name": "glm-5.3-flash"
+    },
+    {
+      "id": "glm-5.3",
+      "name": "glm-5.3"
+    },
+    {
+      "id": "glm-5.2",
+      "name": "glm-5.2"
+    },
+    {
+      "id": "glm-5-turbo",
+      "name": "glm-5-turbo"
+    },
+    {
+      "id": "kimi-k2.7-code",
+      "name": "kimi-k2.7-code"
+    },
+    {
+      "id": "kimi-k3",
+      "name": "kimi-k3"
+    },
+    {
+      "id": "mimo-v2.5-pro",
+      "name": "mimo-v2.5-pro"
+    },
+    {
+      "id": "mimo-v2.5",
+      "name": "mimo-v2.5"
+    },
+    {
+      "id": "hy4-preview",
+      "name": "hy4-preview"
+    },
+    {
+      "id": "composer-2.5-fast",
+      "name": "composer-2.5-fast"
+    },
+    {
+      "id": "minimax-m3",
+      "name": "MiniMax M3"
+    },
+    {
+      "id": "muse-spark-1.3",
+      "name": "muse-spark-1.3"
     }
   ],
   "scw": [
@@ -5142,23 +8520,27 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
   ],
   "agentrouter": [
     {
-      "id": "claude-opus-4-6",
-      "name": "Claude 4.6 Opus"
+      "id": "claude-opus-4-8",
+      "name": "Claude Opus 4.8"
     },
     {
-      "id": "claude-haiku-4-5-20251001",
-      "name": "Claude 4.5 Haiku"
+      "id": "claude-opus-5",
+      "name": "Claude Opus 5"
     },
     {
-      "id": "glm-5.1",
-      "name": "GLM 5.1"
-    },
-    {
-      "id": "deepseek-v3.2",
-      "name": "DeepSeek V3.2"
+      "id": "gpt-5.6-sol",
+      "name": "GPT-5.6 Sol"
     }
   ],
   "zai": [
+    {
+      "id": "glm-5.3",
+      "name": "GLM 5.3"
+    },
+    {
+      "id": "glm-5.3-flash",
+      "name": "GLM 5.3 Flash"
+    },
     {
       "id": "glm-5.2",
       "name": "GLM 5.2"
@@ -5182,6 +8564,68 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
     {
       "id": "glm-4.7",
       "name": "GLM 4.7"
+    }
+  ],
+  "bigmodel": [
+    {
+      "id": "glm-5.3",
+      "name": "GLM 5.3"
+    },
+    {
+      "id": "glm-5.3-flash",
+      "name": "GLM 5.3 Flash"
+    },
+    {
+      "id": "glm-5.2",
+      "name": "GLM 5.2"
+    },
+    {
+      "id": "glm-5.1",
+      "name": "GLM 5.1"
+    },
+    {
+      "id": "glm-5-turbo",
+      "name": "GLM 5 Turbo"
+    },
+    {
+      "id": "glm-5",
+      "name": "GLM 5"
+    },
+    {
+      "id": "glm-4.7",
+      "name": "GLM 4.7"
+    },
+    {
+      "id": "glm-4.7-flash",
+      "name": "GLM 4.7 Flash"
+    },
+    {
+      "id": "glm-4.7-flashx",
+      "name": "GLM 4.7 FlashX"
+    },
+    {
+      "id": "glm-4.6",
+      "name": "GLM 4.6"
+    },
+    {
+      "id": "glm-4.5-air",
+      "name": "GLM 4.5 Air"
+    },
+    {
+      "id": "glm-4.5-airx",
+      "name": "GLM 4.5 AirX"
+    },
+    {
+      "id": "glm-4.5-flash",
+      "name": "GLM 4.5 Flash"
+    },
+    {
+      "id": "glm-4-flash-250414",
+      "name": "GLM 4 Flash 250414"
+    },
+    {
+      "id": "glm-4-flashx-250414",
+      "name": "GLM 4 FlashX 250414"
     }
   ],
   "huggingchat": [
@@ -5316,6 +8760,26 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
       "name": "Hunyuan T1 + Web Search (via Yuanbao)"
     }
   ],
+  "ntw": [
+    {
+      "id": "notrack-c",
+      "name": "NoTrack C"
+    }
+  ],
+  "tasw": [
+    {
+      "id": "hy3-g",
+      "name": "HY3-G (via Tencent AI Studio)"
+    },
+    {
+      "id": "hunyuan-default",
+      "name": "Hunyuan Default (via Tencent AI Studio)"
+    },
+    {
+      "id": "hunyuan-3d",
+      "name": "Hunyuan 3D (via Tencent AI Studio)"
+    }
+  ],
   "galadriel": [
     {
       "id": "galadriel-latest",
@@ -5356,24 +8820,8 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
   ],
   "cf": [
     {
-      "id": "@cf/meta/llama-3.3-70b-instruct",
-      "name": "Llama 3.3 70B (🆓 ~150 resp/day)"
-    },
-    {
-      "id": "@cf/meta/llama-3.1-8b-instruct",
-      "name": "Llama 3.1 8B (🆓)"
-    },
-    {
-      "id": "@cf/google/gemma-3-12b-it",
-      "name": "Gemma 3 12B (🆓)"
-    },
-    {
       "id": "@cf/mistral/mistral-7b-instruct-v0.2-lora",
       "name": "Mistral 7B (🆓)"
-    },
-    {
-      "id": "@cf/qwen/qwen2.5-coder-15b-instruct",
-      "name": "Qwen 2.5 Coder 15B (🆓)"
     },
     {
       "id": "@cf/qwen/qwen2.5-coder-32b-instruct",
@@ -5385,7 +8833,7 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
     },
     {
       "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-      "name": "Llama 3.3 70B (FP8 Fast 🆓)"
+      "name": "Llama 3.3 70B (FP8 Fast 🆓 ~150 resp/day)"
     },
     {
       "id": "@cf/meta/llama-3.2-3b-instruct",
@@ -5411,7 +8859,7 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
   "nous": [
     {
       "id": "Hermes-4-405B",
-      "name": "Hermes 4 7B (Nous Research)"
+      "name": "Hermes 4 405B (Nous Research)"
     },
     {
       "id": "Hermes-4-70B",
@@ -5420,102 +8868,118 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
   ],
   "ali": [
     {
-      "id": "qwen-max",
-      "name": "Qwen Max"
+      "id": "qwen3.8-max",
+      "name": "Qwen3.8 Max"
     },
     {
-      "id": "qwen-max-2025-01-25",
-      "name": "Qwen Max (2025-01-25)"
+      "id": "qwen3.7-max",
+      "name": "Qwen3.7 Max"
     },
     {
-      "id": "qwen-plus",
-      "name": "Qwen Plus"
+      "id": "qwen3.7-plus",
+      "name": "Qwen3.7 Plus"
     },
     {
-      "id": "qwen-plus-2025-07-14",
-      "name": "Qwen Plus (2025-07-14)"
+      "id": "qwen3.6-plus",
+      "name": "Qwen3.6 Plus"
     },
     {
-      "id": "qwen-turbo",
-      "name": "Qwen Turbo"
+      "id": "qwen3.6-27b",
+      "name": "Qwen3.6 27B"
     },
     {
-      "id": "qwen-turbo-2025-11-01",
-      "name": "Qwen Turbo (2025-11-01)"
+      "id": "qwen3.6-35b-a3b",
+      "name": "Qwen3.6 35B A3B"
     },
     {
-      "id": "qwen3-coder-plus",
-      "name": "Qwen3 Coder Plus"
+      "id": "qwen3.5-plus",
+      "name": "Qwen3.5 Plus"
     },
     {
-      "id": "qwen3-coder-flash",
-      "name": "Qwen3 Coder Flash"
+      "id": "qwen3.5-122b-a10b",
+      "name": "Qwen3.5 122B A10B"
     },
     {
-      "id": "qwq-plus",
-      "name": "QwQ Plus (Reasoning)"
+      "id": "qwen3.5-397b-a17b",
+      "name": "Qwen3.5 397B A17B"
     },
     {
-      "id": "qwq-32b",
-      "name": "QwQ 32B"
+      "id": "glm-5.2",
+      "name": "GLM 5.2"
     },
     {
-      "id": "qwen3-32b",
-      "name": "Qwen3 32B"
+      "id": "glm-5.2-fast-preview",
+      "name": "GLM 5.2 Fast Preview"
     },
     {
-      "id": "qwen3-235b-a22b",
-      "name": "Qwen3 235B A22B"
+      "id": "deepseek-v4-pro",
+      "name": "DeepSeek V4 Pro"
+    },
+    {
+      "id": "deepseek-v4-flash",
+      "name": "DeepSeek V4 Flash"
+    },
+    {
+      "id": "kimi-k2.7-code",
+      "name": "Kimi K2.7 Code"
     }
   ],
   "ali-cn": [
     {
-      "id": "qwen-max",
-      "name": "Qwen Max"
+      "id": "qwen3.8-max",
+      "name": "Qwen3.8 Max"
     },
     {
-      "id": "qwen-max-2025-01-25",
-      "name": "Qwen Max (2025-01-25)"
+      "id": "qwen3.7-max",
+      "name": "Qwen3.7 Max"
     },
     {
-      "id": "qwen-plus",
-      "name": "Qwen Plus"
+      "id": "qwen3.7-plus",
+      "name": "Qwen3.7 Plus"
     },
     {
-      "id": "qwen-plus-2025-07-14",
-      "name": "Qwen Plus (2025-07-14)"
+      "id": "qwen3.6-plus",
+      "name": "Qwen3.6 Plus"
     },
     {
-      "id": "qwen-turbo",
-      "name": "Qwen Turbo"
+      "id": "qwen3.6-27b",
+      "name": "Qwen3.6 27B"
     },
     {
-      "id": "qwen-turbo-2025-11-01",
-      "name": "Qwen Turbo (2025-11-01)"
+      "id": "qwen3.6-35b-a3b",
+      "name": "Qwen3.6 35B A3B"
     },
     {
-      "id": "qwen3-coder-plus",
-      "name": "Qwen3 Coder Plus"
+      "id": "qwen3.5-plus",
+      "name": "Qwen3.5 Plus"
     },
     {
-      "id": "qwen3-coder-flash",
-      "name": "Qwen3 Coder Flash"
+      "id": "qwen3.5-122b-a10b",
+      "name": "Qwen3.5 122B A10B"
     },
     {
-      "id": "qwq-plus",
-      "name": "QwQ Plus (Reasoning)"
+      "id": "qwen3.5-397b-a17b",
+      "name": "Qwen3.5 397B A17B"
     },
     {
-      "id": "qwq-32b",
-      "name": "QwQ 32B"
+      "id": "glm-5.2",
+      "name": "GLM 5.2"
     },
     {
-      "id": "qwen3-32b",
-      "name": "Qwen3 32B"
+      "id": "glm-5.2-fast-preview",
+      "name": "GLM 5.2 Fast Preview"
     },
     {
-      "id": "qwen3-235b-a22b",
-      "name": "Qwen3 235B A22B"
+      "id": "deepseek-v4-pro",
+      "name": "DeepSeek V4 Pro"
+    },
+    {
+      "id": "deepseek-v4-flash",
+      "name": "DeepSeek V4 Flash"
+    },
+    {
+      "id": "kimi-k2.7-code",
+      "name": "Kimi K2.7 Code"
     }
   ],
   "doubao": [
@@ -5594,44 +9058,28 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
   ],
   "bcp": [
     {
+      "id": "qwen3.8-max-preview",
+      "name": "Qwen3.8 Max Preview"
+    },
+    {
+      "id": "qwen3.7-max",
+      "name": "Qwen3.7 Max"
+    },
+    {
       "id": "qwen3.7-plus",
-      "name": "Qwen3.7 Plus(vision)"
+      "name": "Qwen3.7 Plus"
     },
     {
-      "id": "qwen3-coder-plus",
-      "name": "Qwen3 Coder Plus"
+      "id": "qwen3.6-flash",
+      "name": "Qwen3.6 Flash"
     },
     {
-      "id": "qwen3-coder-next",
-      "name": "Qwen3 Coder Next"
+      "id": "glm-5.2",
+      "name": "GLM 5.2"
     },
     {
-      "id": "glm-4.7",
-      "name": "GLM 4.7"
-    },
-    {
-      "id": "qwen3.6-plus",
-      "name": "Qwen3.6 Plus(vision)"
-    },
-    {
-      "id": "qwen3.5-plus",
-      "name": "Qwen3.5 Plus(vision)"
-    },
-    {
-      "id": "qwen3-max-2026-01-23",
-      "name": "Qwen3 Max"
-    },
-    {
-      "id": "kimi-k2.5",
-      "name": "Kimi K2.5(vision)"
-    },
-    {
-      "id": "glm-5",
-      "name": "GLM 5"
-    },
-    {
-      "id": "MiniMax-M2.5",
-      "name": "MiniMax M2.5"
+      "id": "deepseek-v4-pro",
+      "name": "DeepSeek V4 Pro"
     }
   ],
   "gigachat": [
@@ -5650,194 +9098,1000 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
   ],
   "dv": [
     {
-      "id": "swe-1.6-fast",
-      "name": "SWE-1.6 Fast"
+      "id": "claude-fable-5-1-max",
+      "name": "Claude Fable 5.1 Max"
     },
     {
-      "id": "swe-1.6",
-      "name": "SWE-1.6"
+      "id": "claude-fable-5-1-xhigh",
+      "name": "Claude Fable 5.1 XHigh"
     },
     {
-      "id": "swe-1.5-fast",
-      "name": "SWE-1.5 Fast"
+      "id": "claude-fable-5-1-high",
+      "name": "Claude Fable 5.1 High"
     },
     {
-      "id": "swe-1.5",
-      "name": "SWE-1.5"
+      "id": "claude-fable-5-1-medium",
+      "name": "Claude Fable 5.1 Medium"
     },
     {
-      "id": "claude-opus-4.7-max",
-      "name": "Claude Opus 4.7 Max"
+      "id": "claude-fable-5-1-low",
+      "name": "Claude Fable 5.1 Low"
     },
     {
-      "id": "claude-opus-4.7-high",
-      "name": "Claude Opus 4.7 High"
+      "id": "claude-opus-5-max-fast",
+      "name": "Claude Opus 5 Max Fast"
     },
     {
-      "id": "claude-opus-4.7-medium",
-      "name": "Claude Opus 4.7 Medium"
+      "id": "claude-opus-5-max",
+      "name": "Claude Opus 5 Max"
     },
     {
-      "id": "claude-opus-4.7-low",
-      "name": "Claude Opus 4.7 Low"
+      "id": "claude-opus-5-xhigh-fast",
+      "name": "Claude Opus 5 XHigh Fast"
     },
     {
-      "id": "claude-sonnet-4.6-thinking-1m",
+      "id": "claude-opus-5-xhigh",
+      "name": "Claude Opus 5 XHigh"
+    },
+    {
+      "id": "claude-opus-5-high-fast",
+      "name": "Claude Opus 5 High Fast"
+    },
+    {
+      "id": "claude-opus-5-high",
+      "name": "Claude Opus 5 High"
+    },
+    {
+      "id": "claude-opus-5-medium-fast",
+      "name": "Claude Opus 5 Medium Fast"
+    },
+    {
+      "id": "claude-opus-5-medium",
+      "name": "Claude Opus 5 Medium"
+    },
+    {
+      "id": "claude-opus-5-low-fast",
+      "name": "Claude Opus 5 Low Fast"
+    },
+    {
+      "id": "claude-opus-5-low",
+      "name": "Claude Opus 5 Low"
+    },
+    {
+      "id": "claude-opus-4-8-max-fast",
+      "name": "Claude Opus 4.8 Max Fast"
+    },
+    {
+      "id": "claude-opus-4-8-max",
+      "name": "Claude Opus 4.8 Max"
+    },
+    {
+      "id": "claude-opus-4-8-xhigh-fast",
+      "name": "Claude Opus 4.8 XHigh Fast"
+    },
+    {
+      "id": "claude-opus-4-8-xhigh",
+      "name": "Claude Opus 4.8 XHigh"
+    },
+    {
+      "id": "claude-opus-4-8-high-fast",
+      "name": "Claude Opus 4.8 High Fast"
+    },
+    {
+      "id": "claude-opus-4-8-high",
+      "name": "Claude Opus 4.8 High"
+    },
+    {
+      "id": "claude-opus-4-8-medium-fast",
+      "name": "Claude Opus 4.8 Medium Fast"
+    },
+    {
+      "id": "claude-opus-4-8-medium",
+      "name": "Claude Opus 4.8 Medium"
+    },
+    {
+      "id": "claude-opus-4-8-low-fast",
+      "name": "Claude Opus 4.8 Low Fast"
+    },
+    {
+      "id": "claude-opus-4-8-low",
+      "name": "Claude Opus 4.8 Low"
+    },
+    {
+      "id": "claude-sonnet-5-max",
+      "name": "Claude Sonnet 5 Max"
+    },
+    {
+      "id": "claude-sonnet-5-xhigh",
+      "name": "Claude Sonnet 5 XHigh"
+    },
+    {
+      "id": "claude-sonnet-5-high",
+      "name": "Claude Sonnet 5 High"
+    },
+    {
+      "id": "claude-sonnet-5-medium",
+      "name": "Claude Sonnet 5 Medium"
+    },
+    {
+      "id": "claude-sonnet-5-low",
+      "name": "Claude Sonnet 5 Low"
+    },
+    {
+      "id": "claude-sonnet-4-6-thinking-1m",
       "name": "Claude Sonnet 4.6 Thinking 1M"
     },
     {
-      "id": "claude-sonnet-4.6-thinking",
+      "id": "claude-sonnet-4-6-1m",
+      "name": "Claude Sonnet 4.6 1M"
+    },
+    {
+      "id": "claude-sonnet-4-6-thinking",
       "name": "Claude Sonnet 4.6 Thinking"
     },
     {
-      "id": "claude-sonnet-4.6",
+      "id": "claude-sonnet-4-6",
       "name": "Claude Sonnet 4.6"
     },
     {
-      "id": "claude-opus-4.6-thinking",
-      "name": "Claude Opus 4.6 Thinking"
-    },
-    {
-      "id": "claude-opus-4.6",
-      "name": "Claude Opus 4.6"
-    },
-    {
-      "id": "claude-sonnet-4.5",
-      "name": "Claude Sonnet 4.5"
-    },
-    {
-      "id": "claude-haiku-4.5",
+      "id": "MODEL_PRIVATE_11",
       "name": "Claude Haiku 4.5"
     },
     {
-      "id": "gpt-5.5-xhigh",
-      "name": "GPT-5.5 XHigh"
+      "id": "gpt-5-6-sol-max-priority",
+      "name": "GPT-5.6 Sol Max Thinking Fast"
     },
     {
-      "id": "gpt-5.5-high",
-      "name": "GPT-5.5 High"
+      "id": "gpt-5-6-sol-max",
+      "name": "GPT-5.6 Sol Max Thinking"
     },
     {
-      "id": "gpt-5.5-medium",
-      "name": "GPT-5.5 Medium"
+      "id": "gpt-5-6-sol-xhigh-priority",
+      "name": "GPT-5.6 Sol XHigh Thinking Fast"
     },
     {
-      "id": "gpt-5.5-low",
-      "name": "GPT-5.5 Low"
+      "id": "gpt-5-6-sol-xhigh",
+      "name": "GPT-5.6 Sol XHigh Thinking"
     },
     {
-      "id": "gpt-5.4-high",
-      "name": "GPT-5.4 High"
+      "id": "gpt-5-6-sol-high-priority",
+      "name": "GPT-5.6 Sol High Thinking Fast"
     },
     {
-      "id": "gpt-5.4-medium",
-      "name": "GPT-5.4 Medium"
+      "id": "gpt-5-6-sol-high",
+      "name": "GPT-5.6 Sol High Thinking"
     },
     {
-      "id": "gpt-5.4-low",
-      "name": "GPT-5.4 Low"
+      "id": "gpt-5-6-sol-medium-priority",
+      "name": "GPT-5.6 Sol Medium Thinking Fast"
     },
     {
-      "id": "gpt-5.3-codex-high",
-      "name": "GPT-5.3 Codex High"
+      "id": "gpt-5-6-sol-medium",
+      "name": "GPT-5.6 Sol Medium Thinking"
     },
     {
-      "id": "gpt-5.3-codex-medium",
-      "name": "GPT-5.3 Codex Medium"
+      "id": "gpt-5-6-sol-low-priority",
+      "name": "GPT-5.6 Sol Low Thinking Fast"
     },
     {
-      "id": "gpt-5.3-codex-low",
-      "name": "GPT-5.3 Codex Low"
+      "id": "gpt-5-6-sol-low",
+      "name": "GPT-5.6 Sol Low Thinking"
     },
     {
-      "id": "gpt-5.2-high",
-      "name": "GPT-5.2 High"
+      "id": "gpt-5-6-sol-none-priority",
+      "name": "GPT-5.6 Sol No Thinking Fast"
     },
     {
-      "id": "gpt-5.2-medium",
-      "name": "GPT-5.2 Medium"
+      "id": "gpt-5-6-sol-none",
+      "name": "GPT-5.6 Sol No Thinking"
     },
     {
-      "id": "gpt-5.2-low",
-      "name": "GPT-5.2 Low"
+      "id": "gpt-5-6-terra-max-priority",
+      "name": "GPT-5.6 Terra Max Thinking Fast"
     },
     {
-      "id": "gemini-3.1-pro-high",
-      "name": "Gemini 3.1 Pro High"
+      "id": "gpt-5-6-terra-max",
+      "name": "GPT-5.6 Terra Max Thinking"
     },
     {
-      "id": "gemini-3.1-pro-low",
-      "name": "Gemini 3.1 Pro Low"
+      "id": "gpt-5-6-terra-xhigh-priority",
+      "name": "GPT-5.6 Terra XHigh Thinking Fast"
     },
     {
-      "id": "gemini-3.0-flash-high",
-      "name": "Gemini 3 Flash High"
+      "id": "gpt-5-6-terra-xhigh",
+      "name": "GPT-5.6 Terra XHigh Thinking"
     },
     {
-      "id": "gemini-2.5-pro",
-      "name": "Gemini 2.5 Pro"
+      "id": "gpt-5-6-terra-high-priority",
+      "name": "GPT-5.6 Terra High Thinking Fast"
     },
     {
-      "id": "deepseek-v4",
-      "name": "DeepSeek V4"
+      "id": "gpt-5-6-terra-high",
+      "name": "GPT-5.6 Terra High Thinking"
     },
     {
-      "id": "kimi-k2.6",
-      "name": "Kimi K2.6"
+      "id": "gpt-5-6-terra-medium-priority",
+      "name": "GPT-5.6 Terra Medium Thinking Fast"
     },
     {
-      "id": "glm-5.1",
-      "name": "GLM-5.1"
+      "id": "gpt-5-6-terra-medium",
+      "name": "GPT-5.6 Terra Medium Thinking"
+    },
+    {
+      "id": "gpt-5-6-terra-low-priority",
+      "name": "GPT-5.6 Terra Low Thinking Fast"
+    },
+    {
+      "id": "gpt-5-6-terra-low",
+      "name": "GPT-5.6 Terra Low Thinking"
+    },
+    {
+      "id": "gpt-5-6-terra-none-priority",
+      "name": "GPT-5.6 Terra No Thinking Fast"
+    },
+    {
+      "id": "gpt-5-6-terra-none",
+      "name": "GPT-5.6 Terra No Thinking"
+    },
+    {
+      "id": "gpt-5-6-luna-max-priority",
+      "name": "GPT-5.6 Luna Max Thinking Fast"
+    },
+    {
+      "id": "gpt-5-6-luna-max",
+      "name": "GPT-5.6 Luna Max Thinking"
+    },
+    {
+      "id": "gpt-5-6-luna-xhigh-priority",
+      "name": "GPT-5.6 Luna XHigh Thinking Fast"
+    },
+    {
+      "id": "gpt-5-6-luna-xhigh",
+      "name": "GPT-5.6 Luna XHigh Thinking"
+    },
+    {
+      "id": "gpt-5-6-luna-high-priority",
+      "name": "GPT-5.6 Luna High Thinking Fast"
+    },
+    {
+      "id": "gpt-5-6-luna-high",
+      "name": "GPT-5.6 Luna High Thinking"
+    },
+    {
+      "id": "gpt-5-6-luna-medium-priority",
+      "name": "GPT-5.6 Luna Medium Thinking Fast"
+    },
+    {
+      "id": "gpt-5-6-luna-medium",
+      "name": "GPT-5.6 Luna Medium Thinking"
+    },
+    {
+      "id": "gpt-5-6-luna-low-priority",
+      "name": "GPT-5.6 Luna Low Thinking Fast"
+    },
+    {
+      "id": "gpt-5-6-luna-low",
+      "name": "GPT-5.6 Luna Low Thinking"
+    },
+    {
+      "id": "gpt-5-6-luna-none-priority",
+      "name": "GPT-5.6 Luna No Thinking Fast"
+    },
+    {
+      "id": "gpt-5-6-luna-none",
+      "name": "GPT-5.6 Luna No Thinking"
+    },
+    {
+      "id": "kimi-k3-max",
+      "name": "Kimi K3 Max"
+    },
+    {
+      "id": "kimi-k3-high",
+      "name": "Kimi K3 High"
+    },
+    {
+      "id": "kimi-k3-low",
+      "name": "Kimi K3 Low"
+    },
+    {
+      "id": "kimi-k2-7",
+      "name": "Kimi K2.7"
+    },
+    {
+      "id": "glm-5-3-max",
+      "name": "GLM-5.3 Max"
+    },
+    {
+      "id": "glm-5-3-high",
+      "name": "GLM-5.3 High"
+    },
+    {
+      "id": "glm-5-3-low",
+      "name": "GLM-5.3 Low"
+    },
+    {
+      "id": "glm-5-3-flash-max",
+      "name": "GLM-5.3 Flash Max"
+    },
+    {
+      "id": "glm-5-3-flash-high",
+      "name": "GLM-5.3 Flash High"
+    },
+    {
+      "id": "glm-5-3-flash-low",
+      "name": "GLM-5.3 Flash Low"
+    },
+    {
+      "id": "swe-1-7",
+      "name": "SWE-1.7 Max"
+    },
+    {
+      "id": "swe-1-7-medium",
+      "name": "SWE-1.7 Medium"
+    },
+    {
+      "id": "swe-1-7-lightning",
+      "name": "SWE-1.7 Lightning Max"
+    },
+    {
+      "id": "swe-1-7-lightning-medium",
+      "name": "SWE-1.7 Lightning Medium"
+    },
+    {
+      "id": "adaptive",
+      "name": "Adaptive"
+    },
+    {
+      "id": "grok-4-6-xhigh",
+      "name": "Grok 4.6 XHigh"
+    },
+    {
+      "id": "grok-4-6-high",
+      "name": "Grok 4.6 High"
+    },
+    {
+      "id": "grok-4-6-medium",
+      "name": "Grok 4.6 Medium"
+    },
+    {
+      "id": "grok-4-6-low",
+      "name": "Grok 4.6 Low"
+    },
+    {
+      "id": "inkling-max",
+      "name": "Inkling Max"
+    },
+    {
+      "id": "inkling-xhigh",
+      "name": "Inkling X-High"
+    },
+    {
+      "id": "inkling-high",
+      "name": "Inkling High"
+    },
+    {
+      "id": "inkling-medium",
+      "name": "Inkling Medium"
+    },
+    {
+      "id": "inkling-low",
+      "name": "Inkling Low"
+    },
+    {
+      "id": "inkling-none",
+      "name": "Inkling None"
+    },
+    {
+      "id": "deepseek-v4-flash-max",
+      "name": "DeepSeek V4 Flash Max"
+    },
+    {
+      "id": "deepseek-v4-flash-high",
+      "name": "DeepSeek V4 Flash High"
+    },
+    {
+      "id": "deepseek-v4-flash-low",
+      "name": "DeepSeek V4 Flash Low"
+    },
+    {
+      "id": "nemotron-3-ultra-high",
+      "name": "Nemotron 3 Ultra High"
+    },
+    {
+      "id": "nemotron-3-ultra-medium",
+      "name": "Nemotron 3 Ultra Medium"
+    },
+    {
+      "id": "nemotron-3-ultra-none",
+      "name": "Nemotron 3 Ultra None"
+    },
+    {
+      "id": "gemini-3-7-flash-high",
+      "name": "Gemini 3.7 Flash High"
+    },
+    {
+      "id": "gemini-3-7-flash-medium",
+      "name": "Gemini 3.7 Flash Medium"
+    },
+    {
+      "id": "gemini-3-7-flash-low",
+      "name": "Gemini 3.7 Flash Low"
+    },
+    {
+      "id": "gemini-3-1-pro-high",
+      "name": "Gemini 3.1 Pro High Thinking"
+    },
+    {
+      "id": "gemini-3-1-pro-low",
+      "name": "Gemini 3.1 Pro Low Thinking"
+    },
+    {
+      "id": "deepseek-v4-pro-max",
+      "name": "DeepSeek V4 Pro Max"
+    },
+    {
+      "id": "deepseek-v4-pro-high",
+      "name": "DeepSeek V4 Pro High"
+    },
+    {
+      "id": "deepseek-v4-pro-low",
+      "name": "DeepSeek V4 Pro Low"
+    }
+  ],
+  "dva": [
+    {
+      "id": "claude-fable-5-1-max",
+      "name": "Claude Fable 5.1 Max"
+    },
+    {
+      "id": "claude-fable-5-1-xhigh",
+      "name": "Claude Fable 5.1 XHigh"
+    },
+    {
+      "id": "claude-fable-5-1-high",
+      "name": "Claude Fable 5.1 High"
+    },
+    {
+      "id": "claude-fable-5-1-medium",
+      "name": "Claude Fable 5.1 Medium"
+    },
+    {
+      "id": "claude-fable-5-1-low",
+      "name": "Claude Fable 5.1 Low"
+    },
+    {
+      "id": "claude-opus-5-max-fast",
+      "name": "Claude Opus 5 Max Fast"
+    },
+    {
+      "id": "claude-opus-5-max",
+      "name": "Claude Opus 5 Max"
+    },
+    {
+      "id": "claude-opus-5-xhigh-fast",
+      "name": "Claude Opus 5 XHigh Fast"
+    },
+    {
+      "id": "claude-opus-5-xhigh",
+      "name": "Claude Opus 5 XHigh"
+    },
+    {
+      "id": "claude-opus-5-high-fast",
+      "name": "Claude Opus 5 High Fast"
+    },
+    {
+      "id": "claude-opus-5-high",
+      "name": "Claude Opus 5 High"
+    },
+    {
+      "id": "claude-opus-5-medium-fast",
+      "name": "Claude Opus 5 Medium Fast"
+    },
+    {
+      "id": "claude-opus-5-medium",
+      "name": "Claude Opus 5 Medium"
+    },
+    {
+      "id": "claude-opus-5-low-fast",
+      "name": "Claude Opus 5 Low Fast"
+    },
+    {
+      "id": "claude-opus-5-low",
+      "name": "Claude Opus 5 Low"
+    },
+    {
+      "id": "claude-opus-4-8-max-fast",
+      "name": "Claude Opus 4.8 Max Fast"
+    },
+    {
+      "id": "claude-opus-4-8-max",
+      "name": "Claude Opus 4.8 Max"
+    },
+    {
+      "id": "claude-opus-4-8-xhigh-fast",
+      "name": "Claude Opus 4.8 XHigh Fast"
+    },
+    {
+      "id": "claude-opus-4-8-xhigh",
+      "name": "Claude Opus 4.8 XHigh"
+    },
+    {
+      "id": "claude-opus-4-8-high-fast",
+      "name": "Claude Opus 4.8 High Fast"
+    },
+    {
+      "id": "claude-opus-4-8-high",
+      "name": "Claude Opus 4.8 High"
+    },
+    {
+      "id": "claude-opus-4-8-medium-fast",
+      "name": "Claude Opus 4.8 Medium Fast"
+    },
+    {
+      "id": "claude-opus-4-8-medium",
+      "name": "Claude Opus 4.8 Medium"
+    },
+    {
+      "id": "claude-opus-4-8-low-fast",
+      "name": "Claude Opus 4.8 Low Fast"
+    },
+    {
+      "id": "claude-opus-4-8-low",
+      "name": "Claude Opus 4.8 Low"
+    },
+    {
+      "id": "claude-sonnet-5-max",
+      "name": "Claude Sonnet 5 Max"
+    },
+    {
+      "id": "claude-sonnet-5-xhigh",
+      "name": "Claude Sonnet 5 XHigh"
+    },
+    {
+      "id": "claude-sonnet-5-high",
+      "name": "Claude Sonnet 5 High"
+    },
+    {
+      "id": "claude-sonnet-5-medium",
+      "name": "Claude Sonnet 5 Medium"
+    },
+    {
+      "id": "claude-sonnet-5-low",
+      "name": "Claude Sonnet 5 Low"
+    },
+    {
+      "id": "claude-sonnet-4-6-thinking-1m",
+      "name": "Claude Sonnet 4.6 Thinking 1M"
+    },
+    {
+      "id": "claude-sonnet-4-6-1m",
+      "name": "Claude Sonnet 4.6 1M"
+    },
+    {
+      "id": "claude-sonnet-4-6-thinking",
+      "name": "Claude Sonnet 4.6 Thinking"
+    },
+    {
+      "id": "claude-sonnet-4-6",
+      "name": "Claude Sonnet 4.6"
+    },
+    {
+      "id": "MODEL_PRIVATE_11",
+      "name": "Claude Haiku 4.5"
+    },
+    {
+      "id": "gpt-5-6-sol-max-priority",
+      "name": "GPT-5.6 Sol Max Thinking Fast"
+    },
+    {
+      "id": "gpt-5-6-sol-max",
+      "name": "GPT-5.6 Sol Max Thinking"
+    },
+    {
+      "id": "gpt-5-6-sol-xhigh-priority",
+      "name": "GPT-5.6 Sol XHigh Thinking Fast"
+    },
+    {
+      "id": "gpt-5-6-sol-xhigh",
+      "name": "GPT-5.6 Sol XHigh Thinking"
+    },
+    {
+      "id": "gpt-5-6-sol-high-priority",
+      "name": "GPT-5.6 Sol High Thinking Fast"
+    },
+    {
+      "id": "gpt-5-6-sol-high",
+      "name": "GPT-5.6 Sol High Thinking"
+    },
+    {
+      "id": "gpt-5-6-sol-medium-priority",
+      "name": "GPT-5.6 Sol Medium Thinking Fast"
+    },
+    {
+      "id": "gpt-5-6-sol-medium",
+      "name": "GPT-5.6 Sol Medium Thinking"
+    },
+    {
+      "id": "gpt-5-6-sol-low-priority",
+      "name": "GPT-5.6 Sol Low Thinking Fast"
+    },
+    {
+      "id": "gpt-5-6-sol-low",
+      "name": "GPT-5.6 Sol Low Thinking"
+    },
+    {
+      "id": "gpt-5-6-sol-none-priority",
+      "name": "GPT-5.6 Sol No Thinking Fast"
+    },
+    {
+      "id": "gpt-5-6-sol-none",
+      "name": "GPT-5.6 Sol No Thinking"
+    },
+    {
+      "id": "gpt-5-6-terra-max-priority",
+      "name": "GPT-5.6 Terra Max Thinking Fast"
+    },
+    {
+      "id": "gpt-5-6-terra-max",
+      "name": "GPT-5.6 Terra Max Thinking"
+    },
+    {
+      "id": "gpt-5-6-terra-xhigh-priority",
+      "name": "GPT-5.6 Terra XHigh Thinking Fast"
+    },
+    {
+      "id": "gpt-5-6-terra-xhigh",
+      "name": "GPT-5.6 Terra XHigh Thinking"
+    },
+    {
+      "id": "gpt-5-6-terra-high-priority",
+      "name": "GPT-5.6 Terra High Thinking Fast"
+    },
+    {
+      "id": "gpt-5-6-terra-high",
+      "name": "GPT-5.6 Terra High Thinking"
+    },
+    {
+      "id": "gpt-5-6-terra-medium-priority",
+      "name": "GPT-5.6 Terra Medium Thinking Fast"
+    },
+    {
+      "id": "gpt-5-6-terra-medium",
+      "name": "GPT-5.6 Terra Medium Thinking"
+    },
+    {
+      "id": "gpt-5-6-terra-low-priority",
+      "name": "GPT-5.6 Terra Low Thinking Fast"
+    },
+    {
+      "id": "gpt-5-6-terra-low",
+      "name": "GPT-5.6 Terra Low Thinking"
+    },
+    {
+      "id": "gpt-5-6-terra-none-priority",
+      "name": "GPT-5.6 Terra No Thinking Fast"
+    },
+    {
+      "id": "gpt-5-6-terra-none",
+      "name": "GPT-5.6 Terra No Thinking"
+    },
+    {
+      "id": "gpt-5-6-luna-max-priority",
+      "name": "GPT-5.6 Luna Max Thinking Fast"
+    },
+    {
+      "id": "gpt-5-6-luna-max",
+      "name": "GPT-5.6 Luna Max Thinking"
+    },
+    {
+      "id": "gpt-5-6-luna-xhigh-priority",
+      "name": "GPT-5.6 Luna XHigh Thinking Fast"
+    },
+    {
+      "id": "gpt-5-6-luna-xhigh",
+      "name": "GPT-5.6 Luna XHigh Thinking"
+    },
+    {
+      "id": "gpt-5-6-luna-high-priority",
+      "name": "GPT-5.6 Luna High Thinking Fast"
+    },
+    {
+      "id": "gpt-5-6-luna-high",
+      "name": "GPT-5.6 Luna High Thinking"
+    },
+    {
+      "id": "gpt-5-6-luna-medium-priority",
+      "name": "GPT-5.6 Luna Medium Thinking Fast"
+    },
+    {
+      "id": "gpt-5-6-luna-medium",
+      "name": "GPT-5.6 Luna Medium Thinking"
+    },
+    {
+      "id": "gpt-5-6-luna-low-priority",
+      "name": "GPT-5.6 Luna Low Thinking Fast"
+    },
+    {
+      "id": "gpt-5-6-luna-low",
+      "name": "GPT-5.6 Luna Low Thinking"
+    },
+    {
+      "id": "gpt-5-6-luna-none-priority",
+      "name": "GPT-5.6 Luna No Thinking Fast"
+    },
+    {
+      "id": "gpt-5-6-luna-none",
+      "name": "GPT-5.6 Luna No Thinking"
+    },
+    {
+      "id": "kimi-k3-max",
+      "name": "Kimi K3 Max"
+    },
+    {
+      "id": "kimi-k3-high",
+      "name": "Kimi K3 High"
+    },
+    {
+      "id": "kimi-k3-low",
+      "name": "Kimi K3 Low"
+    },
+    {
+      "id": "kimi-k2-7",
+      "name": "Kimi K2.7"
+    },
+    {
+      "id": "glm-5-3-max",
+      "name": "GLM-5.3 Max"
+    },
+    {
+      "id": "glm-5-3-high",
+      "name": "GLM-5.3 High"
+    },
+    {
+      "id": "glm-5-3-low",
+      "name": "GLM-5.3 Low"
+    },
+    {
+      "id": "glm-5-3-flash-max",
+      "name": "GLM-5.3 Flash Max"
+    },
+    {
+      "id": "glm-5-3-flash-high",
+      "name": "GLM-5.3 Flash High"
+    },
+    {
+      "id": "glm-5-3-flash-low",
+      "name": "GLM-5.3 Flash Low"
+    },
+    {
+      "id": "swe-1-7",
+      "name": "SWE-1.7 Max"
+    },
+    {
+      "id": "swe-1-7-medium",
+      "name": "SWE-1.7 Medium"
+    },
+    {
+      "id": "swe-1-7-lightning",
+      "name": "SWE-1.7 Lightning Max"
+    },
+    {
+      "id": "swe-1-7-lightning-medium",
+      "name": "SWE-1.7 Lightning Medium"
+    },
+    {
+      "id": "adaptive",
+      "name": "Adaptive"
+    },
+    {
+      "id": "grok-4-6-xhigh",
+      "name": "Grok 4.6 XHigh"
+    },
+    {
+      "id": "grok-4-6-high",
+      "name": "Grok 4.6 High"
+    },
+    {
+      "id": "grok-4-6-medium",
+      "name": "Grok 4.6 Medium"
+    },
+    {
+      "id": "grok-4-6-low",
+      "name": "Grok 4.6 Low"
+    },
+    {
+      "id": "inkling-max",
+      "name": "Inkling Max"
+    },
+    {
+      "id": "inkling-xhigh",
+      "name": "Inkling X-High"
+    },
+    {
+      "id": "inkling-high",
+      "name": "Inkling High"
+    },
+    {
+      "id": "inkling-medium",
+      "name": "Inkling Medium"
+    },
+    {
+      "id": "inkling-low",
+      "name": "Inkling Low"
+    },
+    {
+      "id": "inkling-none",
+      "name": "Inkling None"
+    },
+    {
+      "id": "deepseek-v4-flash-max",
+      "name": "DeepSeek V4 Flash Max"
+    },
+    {
+      "id": "deepseek-v4-flash-high",
+      "name": "DeepSeek V4 Flash High"
+    },
+    {
+      "id": "deepseek-v4-flash-low",
+      "name": "DeepSeek V4 Flash Low"
+    },
+    {
+      "id": "nemotron-3-ultra-high",
+      "name": "Nemotron 3 Ultra High"
+    },
+    {
+      "id": "nemotron-3-ultra-medium",
+      "name": "Nemotron 3 Ultra Medium"
+    },
+    {
+      "id": "nemotron-3-ultra-none",
+      "name": "Nemotron 3 Ultra None"
+    },
+    {
+      "id": "gemini-3-7-flash-high",
+      "name": "Gemini 3.7 Flash High"
+    },
+    {
+      "id": "gemini-3-7-flash-medium",
+      "name": "Gemini 3.7 Flash Medium"
+    },
+    {
+      "id": "gemini-3-7-flash-low",
+      "name": "Gemini 3.7 Flash Low"
+    },
+    {
+      "id": "gemini-3-1-pro-high",
+      "name": "Gemini 3.1 Pro High Thinking"
+    },
+    {
+      "id": "gemini-3-1-pro-low",
+      "name": "Gemini 3.1 Pro Low Thinking"
+    },
+    {
+      "id": "deepseek-v4-pro-max",
+      "name": "DeepSeek V4 Pro Max"
+    },
+    {
+      "id": "deepseek-v4-pro-high",
+      "name": "DeepSeek V4 Pro High"
+    },
+    {
+      "id": "deepseek-v4-pro-low",
+      "name": "DeepSeek V4 Pro Low"
     }
   ],
   "aug": [
     {
-      "id": "claude-sonnet-4.6",
-      "name": "Claude Sonnet 4.6"
+      "id": "sonnet4.6",
+      "name": "Sonnet 4.6"
     },
     {
-      "id": "claude-sonnet-4.6-thinking",
-      "name": "Claude Sonnet 4.6 Thinking"
+      "id": "fable-5",
+      "name": "Claude Fable 5"
     },
     {
-      "id": "claude-opus-4.6",
-      "name": "Claude Opus 4.6"
+      "id": "haiku4.5",
+      "name": "Haiku 4.5"
     },
     {
-      "id": "claude-haiku-4.5",
-      "name": "Claude Haiku 4.5"
+      "id": "sonnet4.5",
+      "name": "Sonnet 4.5"
     },
     {
-      "id": "gemini-3.1-pro",
+      "id": "sonnet4.6-500k",
+      "name": "Sonnet 4.6 (500K)"
+    },
+    {
+      "id": "sonnet5-high",
+      "name": "Claude Sonnet 5"
+    },
+    {
+      "id": "sonnet5-500k",
+      "name": "Claude Sonnet 5 (500K)"
+    },
+    {
+      "id": "opus4.5",
+      "name": "Opus 4.5"
+    },
+    {
+      "id": "opus4.6",
+      "name": "Opus 4.6"
+    },
+    {
+      "id": "opus4.6-500k",
+      "name": "Opus 4.6 (500K)"
+    },
+    {
+      "id": "opus4.7",
+      "name": "Opus 4.7"
+    },
+    {
+      "id": "opus4.7-500k",
+      "name": "Opus 4.7 (500K)"
+    },
+    {
+      "id": "opus4.8",
+      "name": "Opus 4.8"
+    },
+    {
+      "id": "gemini-3.1-pro-preview",
       "name": "Gemini 3.1 Pro"
     },
     {
-      "id": "gemini-3.0-flash",
-      "name": "Gemini 3 Flash"
+      "id": "gpt5",
+      "name": "GPT-5"
     },
     {
-      "id": "gpt-5.5-high",
-      "name": "GPT-5.5 High"
+      "id": "gpt5.1",
+      "name": "GPT-5.1"
     },
     {
-      "id": "gpt-5.5-medium",
-      "name": "GPT-5.5 Medium"
+      "id": "gpt5.2",
+      "name": "GPT-5.2"
     },
     {
-      "id": "gpt-5.4-high",
-      "name": "GPT-5.4 High"
+      "id": "gpt5.4",
+      "name": "GPT-5.4"
     },
     {
-      "id": "gpt-5.4-medium",
-      "name": "GPT-5.4 Medium"
+      "id": "gpt5.4-mini",
+      "name": "GPT-5.4 Mini"
+    },
+    {
+      "id": "gpt5.5",
+      "name": "GPT-5.5"
+    },
+    {
+      "id": "gpt5.6-luna",
+      "name": "GPT-5.6 Luna"
+    },
+    {
+      "id": "gpt5.6-sol",
+      "name": "GPT-5.6 Sol"
+    },
+    {
+      "id": "gpt5.6-terra",
+      "name": "GPT-5.6 Terra"
+    },
+    {
+      "id": "glm-5.2",
+      "name": "GLM 5.2"
     },
     {
       "id": "kimi-k2.6",
       "name": "Kimi K2.6"
     },
     {
-      "id": "prism",
-      "name": "Augment Prism"
+      "id": "kimi-k2.7",
+      "name": "Kimi K2.7 Code"
+    },
+    {
+      "id": "prism-a",
+      "name": "Prism (Claude + Gemini)"
+    },
+    {
+      "id": "prism-b",
+      "name": "Prism (GPT + Kimi)"
     }
   ],
   "chutes": [
@@ -5884,6 +10138,98 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
       "name": "Reka Edge 2603"
     }
   ],
+  "typhoon": [
+    {
+      "id": "typhoon-v2.5-30b-a3b-instruct",
+      "name": "Typhoon v2.5 30B A3B Instruct"
+    }
+  ],
+  "inception": [
+    {
+      "id": "mercury-2",
+      "name": "Mercury 2"
+    },
+    {
+      "id": "mercury-2.5",
+      "name": "Mercury 2.5"
+    }
+  ],
+  "sarvam": [
+    {
+      "id": "sarvam-105b",
+      "name": "Sarvam 105B"
+    },
+    {
+      "id": "sarvam-30b",
+      "name": "Sarvam 30B"
+    }
+  ],
+  "writer": [
+    {
+      "id": "palmyra-x5",
+      "name": "Palmyra X5"
+    },
+    {
+      "id": "palmyra-x4",
+      "name": "Palmyra X4"
+    }
+  ],
+  "plamo": [
+    {
+      "id": "plamo-3.0-prime",
+      "name": "PLaMo 3.0 Prime"
+    }
+  ],
+  "clova": [
+    {
+      "id": "HCX-007",
+      "name": "HCX-007"
+    },
+    {
+      "id": "HCX-005",
+      "name": "HCX-005"
+    },
+    {
+      "id": "HCX-DASH-002",
+      "name": "HCX-DASH-002"
+    }
+  ],
+  "internlm": [
+    {
+      "id": "intern-s1-pro",
+      "name": "Intern-S1 Pro"
+    },
+    {
+      "id": "intern-s1",
+      "name": "Intern-S1"
+    },
+    {
+      "id": "intern-s1-mini",
+      "name": "Intern-S1 Mini"
+    },
+    {
+      "id": "internvl3.5-latest",
+      "name": "InternVL3.5 Latest"
+    },
+    {
+      "id": "intern-latest",
+      "name": "Intern Latest"
+    }
+  ],
+  "ling": [
+    {
+      "id": "Ling-2.6-1T",
+      "name": "Ling 2.6 1T"
+    },
+    {
+      "id": "Ring-2.6-1T",
+      "name": "Ring 2.6 1T"
+    },
+    {
+      "id": "Ling-2.6-flash",
+      "name": "Ling 2.6 Flash"
+    }
+  ],
   "vag": [
     {
       "id": "openai/gpt-4.1",
@@ -5926,48 +10272,28 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
       "name": "Big Pickle"
     },
     {
-      "id": "gpt-5-nano",
-      "name": "GPT 5 Nano"
+      "id": "kimi-k2.7-code",
+      "name": "Kimi K2.7 Code"
     },
     {
-      "id": "gpt-5",
-      "name": "GPT 5"
+      "id": "qwen3.5-plus",
+      "name": "Qwen3.5 Plus"
     },
     {
-      "id": "gpt-5-codex",
-      "name": "GPT 5 Codex"
+      "id": "qwen3.6-plus",
+      "name": "Qwen3.6 Plus"
     },
     {
-      "id": "gpt-5.1",
-      "name": "GPT 5.1"
+      "id": "gpt-5.6-sol",
+      "name": "GPT 5.6 Sol"
     },
     {
-      "id": "gpt-5.1-codex",
-      "name": "GPT 5.1 Codex"
+      "id": "gpt-5.6-terra",
+      "name": "GPT 5.6 Terra"
     },
     {
-      "id": "gpt-5.1-codex-max",
-      "name": "GPT 5.1 Codex Max"
-    },
-    {
-      "id": "gpt-5.1-codex-mini",
-      "name": "GPT 5.1 Codex Mini"
-    },
-    {
-      "id": "gpt-5.2",
-      "name": "GPT 5.2"
-    },
-    {
-      "id": "gpt-5.2-codex",
-      "name": "GPT 5.2 Codex"
-    },
-    {
-      "id": "gpt-5.3-codex",
-      "name": "GPT 5.3 Codex"
-    },
-    {
-      "id": "gpt-5.3-codex-spark",
-      "name": "GPT 5.3 Codex Spark"
+      "id": "gpt-5.6-luna",
+      "name": "GPT 5.6 Luna"
     },
     {
       "id": "gpt-5.4",
@@ -5982,92 +10308,130 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
       "name": "GPT 5.4 Nano"
     },
     {
-      "id": "gpt-5.4-pro",
-      "name": "GPT 5.4 Pro"
+      "id": "gpt-5.3-codex-spark",
+      "name": "GPT 5.3 Codex Spark"
     },
     {
-      "id": "gpt-5.5",
-      "name": "GPT 5.5"
+      "id": "gpt-5.1",
+      "name": "GPT 5.1"
     },
     {
-      "id": "gpt-5.5-pro",
-      "name": "GPT 5.5 Pro"
+      "id": "claude-fable-5",
+      "name": "Claude Fable 5"
+    },
+    {
+      "id": "claude-opus-5",
+      "name": "Claude Opus 5"
+    },
+    {
+      "id": "claude-sonnet-5",
+      "name": "Claude Sonnet 5"
     },
     {
       "id": "claude-haiku-4-5",
       "name": "Claude Haiku 4.5"
     },
     {
-      "id": "claude-sonnet-4",
-      "name": "Claude Sonnet 4"
+      "id": "gemini-3.7-flash",
+      "name": "Gemini 3.7 Flash"
     },
     {
-      "id": "claude-sonnet-4-5",
-      "name": "Claude Sonnet 4.5"
-    },
-    {
-      "id": "claude-sonnet-4-6",
-      "name": "Claude Sonnet 4.6"
-    },
-    {
-      "id": "claude-opus-4-1",
-      "name": "Claude Opus 4.1"
-    },
-    {
-      "id": "claude-opus-4-5",
-      "name": "Claude Opus 4.5"
-    },
-    {
-      "id": "claude-opus-4-6",
-      "name": "Claude Opus 4.6"
-    },
-    {
-      "id": "claude-opus-4-7",
-      "name": "Claude Opus 4.7"
-    },
-    {
-      "id": "gemini-3-flash",
-      "name": "Gemini 3 Flash"
+      "id": "gemini-3.5-flash-lite",
+      "name": "Gemini 3.5 Flash Lite"
     },
     {
       "id": "gemini-3.1-pro",
       "name": "Gemini 3.1 Pro"
     },
     {
-      "id": "gemini-3.5-flash",
-      "name": "Gemini 3.5 Flash"
+      "id": "gemini-3-flash",
+      "name": "Gemini 3 Flash"
     },
     {
       "id": "grok-build-0.1",
       "name": "Grok Build 0.1"
     },
     {
-      "id": "glm-5",
-      "name": "GLM-5"
+      "id": "grok-4.6",
+      "name": "Grok 4.6"
     },
     {
-      "id": "glm-5.1",
-      "name": "GLM-5.1"
+      "id": "muse-spark-1.2",
+      "name": "Muse Spark 1.2"
+    },
+    {
+      "id": "muse-spark-1.2-contributor-free",
+      "name": "Muse Spark 1.2 Contributor Free"
+    },
+    {
+      "id": "muse-spark-1.3",
+      "name": "Muse Spark 1.3"
+    },
+    {
+      "id": "muse-spark-1.3-contributor-free",
+      "name": "Muse Spark 1.3 Contributor Free"
+    },
+    {
+      "id": "deepseek-v4-pro",
+      "name": "DeepSeek V4 Pro"
+    },
+    {
+      "id": "deepseek-v4-flash",
+      "name": "DeepSeek V4 Flash"
+    },
+    {
+      "id": "glm-5.2",
+      "name": "GLM-5.2"
     },
     {
       "id": "minimax-m3",
       "name": "MiniMax M3"
     },
     {
-      "id": "minimax-m2.5",
-      "name": "MiniMax M2.5"
+      "id": "kimi-k3",
+      "name": "Kimi K3"
     },
     {
-      "id": "minimax-m2.7",
-      "name": "MiniMax M2.7"
+      "id": "deepseek-v4.1-flash-free",
+      "name": "DeepSeek V4.1 Flash Free"
     },
     {
-      "id": "kimi-k2.5",
-      "name": "Kimi K2.5"
+      "id": "mimo-v2.6-flash-free",
+      "name": "MiMo V2.6 Flash Free"
     },
     {
-      "id": "kimi-k2.6",
-      "name": "Kimi K2.6"
+      "id": "hy3-free",
+      "name": "HY3 Free"
+    },
+    {
+      "id": "nemotron-3-ultra-free",
+      "name": "Nemotron 3 Ultra Free"
+    },
+    {
+      "id": "nemotron-3.5-lightning-free",
+      "name": "Nemotron 3.5 Lightning Free"
+    },
+    {
+      "id": "laguna-s-2.1-free",
+      "name": "Laguna S 2.1 Free"
+    }
+  ],
+  "opencode-go": [
+    {
+      "id": "glm-5.2",
+      "name": "GLM-5.2"
+    },
+    {
+      "id": "glm-5.2-high",
+      "name": "GLM-5.2 (high effort)"
+    },
+    {
+      "id": "glm-5.2-max",
+      "name": "GLM-5.2 (max effort)"
+    },
+    {
+      "id": "kimi-k2.7-code",
+      "name": "Kimi K2.7 Code"
     },
     {
       "id": "qwen3.5-plus",
@@ -6078,38 +10442,12 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
       "name": "Qwen3.6 Plus"
     },
     {
-      "id": "deepseek-v4-flash-free",
-      "name": "DeepSeek V4 Flash Free"
-    },
-    {
-      "id": "minimax-m2.5-free",
-      "name": "MiniMax M2.5 Free"
-    },
-    {
-      "id": "nemotron-3-super-free",
-      "name": "Nemotron 3 Super Free"
-    },
-    {
-      "id": "qwen3.6-plus-free",
-      "name": "Qwen3.6 Plus Free"
-    }
-  ],
-  "opencode-go": [
-    {
-      "id": "glm-5.2",
-      "name": "GLM-5.2"
-    },
-    {
       "id": "glm-5.1",
       "name": "GLM-5.1"
     },
     {
       "id": "glm-5",
       "name": "GLM-5"
-    },
-    {
-      "id": "kimi-k2.7-code",
-      "name": "Kimi K2.7 Code"
     },
     {
       "id": "kimi-k2.6",
@@ -6120,12 +10458,36 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
       "name": "Kimi K2.5"
     },
     {
+      "id": "kimi-k3",
+      "name": "Kimi K3"
+    },
+    {
+      "id": "kimi-k3-max",
+      "name": "Kimi K3 (max effort)"
+    },
+    {
+      "id": "kimi-k3.1-pro",
+      "name": "Kimi K3.1 Pro"
+    },
+    {
       "id": "mimo-v2.5-pro",
       "name": "MiMo-V2.5-Pro"
     },
     {
       "id": "mimo-v2.5",
       "name": "MiMo-V2.5"
+    },
+    {
+      "id": "mimo-v2.5-high",
+      "name": "MiMo-V2.5 (high effort)"
+    },
+    {
+      "id": "mimo-v2.5-max",
+      "name": "MiMo-V2.5 (max effort)"
+    },
+    {
+      "id": "mimo-v2.6-flash-free",
+      "name": "MiMo V2.6 Flash Free"
     },
     {
       "id": "minimax-m3",
@@ -6144,74 +10506,232 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
       "name": "Qwen3.7 Max"
     },
     {
-      "id": "qwen3.6-plus",
-      "name": "Qwen3.6 Plus"
+      "id": "qwen3.7-max-high",
+      "name": "Qwen3.7 Max (high effort)"
     },
     {
-      "id": "qwen3.5-plus",
-      "name": "Qwen3.5 Plus"
+      "id": "qwen3.7-max-max",
+      "name": "Qwen3.7 Max (max effort)"
+    },
+    {
+      "id": "qwen3.7-plus",
+      "name": "Qwen3.7 Plus"
+    },
+    {
+      "id": "qwen3.7-plus-high",
+      "name": "Qwen3.7 Plus (high effort)"
+    },
+    {
+      "id": "qwen3.7-plus-max",
+      "name": "Qwen3.7 Plus (max effort)"
+    },
+    {
+      "id": "qwen3.8-max",
+      "name": "Qwen3.8 Max"
+    },
+    {
+      "id": "qwen3.6-plus-high",
+      "name": "Qwen3.6 Plus (high effort)"
+    },
+    {
+      "id": "qwen3.6-plus-max",
+      "name": "Qwen3.6 Plus (max effort)"
+    },
+    {
+      "id": "hy3",
+      "name": "Hunyuan3"
+    },
+    {
+      "id": "hy3-none",
+      "name": "Hunyuan3 (none effort)"
+    },
+    {
+      "id": "hy3-low",
+      "name": "Hunyuan3 (low effort)"
+    },
+    {
+      "id": "hy3-high",
+      "name": "Hunyuan3 (high effort)"
     },
     {
       "id": "hy3-preview",
       "name": "Hunyuan3 Preview"
     },
     {
+      "id": "muse-spark-1.2-contributor",
+      "name": "Muse Spark 1.2 Contributor"
+    },
+    {
+      "id": "muse-spark-1.2-contributor-minimal",
+      "name": "Muse Spark 1.2 Contributor (minimal effort)"
+    },
+    {
+      "id": "muse-spark-1.2-contributor-low",
+      "name": "Muse Spark 1.2 Contributor (low effort)"
+    },
+    {
+      "id": "muse-spark-1.2-contributor-medium",
+      "name": "Muse Spark 1.2 Contributor (medium effort)"
+    },
+    {
+      "id": "muse-spark-1.2-contributor-high",
+      "name": "Muse Spark 1.2 Contributor (high effort)"
+    },
+    {
+      "id": "muse-spark-1.2-contributor-xhigh",
+      "name": "Muse Spark 1.2 Contributor (xhigh effort)"
+    },
+    {
+      "id": "muse-spark-1.3-contributor",
+      "name": "Muse Spark 1.3 Contributor"
+    },
+    {
+      "id": "muse-spark-1.3-contributor-minimal",
+      "name": "Muse Spark 1.3 Contributor (minimal effort)"
+    },
+    {
+      "id": "muse-spark-1.3-contributor-low",
+      "name": "Muse Spark 1.3 Contributor (low effort)"
+    },
+    {
+      "id": "muse-spark-1.3-contributor-medium",
+      "name": "Muse Spark 1.3 Contributor (medium effort)"
+    },
+    {
+      "id": "muse-spark-1.3-contributor-high",
+      "name": "Muse Spark 1.3 Contributor (high effort)"
+    },
+    {
+      "id": "muse-spark-1.3-contributor-xhigh",
+      "name": "Muse Spark 1.3 Contributor (xhigh effort)"
+    },
+    {
+      "id": "muse-spark-1.3-contributor-max",
+      "name": "Muse Spark 1.3 Contributor (max effort)"
+    },
+    {
+      "id": "grok-4.5",
+      "name": "Grok 4.5"
+    },
+    {
+      "id": "grok-4.5-low",
+      "name": "Grok 4.5 (low effort)"
+    },
+    {
+      "id": "grok-4.5-medium",
+      "name": "Grok 4.5 (medium effort)"
+    },
+    {
+      "id": "grok-4.5-high",
+      "name": "Grok 4.5 (high effort)"
+    },
+    {
+      "id": "grok-4.6",
+      "name": "Grok 4.6"
+    },
+    {
       "id": "deepseek-v4-pro",
       "name": "DeepSeek V4 Pro"
     },
     {
-      "id": "deepseek-v4-pro-low",
-      "name": "DeepSeek V4 Pro (low effort)"
-    },
-    {
-      "id": "deepseek-v4-pro-medium",
-      "name": "DeepSeek V4 Pro (medium effort)"
-    },
-    {
-      "id": "deepseek-v4-pro-high",
-      "name": "DeepSeek V4 Pro (high effort)"
-    },
-    {
-      "id": "deepseek-v4-pro-max",
-      "name": "DeepSeek V4 Pro (max effort)"
-    },
-    {
       "id": "deepseek-v4-flash",
       "name": "DeepSeek V4 Flash"
+    },
+    {
+      "id": "deepseek-v4-flash-vision-exp",
+      "name": "DeepSeek V4 Flash Vision (exp)"
+    },
+    {
+      "id": "gpt-5.6-luna",
+      "name": "GPT-5.6 Luna"
+    },
+    {
+      "id": "gpt-6-luna",
+      "name": "GPT-6 Luna"
+    },
+    {
+      "id": "deepseek-v4.1-flash",
+      "name": "DeepSeek V4.1 Flash"
+    },
+    {
+      "id": "deepseek-flash",
+      "name": "DeepSeek V4.1 Flash"
+    },
+    {
+      "id": "claude-haiku-5-5",
+      "name": "Claude Haiku 5.5"
+    },
+    {
+      "id": "gemini-4-argon",
+      "name": "Gemini 4 Argon"
+    },
+    {
+      "id": "grok-4.7",
+      "name": "Grok 4.7"
+    },
+    {
+      "id": "hy4-preview",
+      "name": "HY4 Preview"
+    },
+    {
+      "id": "longcat-2.0",
+      "name": "LongCat 2.0"
+    },
+    {
+      "id": "mimo-v2.6-flash",
+      "name": "MiMo V2.6 Flash"
+    },
+    {
+      "id": "mimo-v2.6-pro",
+      "name": "MiMo V2.6 Pro"
+    },
+    {
+      "id": "qwen3.8-flash",
+      "name": "Qwen3.8 Flash"
+    },
+    {
+      "id": "space-bunny",
+      "name": "Space Bunny"
+    },
+    {
+      "id": "ox-alpha-free",
+      "name": "ox-alpha (free)"
     }
   ],
-  "oc": [
+  "ocs": [
     {
       "id": "big-pickle",
       "name": "Big Pickle"
     },
     {
-      "id": "deepseek-v4-flash-free",
-      "name": "DeepSeek V4 Flash Free"
+      "id": "space-bunny-free",
+      "name": "Space Bunny Free"
     },
     {
-      "id": "minimax-m3-free",
-      "name": "MiniMax M3 Free"
+      "id": "muse-spark-1.3-contributor-free",
+      "name": "Muse Spark 1.3 Contributor Free"
     },
     {
-      "id": "minimax-m2.5-free",
-      "name": "MiniMax M2.5 Free"
+      "id": "nemotron-3-ultra-free",
+      "name": "Nemotron 3 Ultra Free"
     },
     {
-      "id": "ling-2.6-1t-free",
-      "name": "Ling 2.6 Free"
+      "id": "mimo-v2.6-flash-free",
+      "name": "MiMo V2.6 Flash Free"
     },
     {
-      "id": "trinity-large-preview-free",
-      "name": "Trinity Large Preview Free"
+      "id": "deepseek-v4.1-flash-free",
+      "name": "DeepSeek V4.1 Flash Free"
+    }
+  ],
+  "dahl": [
+    {
+      "id": "MiniMaxAI/MiniMax-M2.7",
+      "name": "MiniMax M2.7"
     },
     {
-      "id": "nemotron-3-super-free",
-      "name": "Nemotron 3 Super Free"
-    },
-    {
-      "id": "qwen3.6-plus-free",
-      "name": "Qwen3.6 Plus Free"
+      "id": "moonshotai/Kimi-K2.6",
+      "name": "Kimi K2.6"
     }
   ],
   "maritalk": [
@@ -6220,60 +10740,104 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
       "name": "sabia-4"
     },
     {
-      "id": "sabia-3.1",
-      "name": "sabia-3.1"
+      "id": "sabia-4-thinking",
+      "name": "sabia-4-thinking"
     },
     {
       "id": "sabiazinho-4",
       "name": "sabiazinho-4"
-    },
-    {
-      "id": "sabiazinho-3",
-      "name": "sabiazinho-3"
     }
   ],
   "baseten": [
     {
-      "id": "moonshotai/Kimi-K2.6",
-      "name": "moonshotai/Kimi-K2.6"
+      "id": "zai-org/GLM-5.3",
+      "name": "GLM 5.3"
+    },
+    {
+      "id": "zai-org/GLM-5.3-Fast",
+      "name": "GLM 5.3 Fast"
+    },
+    {
+      "id": "zai-org/GLM-5.3-Flash",
+      "name": "GLM 5.3 Flash"
+    },
+    {
+      "id": "zai-org/GLM-5.2",
+      "name": "GLM 5.2"
+    },
+    {
+      "id": "zai-org/GLM-5.2-Fast",
+      "name": "GLM 5.2 Fast"
+    },
+    {
+      "id": "zai-org/GLM-4.7",
+      "name": "GLM 4.7"
     },
     {
       "id": "deepseek-ai/DeepSeek-V4-Pro",
-      "name": "deepseek-ai/DeepSeek-V4-Pro"
+      "name": "DeepSeek V4 Pro"
     },
     {
-      "id": "zai-org/GLM-5",
-      "name": "zai-org/GLM-5"
+      "id": "deepseek-ai/DeepSeek-V4-Pro-0813",
+      "name": "DeepSeek V4 Pro 0813"
     },
     {
-      "id": "MiniMaxAI/MiniMax-M2.5",
-      "name": "MiniMaxAI/MiniMax-M2.5"
+      "id": "deepseek-ai/DeepSeek-V4-Flash-0731",
+      "name": "DeepSeek V4 Flash 0731"
     },
     {
-      "id": "nvidia/Nemotron-120B-A12B",
-      "name": "nvidia/Nemotron-120B-A12B"
+      "id": "moonshotai/Kimi-K3",
+      "name": "Kimi K3"
+    },
+    {
+      "id": "moonshotai/Kimi-K2.6",
+      "name": "Kimi K2.6"
+    },
+    {
+      "id": "moonshotai/Kimi-K2.7-Code",
+      "name": "Kimi K2.7 Code"
     },
     {
       "id": "openai/gpt-oss-120b",
-      "name": "openai/gpt-oss-120b"
+      "name": "GPT OSS 120B"
+    },
+    {
+      "id": "nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B",
+      "name": "Nemotron 3 Ultra"
+    },
+    {
+      "id": "thinkingmachines/inkling",
+      "name": "Inkling"
+    },
+    {
+      "id": "thinkingmachines/inkling-small",
+      "name": "Inkling Small"
     }
   ],
   "gemini": [
     {
-      "id": "gemini-3.1-pro-preview",
-      "name": "Gemini 3.1 Pro Preview"
+      "id": "gemini-3.8-flash",
+      "name": "Gemini 3.8 Flash"
     },
     {
-      "id": "gemini-3-flash-preview",
-      "name": "Gemini 3 Flash Preview"
+      "id": "gemini-4-argon",
+      "name": "Gemini 4 Argon"
+    },
+    {
+      "id": "gemini-3.7-flash",
+      "name": "Gemini 3.7 Flash"
+    },
+    {
+      "id": "gemini-3.1-pro-preview",
+      "name": "Gemini 3.1 Pro Preview"
     },
     {
       "id": "gemini-3.1-flash-lite",
       "name": "Gemini 3.1 Flash Lite"
     },
     {
-      "id": "gemini-3.5-flash",
-      "name": "Gemini 3.5 Flash"
+      "id": "gemini-3-flash-preview",
+      "name": "Gemini 3 Flash Preview"
     },
     {
       "id": "gemini-3.1-flash-tts-preview",
@@ -6298,8 +10862,8 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
       "name": "Gemini 3.1 Pro"
     },
     {
-      "id": "gemini-3.5-flash",
-      "name": "Gemini 3.5 Flash"
+      "id": "gemini-3.7-flash",
+      "name": "Gemini 3.7 Flash"
     },
     {
       "id": "gemini-3.1-flash-lite",
@@ -6308,44 +10872,72 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
   ],
   "cl": [
     {
-      "id": "moonshotai/kimi-k2.6",
-      "name": "Kimi K2.6 (Free)"
+      "id": "z-ai/glm-5.2",
+      "name": "GLM 5.2"
     },
     {
-      "id": "anthropic/claude-sonnet-4.6",
-      "name": "Claude Sonnet 4.6"
+      "id": "x-ai/grok-4.5",
+      "name": "Grok 4.5"
     },
     {
-      "id": "anthropic/claude-opus-4.7",
-      "name": "Claude Opus 4.7"
+      "id": "openai/gpt-5.6-sol",
+      "name": "GPT-5.6 Sol"
     },
     {
-      "id": "google/gemini-3.1-pro-preview",
-      "name": "Gemini 3.1 Pro"
+      "id": "moonshotai/kimi-k3",
+      "name": "Kimi K3"
     },
     {
-      "id": "google/gemini-3-flash-preview",
-      "name": "Gemini 3 Flash"
+      "id": "anthropic/claude-opus-4.8",
+      "name": "Claude Opus 4.8"
     },
     {
-      "id": "openai/gpt-5.5",
-      "name": "GPT-5.5"
+      "id": "cline-free/deepseek-v4.1-flash",
+      "name": "DeepSeek V4.1 Flash (Free)"
+    },
+    {
+      "id": "cline-free/mimo-v2.6-flash",
+      "name": "MiMo V2.6 Flash (Free)"
+    },
+    {
+      "id": "cline-free/muse-spark-1.3-contributor",
+      "name": "Muse Spark 1.3 Contributor (Free)"
+    },
+    {
+      "id": "stealth/space-bunny-alpha",
+      "name": "Space Bunny Alpha (Free)"
+    },
+    {
+      "id": "openrouter/free",
+      "name": "Free Models Router"
     },
     {
       "id": "deepseek/deepseek-v4-flash",
       "name": "DeepSeek V4 Flash"
     },
     {
-      "id": "deepseek/deepseek-v4-pro",
-      "name": "DeepSeek V4 Pro"
+      "id": "tencent/hy3:free",
+      "name": "Tencent Hy3 (Free)"
+    },
+    {
+      "id": "stepfun/step-3.7-flash",
+      "name": "Step 3.7 Flash"
+    },
+    {
+      "id": "poolside/laguna-m.1:free",
+      "name": "Laguna M.1 (Free)"
+    },
+    {
+      "id": "google/gemma-4-31b-it:free",
+      "name": "Gemma 4 31B (Free)"
+    },
+    {
+      "id": "nvidia/nemotron-3-ultra-550b-a55b:free",
+      "name": "Nemotron 3 Ultra (Free)"
     },
     {
       "id": "minimax/minimax-m3",
       "name": "MiniMax M3"
-    },
-    {
-      "id": "nvidia/nemotron-3-ultra-550b-a55b",
-      "name": "Nemotron 3 Ultra 550B"
     }
   ],
   "heroku": [
@@ -6486,112 +11078,6 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
     {
       "id": "qwen-max",
       "name": "Qwen Max (VIP)"
-    }
-  ],
-  "tllm": [
-    {
-      "id": "GPT_5_4",
-      "name": "GPT-5.4 (The Old LLM 🆓)"
-    },
-    {
-      "id": "GPT_5_3",
-      "name": "GPT-5.3 (The Old LLM 🆓)"
-    },
-    {
-      "id": "GPT_5_2",
-      "name": "GPT-5.2 (The Old LLM 🆓)"
-    },
-    {
-      "id": "GPT_5_1",
-      "name": "GPT-5.1 (The Old LLM 🆓)"
-    },
-    {
-      "id": "GPT_5",
-      "name": "GPT-5 (The Old LLM 🆓)"
-    },
-    {
-      "id": "GPT_o4_mini",
-      "name": "o4-mini (The Old LLM 🆓)"
-    },
-    {
-      "id": "GPT_o3_mini",
-      "name": "o3-mini (The Old LLM 🆓)"
-    },
-    {
-      "id": "gemini_3_pro",
-      "name": "Gemini 3 Pro (The Old LLM 🆓)"
-    },
-    {
-      "id": "gemini_2_5_pro",
-      "name": "Gemini 2.5 Pro (The Old LLM 🆓)"
-    },
-    {
-      "id": "gemini_2_0_flash",
-      "name": "Gemini 2.0 Flash (The Old LLM 🆓)"
-    },
-    {
-      "id": "gemini_1_5_flash",
-      "name": "Gemini 1.5 Flash (The Old LLM 🆓)"
-    },
-    {
-      "id": "CLAUDE_4_6_OPUS",
-      "name": "Claude 4.6 Opus (The Old LLM 🆓)"
-    },
-    {
-      "id": "CLAUDE_4_6_SONNET",
-      "name": "Claude 4.6 Sonnet (The Old LLM 🆓)"
-    },
-    {
-      "id": "CLAUDE_4_5_HAIKU",
-      "name": "Claude 4.5 Haiku (The Old LLM 🆓)"
-    },
-    {
-      "id": "openrouter_gpt_4_o",
-      "name": "GPT-4o (The Old LLM 🆓)"
-    },
-    {
-      "id": "openrouter_gpt_4_o_mini",
-      "name": "GPT-4o mini (The Old LLM 🆓)"
-    },
-    {
-      "id": "openrouter_grok_4",
-      "name": "Grok 4 (The Old LLM 🆓)"
-    },
-    {
-      "id": "together_deepseek_v3",
-      "name": "DeepSeek V3 (The Old LLM 🆓)"
-    },
-    {
-      "id": "openrouter_deepseek_r1",
-      "name": "DeepSeek R1 (The Old LLM 🆓)"
-    },
-    {
-      "id": "sonar-pro",
-      "name": "Sonar Pro (The Old LLM 🆓)"
-    },
-    {
-      "id": "GPT_4o",
-      "name": "GPT-4o (The Old LLM 🆓)"
-    },
-    {
-      "id": "claude_opus_4",
-      "name": "Claude Opus 4 (The Old LLM 🆓)"
-    },
-    {
-      "id": "claude_sonnet_4",
-      "name": "Claude Sonnet 4 (The Old LLM 🆓)"
-    },
-    {
-      "id": "claude_haiku_3_5",
-      "name": "Claude Haiku 3.5 (The Old LLM 🆓)"
-    },
-    {
-      "id": "deepseek_v4",
-      "name": "DeepSeek V4 (The Old LLM 🆓)"
-    },
-    {
-      "id": "gemini_3_flash",
-      "name": "Gemini 3 Flash (The Old LLM 🆓)"
     }
   ],
   "baidu": [
@@ -6798,6 +11284,114 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
   ],
   "cx": [
     {
+      "id": "gpt-6-astra",
+      "name": "GPT 6 Astra"
+    },
+    {
+      "id": "gpt-6-astra-ultra",
+      "name": "GPT 6 Astra (Ultra)"
+    },
+    {
+      "id": "gpt-6-astra-max",
+      "name": "GPT 6 Astra (Max)"
+    },
+    {
+      "id": "gpt-6-astra-xhigh",
+      "name": "GPT 6 Astra (xHigh)"
+    },
+    {
+      "id": "gpt-6-astra-high",
+      "name": "GPT 6 Astra (High)"
+    },
+    {
+      "id": "gpt-6-astra-medium",
+      "name": "GPT 6 Astra (Medium)"
+    },
+    {
+      "id": "gpt-6-astra-low",
+      "name": "GPT 6 Astra (Low)"
+    },
+    {
+      "id": "gpt-6-sol",
+      "name": "GPT 6 Sol"
+    },
+    {
+      "id": "gpt-6-sol-ultra",
+      "name": "GPT 6 Sol (Ultra)"
+    },
+    {
+      "id": "gpt-6-sol-max",
+      "name": "GPT 6 Sol (Max)"
+    },
+    {
+      "id": "gpt-6-sol-xhigh",
+      "name": "GPT 6 Sol (xHigh)"
+    },
+    {
+      "id": "gpt-6-sol-high",
+      "name": "GPT 6 Sol (High)"
+    },
+    {
+      "id": "gpt-6-sol-medium",
+      "name": "GPT 6 Sol (Medium)"
+    },
+    {
+      "id": "gpt-6-sol-low",
+      "name": "GPT 6 Sol (Low)"
+    },
+    {
+      "id": "gpt-6.1-sol",
+      "name": "GPT 6.1 Sol"
+    },
+    {
+      "id": "gpt-6.1-sol-ultra",
+      "name": "GPT 6.1 Sol (Ultra)"
+    },
+    {
+      "id": "gpt-6.1-sol-max",
+      "name": "GPT 6.1 Sol (Max)"
+    },
+    {
+      "id": "gpt-6.1-sol-xhigh",
+      "name": "GPT 6.1 Sol (xHigh)"
+    },
+    {
+      "id": "gpt-6.1-sol-high",
+      "name": "GPT 6.1 Sol (High)"
+    },
+    {
+      "id": "gpt-6.1-sol-medium",
+      "name": "GPT 6.1 Sol (Medium)"
+    },
+    {
+      "id": "gpt-6.1-sol-low",
+      "name": "GPT 6.1 Sol (Low)"
+    },
+    {
+      "id": "gpt-6-luna",
+      "name": "GPT 6 Luna"
+    },
+    {
+      "id": "gpt-6-luna-max",
+      "name": "GPT 6 Luna (Max)"
+    },
+    {
+      "id": "gpt-6-luna-xhigh",
+      "name": "GPT 6 Luna (xHigh)"
+    },
+    {
+      "id": "gpt-6-luna-high",
+      "name": "GPT 6 Luna (High)"
+    },
+    {
+      "id": "gpt-6-luna-medium",
+      "name": "GPT 6 Luna (Medium)"
+    },
+    {
+      "id": "gpt-6-luna-low",
+      "name": "GPT 6 Luna (Low)"
+    },
+    {
       "id": "gpt-5.6-sol",
       "name": "GPT 5.6 Sol"
     },
@@ -6896,10 +11490,678 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
     {
       "id": "gpt-5.5-low",
       "name": "GPT 5.5 (Low)"
+    }
+  ],
+  "cxa": [
+    {
+      "id": "gpt-6-astra",
+      "name": "GPT 6 Astra"
     },
     {
-      "id": "gpt-5.3-codex-spark",
-      "name": "GPT 5.3 Codex Spark"
+      "id": "gpt-6-astra-ultra",
+      "name": "GPT 6 Astra (Ultra)"
+    },
+    {
+      "id": "gpt-6-astra-max",
+      "name": "GPT 6 Astra (Max)"
+    },
+    {
+      "id": "gpt-6-astra-xhigh",
+      "name": "GPT 6 Astra (xHigh)"
+    },
+    {
+      "id": "gpt-6-astra-high",
+      "name": "GPT 6 Astra (High)"
+    },
+    {
+      "id": "gpt-6-astra-medium",
+      "name": "GPT 6 Astra (Medium)"
+    },
+    {
+      "id": "gpt-6-astra-low",
+      "name": "GPT 6 Astra (Low)"
+    },
+    {
+      "id": "gpt-6-sol",
+      "name": "GPT 6 Sol"
+    },
+    {
+      "id": "gpt-6-sol-ultra",
+      "name": "GPT 6 Sol (Ultra)"
+    },
+    {
+      "id": "gpt-6-sol-max",
+      "name": "GPT 6 Sol (Max)"
+    },
+    {
+      "id": "gpt-6-sol-xhigh",
+      "name": "GPT 6 Sol (xHigh)"
+    },
+    {
+      "id": "gpt-6-sol-high",
+      "name": "GPT 6 Sol (High)"
+    },
+    {
+      "id": "gpt-6-sol-medium",
+      "name": "GPT 6 Sol (Medium)"
+    },
+    {
+      "id": "gpt-6-sol-low",
+      "name": "GPT 6 Sol (Low)"
+    },
+    {
+      "id": "gpt-6.1-sol",
+      "name": "GPT 6.1 Sol"
+    },
+    {
+      "id": "gpt-6.1-sol-ultra",
+      "name": "GPT 6.1 Sol (Ultra)"
+    },
+    {
+      "id": "gpt-6.1-sol-max",
+      "name": "GPT 6.1 Sol (Max)"
+    },
+    {
+      "id": "gpt-6.1-sol-xhigh",
+      "name": "GPT 6.1 Sol (xHigh)"
+    },
+    {
+      "id": "gpt-6.1-sol-high",
+      "name": "GPT 6.1 Sol (High)"
+    },
+    {
+      "id": "gpt-6.1-sol-medium",
+      "name": "GPT 6.1 Sol (Medium)"
+    },
+    {
+      "id": "gpt-6.1-sol-low",
+      "name": "GPT 6.1 Sol (Low)"
+    },
+    {
+      "id": "gpt-6-luna",
+      "name": "GPT 6 Luna"
+    },
+    {
+      "id": "gpt-6-luna-max",
+      "name": "GPT 6 Luna (Max)"
+    },
+    {
+      "id": "gpt-6-luna-xhigh",
+      "name": "GPT 6 Luna (xHigh)"
+    },
+    {
+      "id": "gpt-6-luna-high",
+      "name": "GPT 6 Luna (High)"
+    },
+    {
+      "id": "gpt-6-luna-medium",
+      "name": "GPT 6 Luna (Medium)"
+    },
+    {
+      "id": "gpt-6-luna-low",
+      "name": "GPT 6 Luna (Low)"
+    },
+    {
+      "id": "gpt-5.6-sol",
+      "name": "GPT 5.6 Sol"
+    },
+    {
+      "id": "gpt-5.6-sol-ultra",
+      "name": "GPT 5.6 Sol (Ultra)"
+    },
+    {
+      "id": "gpt-5.6-sol-max",
+      "name": "GPT 5.6 Sol (Max)"
+    },
+    {
+      "id": "gpt-5.6-sol-xhigh",
+      "name": "GPT 5.6 Sol (xHigh)"
+    },
+    {
+      "id": "gpt-5.6-sol-high",
+      "name": "GPT 5.6 Sol (High)"
+    },
+    {
+      "id": "gpt-5.6-sol-medium",
+      "name": "GPT 5.6 Sol (Medium)"
+    },
+    {
+      "id": "gpt-5.6-sol-low",
+      "name": "GPT 5.6 Sol (Low)"
+    },
+    {
+      "id": "gpt-5.6-terra",
+      "name": "GPT 5.6 Terra"
+    },
+    {
+      "id": "gpt-5.6-terra-ultra",
+      "name": "GPT 5.6 Terra (Ultra)"
+    },
+    {
+      "id": "gpt-5.6-terra-max",
+      "name": "GPT 5.6 Terra (Max)"
+    },
+    {
+      "id": "gpt-5.6-terra-xhigh",
+      "name": "GPT 5.6 Terra (xHigh)"
+    },
+    {
+      "id": "gpt-5.6-terra-high",
+      "name": "GPT 5.6 Terra (High)"
+    },
+    {
+      "id": "gpt-5.6-terra-medium",
+      "name": "GPT 5.6 Terra (Medium)"
+    },
+    {
+      "id": "gpt-5.6-terra-low",
+      "name": "GPT 5.6 Terra (Low)"
+    },
+    {
+      "id": "gpt-5.6-luna",
+      "name": "GPT 5.6 Luna"
+    },
+    {
+      "id": "gpt-5.6-luna-max",
+      "name": "GPT 5.6 Luna (Max)"
+    },
+    {
+      "id": "gpt-5.6-luna-xhigh",
+      "name": "GPT 5.6 Luna (xHigh)"
+    },
+    {
+      "id": "gpt-5.6-luna-high",
+      "name": "GPT 5.6 Luna (High)"
+    },
+    {
+      "id": "gpt-5.6-luna-medium",
+      "name": "GPT 5.6 Luna (Medium)"
+    },
+    {
+      "id": "gpt-5.6-luna-low",
+      "name": "GPT 5.6 Luna (Low)"
+    },
+    {
+      "id": "gpt-5.5",
+      "name": "GPT 5.5"
+    },
+    {
+      "id": "gpt-5.5-xhigh",
+      "name": "GPT 5.5 (xHigh)"
+    },
+    {
+      "id": "gpt-5.5-high",
+      "name": "GPT 5.5 (High)"
+    },
+    {
+      "id": "gpt-5.5-medium",
+      "name": "GPT 5.5 (Medium)"
+    },
+    {
+      "id": "gpt-5.5-low",
+      "name": "GPT 5.5 (Low)"
+    }
+  ],
+  "mx": [
+    {
+      "id": "gpt-5.6-luna",
+      "name": "GPT-5.6 Luna"
+    },
+    {
+      "id": "claude-haiku-4-5",
+      "name": "Claude Haiku 4.5"
+    },
+    {
+      "id": "gemini-3-1-flash-lite",
+      "name": "Gemini 3.1 Flash Lite"
+    },
+    {
+      "id": "grok-4-1-fast-non-reasoning",
+      "name": "Grok 4.1 Fast"
+    },
+    {
+      "id": "llama-3.3-70b",
+      "name": "Llama 3.3 70B"
+    },
+    {
+      "id": "deepseek-v3.2",
+      "name": "DeepSeek V3.2"
+    },
+    {
+      "id": "gpt-5.6",
+      "name": "GPT-5.6"
+    },
+    {
+      "id": "claude-5-sonnet",
+      "name": "Claude 5 Sonnet"
+    },
+    {
+      "id": "grok-4-1-fast-reasoning",
+      "name": "Grok 4.1 Fast (Reasoning)"
+    },
+    {
+      "id": "gpt-5.6-thinking",
+      "name": "GPT-5.6 Thinking"
+    },
+    {
+      "id": "gemini-3.1-pro-preview",
+      "name": "Gemini 3.1 Pro Preview"
+    },
+    {
+      "id": "grok-4.5",
+      "name": "Grok 4.5"
+    },
+    {
+      "id": "deepseek-r1",
+      "name": "DeepSeek R1"
+    }
+  ],
+  "ucn": [
+    {
+      "id": "claude-opus-45",
+      "name": "Claude Opus 4.5"
+    },
+    {
+      "id": "claude-opus-46",
+      "name": "Claude Opus 4.6"
+    },
+    {
+      "id": "claude-opus-46-v2",
+      "name": "Claude Opus 4.6 (v2)"
+    },
+    {
+      "id": "claude-opus-47",
+      "name": "Claude Opus 4.7"
+    },
+    {
+      "id": "claude-opus-47-v2",
+      "name": "Claude Opus 4.7 (v2)"
+    },
+    {
+      "id": "claude-opus-48-uncensored",
+      "name": "Claude Opus 4.8 (Uncensored)"
+    },
+    {
+      "id": "deepseek-r1",
+      "name": "DeepSeek R1"
+    },
+    {
+      "id": "glm-5.1",
+      "name": "GLM 5.1"
+    },
+    {
+      "id": "gpt-5.5",
+      "name": "GPT-5.5"
+    },
+    {
+      "id": "gemini-3-flash",
+      "name": "Gemini 3 Flash"
+    },
+    {
+      "id": "gemini-31-uncensored",
+      "name": "Gemini 3.1 (Uncensored)"
+    },
+    {
+      "id": "gemini-emotional",
+      "name": "Gemini (Emotional)"
+    },
+    {
+      "id": "gemini-3-uncensored",
+      "name": "Gemini 3 (Uncensored)"
+    },
+    {
+      "id": "grok-4",
+      "name": "Grok 4"
+    },
+    {
+      "id": "grok-4-20",
+      "name": "Grok 4.20"
+    },
+    {
+      "id": "grok-4-3",
+      "name": "Grok 4.3"
+    },
+    {
+      "id": "kimi-k2-thinking",
+      "name": "Kimi K2 Thinking"
+    },
+    {
+      "id": "kimi-k2.5",
+      "name": "Kimi K2.5"
+    },
+    {
+      "id": "minimax-m2-her",
+      "name": "MiniMax M2 (Her)"
+    }
+  ],
+  "ucd": [
+    {
+      "id": "claude-opus-5",
+      "name": "Claude Opus 5"
+    },
+    {
+      "id": "claude-opus-5-fast",
+      "name": "Claude Opus 5 Fast"
+    },
+    {
+      "id": "claude-fable-5",
+      "name": "Claude Fable 5"
+    },
+    {
+      "id": "claude-opus-4.8",
+      "name": "Claude Opus 4.8"
+    },
+    {
+      "id": "claude-opus-4.5",
+      "name": "Claude Opus 4.5"
+    },
+    {
+      "id": "claude-sonnet-4.5",
+      "name": "Claude Sonnet 4.5"
+    },
+    {
+      "id": "claude-haiku-4.5",
+      "name": "Claude Haiku 4.5"
+    },
+    {
+      "id": "claude-opus-4.7",
+      "name": "Claude Opus 4.7"
+    },
+    {
+      "id": "claude-opus-4.6",
+      "name": "Claude Opus 4.6"
+    },
+    {
+      "id": "claude-sonnet-4.6",
+      "name": "Claude Sonnet 4.6"
+    },
+    {
+      "id": "gpt-5.6-sol",
+      "name": "GPT 5.6 Sol"
+    },
+    {
+      "id": "gpt-5.6-terra",
+      "name": "GPT 5.6 Terra"
+    },
+    {
+      "id": "gpt-5.6-luna",
+      "name": "GPT 5.6 Luna"
+    },
+    {
+      "id": "gpt-4o",
+      "name": "GPT 4o"
+    },
+    {
+      "id": "gpt-4o-mini",
+      "name": "GPT 4o Mini"
+    },
+    {
+      "id": "gpt-5.2",
+      "name": "GPT 5.2"
+    },
+    {
+      "id": "gpt-5.2-codex",
+      "name": "GPT 5.2 Codex"
+    },
+    {
+      "id": "gpt-5.3-codex",
+      "name": "GPT 5.3 Codex"
+    },
+    {
+      "id": "gpt-5.4",
+      "name": "GPT 5.4"
+    },
+    {
+      "id": "gpt-5.4-mini",
+      "name": "GPT 5.4 Mini"
+    },
+    {
+      "id": "gpt-5.4-pro",
+      "name": "GPT 5.4 Pro"
+    },
+    {
+      "id": "gpt-5.4-nano",
+      "name": "GPT 5.4 Nano"
+    },
+    {
+      "id": "gpt-5.5",
+      "name": "GPT 5.5"
+    },
+    {
+      "id": "gpt-5.5-pro",
+      "name": "GPT 5.5 Pro"
+    },
+    {
+      "id": "gpt-5-mini",
+      "name": "GPT 5 Mini"
+    },
+    {
+      "id": "gpt-5-nano",
+      "name": "GPT 5 Nano"
+    },
+    {
+      "id": "openai-gpt-oss-120b",
+      "name": "GPT OSS 120b"
+    },
+    {
+      "id": "gemini-3-6-flash",
+      "name": "Gemini 3 6 Flash"
+    },
+    {
+      "id": "gemini-3-flash-preview",
+      "name": "Gemini 3 Flash Preview"
+    },
+    {
+      "id": "gemini-3.1-pro-preview",
+      "name": "Gemini 3.1 Pro Preview"
+    },
+    {
+      "id": "gemini-3.1-flash-lite",
+      "name": "Gemini 3.1 Flash Lite"
+    },
+    {
+      "id": "gemini-2.5-pro",
+      "name": "Gemini 2.5 Pro"
+    },
+    {
+      "id": "gemini-2.5-flash",
+      "name": "Gemini 2.5 Flash"
+    },
+    {
+      "id": "gemma-3-27b-it",
+      "name": "Gemma 3 27b IT"
+    },
+    {
+      "id": "grok-4-6",
+      "name": "Grok 4 6"
+    },
+    {
+      "id": "grok-4.5",
+      "name": "Grok 4.5"
+    },
+    {
+      "id": "grok-4.20-beta",
+      "name": "Grok 4.20 Beta"
+    },
+    {
+      "id": "grok-4.3",
+      "name": "Grok 4.3"
+    },
+    {
+      "id": "deepseek-v4-flash-0731",
+      "name": "Deepseek V4 Flash 0731"
+    },
+    {
+      "id": "deepseek-v3.2",
+      "name": "Deepseek V3.2"
+    },
+    {
+      "id": "deepseek-v4-pro",
+      "name": "Deepseek V4 Pro"
+    },
+    {
+      "id": "deepseek-v4-flash",
+      "name": "Deepseek V4 Flash"
+    },
+    {
+      "id": "deepseek-r1",
+      "name": "Deepseek R1"
+    },
+    {
+      "id": "qwen-3-8-2-4t-a95b",
+      "name": "Qwen 3 8 2 4t A95b"
+    },
+    {
+      "id": "qwen-3-8-max",
+      "name": "Qwen 3 8 Max"
+    },
+    {
+      "id": "qwen-3-6-35b-a3b",
+      "name": "Qwen 3 6 35b A3B"
+    },
+    {
+      "id": "qwen3-235b-a22b-2507",
+      "name": "Qwen3 235b A22b 2507"
+    },
+    {
+      "id": "qwen3-235b-a22b-thinking-2507",
+      "name": "Qwen3 235b A22b Thinking 2507"
+    },
+    {
+      "id": "qwen3.5-397b-a17b",
+      "name": "Qwen3.5 397b A17b"
+    },
+    {
+      "id": "qwen3.6-27b",
+      "name": "Qwen3.6 27b"
+    },
+    {
+      "id": "qwen3-30b-a3b",
+      "name": "Qwen3 30b A3B"
+    },
+    {
+      "id": "qwen3-5-35b-a3b",
+      "name": "Qwen3 5 35b A3B"
+    },
+    {
+      "id": "qwen3-5-9b",
+      "name": "Qwen3 5 9b"
+    },
+    {
+      "id": "qwen3-coder",
+      "name": "Qwen3 Coder"
+    },
+    {
+      "id": "qwen3-next-80b-a3b-instruct",
+      "name": "Qwen3 Next 80b A3B Instruct"
+    },
+    {
+      "id": "qwen3-vl-235b-a22b-thinking",
+      "name": "Qwen3 VL 235b A22b Thinking"
+    },
+    {
+      "id": "qwen3-vl-30b-a3b-thinking",
+      "name": "Qwen3 VL 30b A3B Thinking"
+    },
+    {
+      "id": "qwen3.5-flash",
+      "name": "Qwen3.5 Flash"
+    },
+    {
+      "id": "qwen3.5-plus",
+      "name": "Qwen3.5 Plus"
+    },
+    {
+      "id": "kimi-k3",
+      "name": "Kimi K3"
+    },
+    {
+      "id": "kimi-k2",
+      "name": "Kimi K2"
+    },
+    {
+      "id": "kimi-k2.5",
+      "name": "Kimi K2.5"
+    },
+    {
+      "id": "kimi-k2.6",
+      "name": "Kimi K2.6"
+    },
+    {
+      "id": "kimi-k2-thinking",
+      "name": "Kimi K2 Thinking"
+    },
+    {
+      "id": "glm-5.2",
+      "name": "GLM 5.2"
+    },
+    {
+      "id": "glm-4.7-flash",
+      "name": "GLM 4.7 Flash"
+    },
+    {
+      "id": "glm-5",
+      "name": "GLM 5"
+    },
+    {
+      "id": "glm-5.1",
+      "name": "GLM 5.1"
+    },
+    {
+      "id": "glm-4.7",
+      "name": "GLM 4.7"
+    },
+    {
+      "id": "glm-4.6",
+      "name": "GLM 4.6"
+    },
+    {
+      "id": "minimax-m2.1",
+      "name": "MiniMax M2.1"
+    },
+    {
+      "id": "minimax-m2.5",
+      "name": "MiniMax M2.5"
+    },
+    {
+      "id": "minimax-m2.7",
+      "name": "MiniMax M2.7"
+    },
+    {
+      "id": "mistral-large",
+      "name": "Mistral Large"
+    },
+    {
+      "id": "mistral-small-3.2-24b-instruct",
+      "name": "Mistral Small 3.2 24b Instruct"
+    },
+    {
+      "id": "llama-3.2-3b-instruct",
+      "name": "Llama 3.2 3b Instruct"
+    },
+    {
+      "id": "llama-3.3-70b-instruct",
+      "name": "Llama 3.3 70b Instruct"
+    },
+    {
+      "id": "nvidia-nemotron-3-5-lightning-30b-a3b",
+      "name": "Nvidia Nemotron 3 5 Lightning 30b A3B"
+    },
+    {
+      "id": "nvidia-nemotron-3-nano-30b-a3b",
+      "name": "Nvidia Nemotron 3 Nano 30b A3B"
+    },
+    {
+      "id": "hermes-3-llama-3.1-405b",
+      "name": "Hermes 3 Llama 3.1 405b"
+    },
+    {
+      "id": "aion-labs.aion-2-0",
+      "name": "Aion 2 0"
+    },
+    {
+      "id": "inkling",
+      "name": "Inkling"
     }
   ],
   "venice": [
@@ -6940,6 +12202,18 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
     {
       "id": "qwen3-coder-next",
       "name": "Qwen3 Coder Next"
+    },
+    {
+      "id": "gpt-5.6-sol",
+      "name": "GPT-5.6 Sol"
+    },
+    {
+      "id": "gpt-5.6-terra",
+      "name": "GPT-5.6 Terra"
+    },
+    {
+      "id": "gpt-5.6-luna",
+      "name": "GPT-5.6 Luna"
     }
   ],
   "bpm": [
@@ -6958,12 +12232,6 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
     {
       "id": "gpt-oss-120b",
       "name": "GPT-OSS-120B"
-    }
-  ],
-  "mcode": [
-    {
-      "id": "mimo-auto",
-      "name": "MiMo Auto"
     }
   ],
   "wafer": [
@@ -7014,17 +12282,95 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
       "name": "DeepSeek V4 Flash (TokenRouter)"
     }
   ],
-  "gc": [
+  "tk": [
     {
-      "id": "grok-build",
-      "name": "Grok Build"
+      "id": "claude-3-5-sonnet",
+      "name": "Claude 3.5 Sonnet (Token Kiosk)"
     },
     {
-      "id": "grok-composer-2.5-fast",
-      "name": "Grok Composer 2.5 Fast"
+      "id": "deepseek-v3",
+      "name": "DeepSeek V3 (Token Kiosk)"
+    },
+    {
+      "id": "deepseek-r1",
+      "name": "DeepSeek R1 (Token Kiosk)"
+    },
+    {
+      "id": "kimi-k1.5",
+      "name": "Kimi K1.5 (Token Kiosk)"
+    },
+    {
+      "id": "minimax-m6",
+      "name": "MiniMax M6 (Token Kiosk)"
+    }
+  ],
+  "gc": [
+    {
+      "id": "grok-4.7",
+      "name": "Grok 4.7"
+    },
+    {
+      "id": "grok-4.7-build-fast",
+      "name": "Grok 4.7 Build Fast"
+    },
+    {
+      "id": "grok-4.6",
+      "name": "Grok 4.6"
+    },
+    {
+      "id": "grok-4.5",
+      "name": "Grok 4.5"
+    },
+    {
+      "id": "grok-code-fast-1",
+      "name": "Grok Code Fast 1"
     }
   ],
   "cbcn": [
+    {
+      "id": "default",
+      "name": "Default"
+    },
+    {
+      "id": "deepseek-v4-pro",
+      "name": "Deepseek-V4-Pro"
+    },
+    {
+      "id": "deepseek-v4-flash",
+      "name": "Deepseek-V4-Flash"
+    },
+    {
+      "id": "deepseek-v4.1-flash",
+      "name": "Deepseek-V4.1-Flash"
+    },
+    {
+      "id": "deepseek-v3-2-volc",
+      "name": "DeepSeek-V3.2"
+    },
+    {
+      "id": "minimax-m2.5",
+      "name": "MiniMax-M2.5"
+    },
+    {
+      "id": "minimax-m2.7",
+      "name": "MiniMax-M2.7"
+    },
+    {
+      "id": "minimax-m3-pay",
+      "name": "MiniMax-M3"
+    },
+    {
+      "id": "glm-5.3",
+      "name": "GLM-5.3"
+    },
+    {
+      "id": "glm-5.3-flash",
+      "name": "GLM-5.3-Flash"
+    },
+    {
+      "id": "glm-5.3-flashx",
+      "name": "GLM-5.3-FlashX"
+    },
     {
       "id": "glm-5.2",
       "name": "GLM-5.2"
@@ -7050,12 +12396,20 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
       "name": "GLM-4.7"
     },
     {
-      "id": "minimax-m3",
-      "name": "MiniMax-M3"
+      "id": "glm-4.6",
+      "name": "GLM-4.6"
     },
     {
-      "id": "minimax-m2.7",
-      "name": "MiniMax-M2.7"
+      "id": "glm-4.6v",
+      "name": "GLM-4.6V"
+    },
+    {
+      "id": "kimi-k3-2",
+      "name": "Kimi-K3"
+    },
+    {
+      "id": "kimi-k2.8-preview",
+      "name": "Kimi-K2.8-Preview"
     },
     {
       "id": "kimi-k2.7",
@@ -7070,20 +12424,118 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
       "name": "Kimi-K2.5"
     },
     {
-      "id": "hy3-preview",
-      "name": "Hy3 Preview"
+      "id": "kimi-k2-thinking",
+      "name": "Kimi-K2-Thinking"
     },
     {
-      "id": "deepseek-v4-pro",
-      "name": "DeepSeek-V4-Pro"
+      "id": "hy3",
+      "name": "Hy3"
     },
     {
-      "id": "deepseek-v4-flash",
-      "name": "DeepSeek-V4-Flash"
+      "id": "hy3-x",
+      "name": "Hy3"
     },
     {
-      "id": "deepseek-v3-2-volc",
-      "name": "DeepSeek-V3.2"
+      "id": "hy4-preview",
+      "name": "Hy4 preview"
+    },
+    {
+      "id": "hy4-preview-x",
+      "name": "Hy4 preview"
+    },
+    {
+      "id": "hunyuan-chat",
+      "name": "Hunyuan-Turbos"
+    }
+  ],
+  "cbai": [
+    {
+      "id": "hy4-preview",
+      "name": "Hy4-Preview"
+    },
+    {
+      "id": "hy3",
+      "name": "Hy3"
+    },
+    {
+      "id": "gpt-6-astra",
+      "name": "GPT 6.0 Astra"
+    },
+    {
+      "id": "gpt-6-luna",
+      "name": "GPT-6-Luna"
+    },
+    {
+      "id": "gpt-6-sol",
+      "name": "GPT-6-Sol"
+    },
+    {
+      "id": "gpt-5.6-sol",
+      "name": "GPT-5.6-Sol"
+    },
+    {
+      "id": "gpt-5.6-terra",
+      "name": "GPT-5.6-Terra"
+    },
+    {
+      "id": "gpt-5.6-luna",
+      "name": "GPT-5.6-Luna"
+    },
+    {
+      "id": "gpt-5.5",
+      "name": "GPT-5.5"
+    },
+    {
+      "id": "gpt-5.4",
+      "name": "GPT-5.4"
+    },
+    {
+      "id": "gpt-5.3-codex",
+      "name": "GPT-5.3-Codex"
+    },
+    {
+      "id": "gemini-3.5-flash",
+      "name": "Gemini-3.5-Flash"
+    },
+    {
+      "id": "glm-5v-turbo",
+      "name": "GLM-5v-Turbo"
+    },
+    {
+      "id": "glm-5.3",
+      "name": "GLM-5.3"
+    },
+    {
+      "id": "glm-5.3-flash",
+      "name": "GLM-5.3-Flash"
+    },
+    {
+      "id": "glm-5.2",
+      "name": "GLM-5.2"
+    },
+    {
+      "id": "glm-5.1",
+      "name": "GLM-5.1"
+    },
+    {
+      "id": "minimax-m3",
+      "name": "MiniMax-M3"
+    },
+    {
+      "id": "kimi-k3",
+      "name": "Kimi-K3"
+    },
+    {
+      "id": "kimi-k2.7",
+      "name": "Kimi-K2.7-Code"
+    },
+    {
+      "id": "kimi-k2.6",
+      "name": "Kimi-K2.6"
+    },
+    {
+      "id": "deepseek-v4.1-flash",
+      "name": "DeepSeek-V4.1-Flash"
     }
   ],
   "pn": [
@@ -7172,6 +12624,944 @@ export const OMNI_BUILTIN_MODELS: Record<string, OmniBuiltinModel[]> = {
     {
       "id": "sapiens-ai/agnes-1.5-pro",
       "name": "Agnes 1.5 Pro"
+    }
+  ],
+  "tcw": [
+    {
+      "id": "claude-fable-5",
+      "name": "Claude Fable 5"
+    },
+    {
+      "id": "claude-opus-5",
+      "name": "Claude Opus 5"
+    },
+    {
+      "id": "claude-sonnet-5",
+      "name": "Claude Sonnet 5"
+    },
+    {
+      "id": "gpt-5.6-sol",
+      "name": "GPT 5.6 Sol"
+    },
+    {
+      "id": "gpt-5.6-luna",
+      "name": "GPT 5.6 Luna"
+    },
+    {
+      "id": "gpt-5.5",
+      "name": "GPT 5.5"
+    },
+    {
+      "id": "gpt-5.4-mini",
+      "name": "GPT 5.4 Mini"
+    },
+    {
+      "id": "gpt-5.4-nano",
+      "name": "GPT 5.4 Nano"
+    },
+    {
+      "id": "gpt-5.3-thinking-free",
+      "name": "GPT 5.3 Thinking Free"
+    },
+    {
+      "id": "gpt-5.3-free",
+      "name": "GPT 5.3 Free (Multimodal/Vision)"
+    },
+    {
+      "id": "gpt-oss-120b",
+      "name": "GPT-OSS 120B"
+    },
+    {
+      "id": "gemini-3.6-flash",
+      "name": "Gemini 3.6 Flash"
+    },
+    {
+      "id": "gemini-3.1-pro-preview",
+      "name": "Gemini 3.1 Pro"
+    },
+    {
+      "id": "gemini-3.1-flash-lite-preview",
+      "name": "Gemini 3.1 Flash Lite"
+    },
+    {
+      "id": "grok-4.5",
+      "name": "Grok 4.5"
+    },
+    {
+      "id": "deepseek-v4-pro",
+      "name": "DeepSeek V4 Pro"
+    },
+    {
+      "id": "deepseek-v4-flash",
+      "name": "DeepSeek V4 Flash"
+    },
+    {
+      "id": "kimi-k3",
+      "name": "Kimi K3"
+    },
+    {
+      "id": "glm-5.2",
+      "name": "GLM 5.2"
+    },
+    {
+      "id": "qwen3.6-plus",
+      "name": "Qwen 3.6 Plus"
+    },
+    {
+      "id": "mimo-v2.5-pro",
+      "name": "Mimo V2.5 Pro"
+    },
+    {
+      "id": "mimo-v2.5",
+      "name": "Mimo V2.5"
+    }
+  ],
+  "navy": [
+    {
+      "id": "llama-3.3-70b-instruct",
+      "name": "Llama 3.3 70B Instruct"
+    },
+    {
+      "id": "gemma-4-31b-it",
+      "name": "Gemma 4 31B IT"
+    },
+    {
+      "id": "deepseek-v4-flash",
+      "name": "DeepSeek V4 Flash"
+    },
+    {
+      "id": "deepseek-chat",
+      "name": "DeepSeek Chat"
+    },
+    {
+      "id": "mistral-small-latest",
+      "name": "Mistral Small"
+    },
+    {
+      "id": "llama-4-scout",
+      "name": "Llama 4 Scout"
+    }
+  ],
+  "nara": [
+    {
+      "id": "agnes-2.0-flash",
+      "name": "Agnes 2.0 Flash"
+    },
+    {
+      "id": "agnes-2.5-flash",
+      "name": "Agnes 2.5 Flash"
+    },
+    {
+      "id": "laguna-s-2.1",
+      "name": "Laguna S 2.1"
+    },
+    {
+      "id": "minimax-m3-free",
+      "name": "MiniMax M3 (free)"
+    },
+    {
+      "id": "mistral-large",
+      "name": "Mistral Large"
+    },
+    {
+      "id": "mistral-medium-3-5",
+      "name": "Mistral Medium 3.5"
+    },
+    {
+      "id": "qwen3.8-27b",
+      "name": "Qwen3.8 27B"
+    },
+    {
+      "id": "stepfun-3.7-flash",
+      "name": "StepFun 3.7 Flash"
+    }
+  ],
+  "xkiro": [
+    {
+      "id": "qwen/qwen3-vl-plus:free",
+      "name": "Qwen3 VL Plus"
+    },
+    {
+      "id": "sensenova/sensenova-6.8-flash-lite",
+      "name": "SenseNova 6.8 Flash-Lite"
+    },
+    {
+      "id": "minimax/minimax-m2.7:free",
+      "name": "MiniMax M2.7"
+    },
+    {
+      "id": "minimax/minimax-m2.7-highspeed:free",
+      "name": "MiniMax M2.7 Highspeed"
+    },
+    {
+      "id": "minimax/minimax-m2.5:free",
+      "name": "MiniMax M2.5"
+    },
+    {
+      "id": "minimax/minimax-m3:free",
+      "name": "MiniMax M3"
+    },
+    {
+      "id": "minimax/minimax-m2.1-highspeed:free",
+      "name": "MiniMax M2.1 Highspeed"
+    },
+    {
+      "id": "minimax/minimax-m2.5-highspeed:free",
+      "name": "MiniMax M2.5 Highspeed"
+    },
+    {
+      "id": "minimax/minimax-m2.1:free",
+      "name": "MiniMax M2.1"
+    },
+    {
+      "id": "minimax/minimax-m2:free",
+      "name": "MiniMax M2"
+    },
+    {
+      "id": "qwen/qwen3.5-flash:free",
+      "name": "Qwen3.5 Flash"
+    },
+    {
+      "id": "qwen/qwen3.6-plus:free",
+      "name": "Qwen3.6 Plus"
+    },
+    {
+      "id": "qwen/qwen3.5-397b-a17b:free",
+      "name": "Qwen3.5 397B A17B"
+    },
+    {
+      "id": "qwen/qwen3.5-omni-flash:free",
+      "name": "Qwen3.5 Omni Flash"
+    },
+    {
+      "id": "mistralai/mistral-large-2512",
+      "name": "Mistral Large 3"
+    },
+    {
+      "id": "mistralai/mistral-medium-3.5",
+      "name": "Mistral Medium 3.5"
+    },
+    {
+      "id": "mistralai/mistral-small-2603",
+      "name": "Mistral Small 4"
+    },
+    {
+      "id": "mistralai/codestral-2508",
+      "name": "Codestral"
+    },
+    {
+      "id": "mistralai/devstral-medium",
+      "name": "Devstral 2"
+    },
+    {
+      "id": "mistralai/ministral-8b",
+      "name": "Ministral 3 8B"
+    },
+    {
+      "id": "mistralai/ministral-3b",
+      "name": "Ministral 3 3B"
+    },
+    {
+      "id": "deepseek/deepseek-v4-pro",
+      "name": "DeepSeek V4 Pro"
+    },
+    {
+      "id": "deepseek/deepseek-v3.2",
+      "name": "DeepSeek V3.2"
+    },
+    {
+      "id": "deepseek/deepseek-chat-v3.1",
+      "name": "DeepSeek V3.1"
+    },
+    {
+      "id": "qwen/qwen3.7-plus:free",
+      "name": "Qwen3.7 Plus"
+    },
+    {
+      "id": "mistralai/ministral-14b",
+      "name": "Ministral 3 14B"
+    },
+    {
+      "id": "qwen/qwen3.6-max-preview:free",
+      "name": "Qwen3.6 Max Preview"
+    },
+    {
+      "id": "qwen/qwen3.5-plus:free",
+      "name": "Qwen3.5 Plus"
+    },
+    {
+      "id": "qwen/qwen3.5-omni-plus:free",
+      "name": "Qwen3.5 Omni Plus"
+    },
+    {
+      "id": "deepseek/deepseek-v4-flash",
+      "name": "DeepSeek V4 Flash"
+    },
+    {
+      "id": "sensenova/sensenova-6.7-flash-lite",
+      "name": "SenseNova 6.7 Flash-Lite"
+    },
+    {
+      "id": "qwen/qwen3.8-max:free",
+      "name": "Qwen3.8 Max"
+    },
+    {
+      "id": "qwen/qwen3.7-max:free",
+      "name": "Qwen3.7 Max"
+    },
+    {
+      "id": "qwen/qwen3.6-27b:free",
+      "name": "Qwen3.6 27B"
+    },
+    {
+      "id": "qwen/qwen3.6-35b-a3b:free",
+      "name": "Qwen3.6 35B A3B"
+    },
+    {
+      "id": "qwen/qwen3-max:free",
+      "name": "Qwen3 Max"
+    },
+    {
+      "id": "qwen/qwen3-coder-plus:free",
+      "name": "Qwen3 Coder Plus"
+    },
+    {
+      "id": "qwen/qwen-plus-2025-07-28:free",
+      "name": "Qwen Plus 0728"
+    },
+    {
+      "id": "qwen/qwen3-omni-flash:free",
+      "name": "Qwen3 Omni Flash"
+    }
+  ],
+  "sealion": [
+    {
+      "id": "aisingapore/Llama-SEA-LION-v3.5-70B-R",
+      "name": "Llama SEA-LION v3.5 70B R"
+    },
+    {
+      "id": "aisingapore/Llama-SEA-LION-v3-70B-IT",
+      "name": "Llama SEA-LION v3 70B IT"
+    },
+    {
+      "id": "aisingapore/Gemma-SEA-LION-v4-27B-IT",
+      "name": "Gemma SEA-LION v4 27B IT"
+    },
+    {
+      "id": "aisingapore/Qwen-SEA-LION-v4.5-27B-IT",
+      "name": "Qwen SEA-LION v4.5 27B IT"
+    },
+    {
+      "id": "aisingapore/Qwen-SEA-LION-v4-32B-IT",
+      "name": "Qwen SEA-LION v4 32B IT"
+    }
+  ],
+  "routeway": [
+    {
+      "id": "llama-3.3-70b-instruct:free",
+      "name": "Llama 3.3 70B Instruct (free)"
+    },
+    {
+      "id": "nemotron-3-nano-30b-a3b:free",
+      "name": "Nemotron 3 Nano 30B (free)"
+    },
+    {
+      "id": "nemotron-nano-9b-v2:free",
+      "name": "Nemotron Nano 9B v2 (free)"
+    },
+    {
+      "id": "step-3.7-flash:free",
+      "name": "Step 3.7 Flash (free)"
+    },
+    {
+      "id": "step-3.5-flash:free",
+      "name": "Step 3.5 Flash (free)"
+    },
+    {
+      "id": "laguna-m.1:free",
+      "name": "Laguna M.1 (free)"
+    },
+    {
+      "id": "laguna-xs.2:free",
+      "name": "Laguna XS.2 (free)"
+    },
+    {
+      "id": "llama-3.2-3b-instruct:free",
+      "name": "Llama 3.2 3B Instruct (free)"
+    }
+  ],
+  "pql": [
+    {
+      "id": "bedrock-claude-fable-5",
+      "name": "Claude Fable 5"
+    },
+    {
+      "id": "bedrock-claude-opus-5",
+      "name": "Claude Opus 5"
+    },
+    {
+      "id": "bedrock-claude-sonnet-4-5",
+      "name": "Claude Sonnet 4.5"
+    },
+    {
+      "id": "deepseek-v4-pro-0813",
+      "name": "DeepSeek V4 Pro 0813"
+    },
+    {
+      "id": "deepseek-v4-flash-0731",
+      "name": "DeepSeek V4 Flash 0731"
+    },
+    {
+      "id": "gemini-3.1-pro-preview",
+      "name": "Gemini 3.1 Pro Preview"
+    },
+    {
+      "id": "gemini-3.7-flash",
+      "name": "Gemini 3.7 Flash"
+    },
+    {
+      "id": "gpt-5.6-sol",
+      "name": "GPT-5.6 Sol"
+    },
+    {
+      "id": "gpt-5.6-terra",
+      "name": "GPT-5.6 Terra"
+    },
+    {
+      "id": "gpt-5.6-luna",
+      "name": "GPT-5.6 Luna"
+    },
+    {
+      "id": "xai-grok-4-6",
+      "name": "Grok 4.6"
+    },
+    {
+      "id": "kimi-k3",
+      "name": "Kimi K3"
+    },
+    {
+      "id": "glm-5.2",
+      "name": "GLM 5.2"
+    },
+    {
+      "id": "minimax-m3",
+      "name": "Minimax M3"
+    }
+  ],
+  "ha": [
+    {
+      "id": "fable-latest",
+      "name": "Fable 5"
+    },
+    {
+      "id": "claude-fable-5",
+      "name": "Claude Fable 5"
+    },
+    {
+      "id": "opus-latest",
+      "name": "Claude Opus Latest"
+    },
+    {
+      "id": "claude-opus-4-8",
+      "name": "Claude Opus 4.8"
+    },
+    {
+      "id": "sonnet-latest",
+      "name": "Claude Sonnet Latest"
+    },
+    {
+      "id": "claude-sonnet-5",
+      "name": "Claude Sonnet 5"
+    }
+  ],
+  "mc": [
+    {
+      "id": "muse-wonder-1.0",
+      "name": "Muse Wonder 1.0"
+    },
+    {
+      "id": "muse-wonder-1.0-contributor",
+      "name": "Muse Wonder 1.0 Contributor"
+    },
+    {
+      "id": "muse-spark-1.3",
+      "name": "Muse Spark 1.3"
+    },
+    {
+      "id": "muse-spark-1.3-contributor",
+      "name": "Muse Spark 1.3 Contributor"
+    },
+    {
+      "id": "muse-spark-1.2",
+      "name": "Muse Spark 1.2"
+    },
+    {
+      "id": "muse-spark-1.2-contributor",
+      "name": "Muse Spark 1.2 Contributor"
+    },
+    {
+      "id": "muse-spark-1.1",
+      "name": "Muse Spark 1.1"
+    }
+  ],
+  "poolside": [
+    {
+      "id": "poolside/laguna-xs-2.1",
+      "name": "Laguna XS 2.1"
+    },
+    {
+      "id": "poolside/laguna-s-2.1",
+      "name": "Laguna S 2.1"
+    }
+  ],
+  "llmkiwi": [
+    {
+      "id": "auto",
+      "name": "Auto"
+    },
+    {
+      "id": "hrLLM",
+      "name": "hrLLM"
+    }
+  ],
+  "mixlayer": [
+    {
+      "id": "qwen/qwen3.5-4b-free",
+      "name": "Qwen 3.5 4B (free)"
+    }
+  ],
+  "yolo-auto": [
+    {
+      "id": "qwen3.6-35b-a3b",
+      "name": "Qwen 3.6 35B A3B"
+    }
+  ],
+  "cloudcode-one": [
+    {
+      "id": "glm-4.7-flash",
+      "name": "GLM 4.7 Flash"
+    },
+    {
+      "id": "glm-4.6v-flash",
+      "name": "GLM 4.6V Flash"
+    }
+  ],
+  "tabitoken": [
+    {
+      "id": "claude-opus-5",
+      "name": "Claude Opus 5"
+    },
+    {
+      "id": "claude-opus-5-thinking",
+      "name": "Claude Opus 5 (Thinking)"
+    },
+    {
+      "id": "claude-opus-4-8",
+      "name": "Claude Opus 4.8"
+    },
+    {
+      "id": "claude-opus-4-8-thinking",
+      "name": "Claude Opus 4.8 (Thinking)"
+    }
+  ],
+  "tm": [
+    {
+      "id": "auto",
+      "name": "Auto"
+    },
+    {
+      "id": "gemini-3.1-pro-thinking",
+      "name": "Gemini 3.1 Pro Thinking"
+    },
+    {
+      "id": "gemini-3.8-flash-thinking",
+      "name": "Gemini 3.8 Flash Thinking"
+    },
+    {
+      "id": "gemini-3.7-flash",
+      "name": "Gemini 3.7 Flash"
+    },
+    {
+      "id": "gemini-3.6-flash",
+      "name": "Gemini 3.6 Flash"
+    },
+    {
+      "id": "gpt-5.6-sol-thinking",
+      "name": "GPT-5.6 Sol Thinking"
+    },
+    {
+      "id": "gpt-5.5-thinking",
+      "name": "GPT-5.5 Thinking"
+    },
+    {
+      "id": "gpt-5.6-terra",
+      "name": "GPT-5.6 Terra"
+    },
+    {
+      "id": "gpt-5.6-luna",
+      "name": "GPT-5.6 Luna"
+    },
+    {
+      "id": "claude-opus-5-thinking",
+      "name": "Claude Opus 5 Thinking"
+    },
+    {
+      "id": "claude-opus-4-7-thinking",
+      "name": "Claude Opus 4.7 Thinking"
+    },
+    {
+      "id": "claude-sonnet-5",
+      "name": "Claude Sonnet 5"
+    },
+    {
+      "id": "claude-sonnet-4-6",
+      "name": "Claude Sonnet 4.6"
+    }
+  ],
+  "stx": [
+    {
+      "id": "claude-fable-5-1",
+      "name": "Claude Fable 5.1"
+    },
+    {
+      "id": "claude-haiku-4-5-20251001",
+      "name": "Claude Haiku 4.5"
+    },
+    {
+      "id": "claude-opus-5",
+      "name": "Claude Opus 5"
+    },
+    {
+      "id": "claude-fable-5",
+      "name": "Claude Fable 5"
+    },
+    {
+      "id": "claude-opus-4-6",
+      "name": "Claude Opus 4.6"
+    },
+    {
+      "id": "claude-opus-4-7",
+      "name": "Claude Opus 4.7"
+    },
+    {
+      "id": "claude-opus-4-8",
+      "name": "Claude Opus 4.8"
+    },
+    {
+      "id": "claude-sonnet-4-6",
+      "name": "Claude Sonnet 4.6"
+    },
+    {
+      "id": "claude-sonnet-5",
+      "name": "Claude Sonnet 5"
+    },
+    {
+      "id": "qwen3-max-2026-01-23",
+      "name": "Qwen 3 Max"
+    },
+    {
+      "id": "qwen3.7-max",
+      "name": "Qwen 3.7 Max"
+    },
+    {
+      "id": "qwen3.7-plus",
+      "name": "Qwen 3.7 Plus"
+    },
+    {
+      "id": "deepseek-r1",
+      "name": "DeepSeek R1"
+    },
+    {
+      "id": "deepseek-v3",
+      "name": "DeepSeek V3"
+    },
+    {
+      "id": "gemini-3.1-pro-preview",
+      "name": "Gemini 3.1 Pro"
+    },
+    {
+      "id": "gemini-3.5-flash",
+      "name": "Gemini 3.5 Flash"
+    },
+    {
+      "id": "gemini-3.5-flash-lite",
+      "name": "Gemini 3.5 Flash Lite"
+    },
+    {
+      "id": "gemini-3.6-flash",
+      "name": "Gemini 3.6 Flash"
+    },
+    {
+      "id": "gemini-3.7-flash",
+      "name": "Gemini 3.7 Flash"
+    },
+    {
+      "id": "gemini-3.8-flash",
+      "name": "Gemini 3.8 Flash"
+    },
+    {
+      "id": "gpt-5-mini-2025-08-07",
+      "name": "GPT-5 Mini"
+    },
+    {
+      "id": "gpt-5-nano-2025-08-07",
+      "name": "GPT-5 Nano"
+    },
+    {
+      "id": "gpt-5.6-luna",
+      "name": "GPT 5.6 Luna"
+    },
+    {
+      "id": "gpt-6-astra",
+      "name": "GPT 6 Astra"
+    },
+    {
+      "id": "gpt-5.6-terra",
+      "name": "GPT 5.6 Terra"
+    },
+    {
+      "id": "gpt-5.6-sol",
+      "name": "GPT 5.6 Sol"
+    },
+    {
+      "id": "gpt-5.2",
+      "name": "GPT 5.2"
+    },
+    {
+      "id": "gpt-5.4",
+      "name": "GPT 5.4"
+    },
+    {
+      "id": "gpt-5.5",
+      "name": "GPT 5.5"
+    },
+    {
+      "id": "sonar",
+      "name": "Perplexity Sonar + Internet"
+    },
+    {
+      "id": "grok-4.6",
+      "name": "Grok 4.6"
+    },
+    {
+      "id": "grok-4.3",
+      "name": "Grok 4.3"
+    },
+    {
+      "id": "grok-4.5",
+      "name": "Grok 4.5"
+    },
+    {
+      "id": "glm-5.2",
+      "name": "GLM 5.2"
+    }
+  ],
+  "daoxe": [
+    {
+      "id": "claude-sonnet-4-6",
+      "name": "Claude Sonnet 4.6"
+    },
+    {
+      "id": "claude-opus-4-8",
+      "name": "Claude Opus 4.8"
+    },
+    {
+      "id": "claude-haiku-4-5-20251001",
+      "name": "Claude Haiku 4.5"
+    },
+    {
+      "id": "gpt-5.5",
+      "name": "GPT-5.5"
+    },
+    {
+      "id": "gpt-5.4",
+      "name": "GPT-5.4"
+    },
+    {
+      "id": "gemini-3.1-pro-preview",
+      "name": "Gemini 3.1 Pro Preview"
+    },
+    {
+      "id": "grok-4.5",
+      "name": "Grok 4.5"
+    },
+    {
+      "id": "grok-4.3",
+      "name": "Grok 4.3"
+    },
+    {
+      "id": "kimi-k2.5",
+      "name": "Kimi K2.5"
+    }
+  ],
+  "gisoo": [
+    {
+      "id": "claude-opus-5-5",
+      "name": "Claude Opus 5.5"
+    },
+    {
+      "id": "claude-sonnet-5-5",
+      "name": "Claude Sonnet 5.5"
+    },
+    {
+      "id": "claude-haiku-5-5",
+      "name": "Claude Haiku 5.5"
+    },
+    {
+      "id": "gpt-5.6-sol",
+      "name": "GPT-5.6 Sol"
+    },
+    {
+      "id": "gpt-5.5",
+      "name": "GPT-5.5"
+    },
+    {
+      "id": "gemini-3.8-flash",
+      "name": "Gemini 3.8 Flash"
+    },
+    {
+      "id": "gemini-3.1-pro-preview",
+      "name": "Gemini 3.1 Pro (Preview)"
+    },
+    {
+      "id": "deepseek-v4-pro",
+      "name": "DeepSeek V4 Pro"
+    },
+    {
+      "id": "deepseek-flash",
+      "name": "DeepSeek Flash"
+    }
+  ],
+  "demonroute": [
+    {
+      "id": "dphn/Dolphin3.0-Llama3.1-8B",
+      "name": "Dolphin 3.0 Llama 3.1 8B"
+    },
+    {
+      "id": "dphn/Dolphin-Mistral-24B-Venice-Edition",
+      "name": "Dolphin Mistral 24B Venice"
+    },
+    {
+      "id": "TheDrummer/Artemis-31B-v1.2",
+      "name": "Artemis 31B v1.2"
+    },
+    {
+      "id": "TheDrummer/Cydonia-24B-v4.3",
+      "name": "Cydonia 24B v4.3"
+    },
+    {
+      "id": "huihui-ai/Huihui-Qwen3.6-35B-A3B-abliterated",
+      "name": "Huihui Qwen 3.6 35B A3B Abliterated"
+    },
+    {
+      "id": "huihui-ai/Huihui-gemma-4-31B-it-abliterated-v2",
+      "name": "Huihui Gemma 4 31B Abliterated v2"
+    },
+    {
+      "id": "dphn/dolphin-2.9.3-mistral-nemo-12b",
+      "name": "Dolphin 2.9.3 Mistral Nemo 12B"
+    }
+  ],
+  "paralon": [
+    {
+      "id": "qwen3.8-27b",
+      "name": "Qwen3.8 27B"
+    },
+    {
+      "id": "qwen3-3b",
+      "name": "Qwen3 3B"
+    }
+  ],
+  "empiriolabs": [
+    {
+      "id": "qwen3-8-flash",
+      "name": "Qwen3.8 Flash"
+    },
+    {
+      "id": "qwen3-7-max",
+      "name": "Qwen3.7 Max"
+    },
+    {
+      "id": "glm-5-3",
+      "name": "GLM 5.3"
+    },
+    {
+      "id": "kimi-k2-7-code",
+      "name": "Kimi K2.7 Code"
+    },
+    {
+      "id": "deepseek-v4-pro",
+      "name": "DeepSeek V4 Pro"
+    },
+    {
+      "id": "deepseek-v4-1-flash",
+      "name": "DeepSeek V4.1 Flash"
+    },
+    {
+      "id": "minimax-m3",
+      "name": "MiniMax M3"
+    }
+  ],
+  "mb": [
+    {
+      "id": "mb-auto/free",
+      "name": "MegaBrain Auto Free"
+    },
+    {
+      "id": "z-ai/glm-5.3",
+      "name": "GLM 5.3"
+    },
+    {
+      "id": "z-ai/glm-5.3-prime",
+      "name": "GLM 5.3 Prime"
+    },
+    {
+      "id": "moonshotai/kimi-k3",
+      "name": "Kimi K3"
+    },
+    {
+      "id": "moonshotai/kimi-k3.1-pro",
+      "name": "Kimi K3.1 Pro"
+    },
+    {
+      "id": "moonshotai/kimi-k2.7-code",
+      "name": "Kimi K2.7 Code"
+    },
+    {
+      "id": "minimax/minimax-m3",
+      "name": "MiniMax M3"
+    },
+    {
+      "id": "x-ai/grok-4.7",
+      "name": "Grok 4.7"
+    },
+    {
+      "id": "x-ai/grok-build-0.1",
+      "name": "Grok Build 0.1"
+    },
+    {
+      "id": "deepseek/deepseek-v4-pro",
+      "name": "DeepSeek V4 Pro"
+    },
+    {
+      "id": "qwen/qwen3.8-flash",
+      "name": "Qwen3.8 Flash"
+    },
+    {
+      "id": "anthropic/claude-opus-5.5",
+      "name": "Claude Opus 5.5"
+    },
+    {
+      "id": "anthropic/claude-sonnet-5.5",
+      "name": "Claude Sonnet 5.5"
+    },
+    {
+      "id": "openai/gpt-6-sol",
+      "name": "GPT-6 Sol"
+    },
+    {
+      "id": "google/gemini-3.7-flash",
+      "name": "Gemini 3.7 Flash"
     }
   ]
 }
