@@ -37,12 +37,12 @@ test('The pinned OMP shim is valid JS, preserves SQLite reads/writes and respect
   const root = temporary(t)
   const chunks = path.join(root, patch.root)
   fs.mkdirSync(chunks, { recursive: true })
-  const source = 'const n=e.i(785148);let a=()=>r.default.join(r.default.join(t.default.homedir(),".omp","agent"),"agent.db");globalThis.Database=n.default;'
+  const source = 'function i(){try{if(process.versions.bun)return(0,a.f)("bun:sqlite").Database;return(0,a.f)("better-sqlite3")}catch{return null}}let o=()=>r.default.join(r.default.join(t.default.homedir(),".omp","agent"),"agent.db");globalThis.Database=i();'
   for (let i = 0; i < patch.expected; i++) fs.writeFileSync(path.join(chunks, `${i}.js`), source)
   applyBuiltinPatches(root, [patch])
   const patched = fs.readFileSync(path.join(chunks, '0.js'), 'utf8')
   new Script(patched)
-  const context = { process, e: { i: () => { throw new Error('Native module must not be imported') } } }
+  const context = { process, a: { f: () => { throw new Error('Native module must not be imported') } } }
   runInNewContext(patched, context)
   const file = path.join(root, 'credentials.sqlite')
   const db = new context.Database(file)
@@ -57,19 +57,54 @@ test('The pinned OMP shim is valid JS, preserves SQLite reads/writes and respect
   writable.prepare('DELETE FROM credentials WHERE provider = ?').run('fixture')
   assert.equal(writable.prepare('SELECT COUNT(*) AS count FROM credentials').get().count, 0)
   writable.close()
-  assert.throws(() => applyBuiltinPatches(root, [patch]), /expected 8 exact occurrences, found 0/)
+  assert.throws(() => applyBuiltinPatches(root, [patch]), /expected 1 exact occurrences, found 0/)
+})
+
+test('The pinned sharp shim keeps boot alive without @img and defers the original error', async (t) => {
+  const { BUILTIN_PATCHES, applyBuiltinPatches } = await import('../omniroute/vendor-patches.mjs')
+  const patch = BUILTIN_PATCHES.find(item => item.id === 'optional-sharp-external')
+  const root = temporary(t)
+  const chunks = path.join(root, patch.root, 'ssr')
+  fs.mkdirSync(chunks, { recursive: true })
+  // Shape of 3.8.54's Turbopack async external for sharp.
+  const source = 'globalThis.load=a=>a.a(async(c,e)=>{try{var r=await a.y("sharp");a.n(r),e()}catch(a){e(a)}},!0);'
+  for (let i = 0; i < patch.expected; i++) fs.writeFileSync(path.join(chunks, `${i}.js`), source)
+  applyBuiltinPatches(root, [patch])
+  const patched = fs.readFileSync(path.join(chunks, '0.js'), 'utf8')
+  new Script(patched)
+  const run = async (resolveSharp) => {
+    const context = {}
+    runInNewContext(patched, context)
+    let exported
+    let failure
+    await context.load({
+      y: resolveSharp,
+      n: (value) => { exported = value },
+      a: (body) => body(null, (error) => { failure = error })
+    })
+    return { exported, failure }
+  }
+  const missing = new Error("Cannot find package '@img/colour'")
+  const absent = await run(async () => { throw missing })
+  assert.equal(absent.failure, undefined, 'module evaluation succeeds without sharp')
+  assert.throws(() => absent.exported(Buffer.alloc(1)), (error) => error === missing)
+  const sharp = () => 'resized'
+  const present = await run(async () => sharp)
+  assert.equal(present.failure, undefined)
+  assert.equal(present.exported, sharp, 'an installed sharp is passed through unchanged')
+  assert.throws(() => applyBuiltinPatches(root, [patch]), /expected 10 exact occurrences, found 0/)
 })
 
 test('Patch-count mismatch leaves all chunks untouched', async (t) => {
   const { BUILTIN_PATCHES, applyBuiltinPatches } = await import('../omniroute/vendor-patches.mjs')
   const patch = BUILTIN_PATCHES.find(item => item.id === 'omp-credentials-node-sqlite')
   const root = temporary(t)
-  const file = path.join(root, patch.root, 'only-one.js')
-  const source = 'n=e.i(785148);let a=()=>r.default.join(r.default.join(t.default.homedir(),".omp","agent"),"agent.db");'
-  fs.mkdirSync(path.dirname(file), { recursive: true })
-  fs.writeFileSync(file, source)
-  assert.throws(() => applyBuiltinPatches(root, [patch]), /found 1/)
-  assert.equal(fs.readFileSync(file, 'utf8'), source)
+  const files = ['first.js', 'second.js'].map(name => path.join(root, patch.root, name))
+  const source = 'function i(){try{if(process.versions.bun)return(0,a.f)("bun:sqlite").Database;return(0,a.f)("better-sqlite3")}catch{return null}}let o=()=>r.default.join(r.default.join(t.default.homedir(),".omp","agent"),"agent.db");'
+  fs.mkdirSync(path.dirname(files[0]), { recursive: true })
+  for (const file of files) fs.writeFileSync(file, source)
+  assert.throws(() => applyBuiltinPatches(root, [patch]), /expected 1 exact occurrences, found 2/)
+  for (const file of files) assert.equal(fs.readFileSync(file, 'utf8'), source)
 })
 
 test('Packaged smoke cannot borrow dependencies from the development workspace', (t) => {

@@ -4,33 +4,36 @@ import { join } from 'node:path'
 const CHUNKS = join('node_modules', 'omniroute', 'dist', '.build', 'next', 'server', 'chunks')
 
 // Exact, count-checked shims for the pinned release. Review on every upstream bump.
+//
+// omniroute@3.8.54 needs fewer shims than 3.8.48: its CLI and process supervisor
+// already spawn process.execPath (Electron with ELECTRON_RUN_AS_NODE), and its DB
+// driver factory opens node:sqlite natively on Node >= 22.5, so the former
+// runtime/node:sqlite stubs have nothing left to replace.
 export const BUILTIN_PATCHES = [
   {
-    id: 'reuse-electron-runtime:serve',
-    path: join('node_modules', 'omniroute', 'bin', 'cli', 'commands', 'serve.mjs'),
-    from: 'spawn("node",', to: 'spawn(process.execPath,', expected: 2
-  },
-  {
-    id: 'reuse-electron-runtime:supervisor',
-    path: join('node_modules', 'omniroute', 'bin', 'cli', 'runtime', 'processSupervisor.mjs'),
-    from: 'spawn("node",', to: 'spawn(process.execPath,', expected: 1
-  },
-  {
-    id: 'enable-node-sqlite-adapter', root: CHUNKS, extension: '.js',
-    pattern: /let\{DatabaseSync:([A-Za-z_$][\w$]*)\}=\(\(\)=>\{let \1=Error\("Cannot find module 'node:sqlite': Unsupported external type Url for commonjs reference"\);throw \1\.code="MODULE_NOT_FOUND",\1\}\)\(\);/g,
-    to: 'let{DatabaseSync:$1}=process.getBuiltinModule("node:sqlite");', expected: 10
-  },
-  {
-    // The OMP credentials module is imported by startup instrumentation through
-    // the DB barrel. Its eager better-sqlite3 import bypasses the driver's fallback
-    // and crashes before node:sqlite can initialize the main database. OMP only
-    // needs prepare/get/run/close, supported directly by DatabaseSync. Keep this
-    // scoped to OMP and translate its readonly option; do not alias all native DBs.
+    // The OMP credential helper still prefers better-sqlite3, which vendoring
+    // prunes. Since 3.8.54 it fails soft (returns null), which would silently
+    // drop OMP credential access instead of crashing startup. OMP only needs
+    // prepare/get/run/close, supported directly by DatabaseSync. Keep this scoped
+    // to OMP and translate its readonly option; do not alias all native DBs.
     id: 'omp-credentials-node-sqlite', root: CHUNKS, extension: '.js',
-    needle: '.i(785148)',
-    pattern: /(?<![\w$])([A-Za-z_$][\w$]*)=[A-Za-z_$][\w$]*\.i\(785148\)(?=;let [A-Za-z_$][\w$]*=\(\)=>[^;]*"\.omp","agent"[^;]*;)/g,
-    to: '$1={default:class{constructor(path,options){return new (process.getBuiltinModule("node:sqlite").DatabaseSync)(path,{readOnly:options?.readonly===true})}}}',
-    expected: 8
+    needle: '".omp","agent"),"agent.db")',
+    pattern: /(?<=function [A-Za-z_$][\w$]*\(\)\{try\{if\(process\.versions\.bun\)return\(0,[A-Za-z_$][\w$]*\.f\)\("bun:sqlite"\)\.Database;)return\(0,[A-Za-z_$][\w$]*\.f\)\("better-sqlite3"\)(?=\}catch\{return null\}\})/g,
+    to: 'return class{constructor(path,options){return new (process.getBuiltinModule("node:sqlite").DatabaseSync)(path,{readOnly:options?.readonly===true})}}',
+    expected: 1
+  },
+  {
+    // Vendoring prunes the @img scope (sharp's native libvips builds): Ascora
+    // does not ship image processing. 3.8.54's media guardrails import the sharp
+    // external statically from startup instrumentation, so a missing @img/*
+    // package aborts boot. Keep the module resolvable and fail only the image
+    // operation itself with the original load error; code that already loads
+    // sharp lazily keeps its own fallback.
+    id: 'optional-sharp-external', root: CHUNKS, extension: '.js',
+    needle: '.y("sharp")',
+    pattern: /var ([A-Za-z_$][\w$]*)=await ([A-Za-z_$][\w$]*)\.y\("sharp"\);/g,
+    to: 'var $1;try{$1=await $2.y("sharp")}catch(sharpError){$1=function(){throw sharpError}}',
+    expected: 10
   }
 ]
 

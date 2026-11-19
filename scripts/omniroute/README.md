@@ -5,8 +5,8 @@ installer as a managed loopback gateway — the user installs nothing. Upstream 
 forked**: the exact npm release pinned in `pin.json` is fetched, trimmed and bundled as an
 artifact via electron-builder `extraResources` (`.build/omniroute` → `resources/omniroute`).
 
-Latest verified Windows vendoring measurement for `omniroute@3.8.48`: **99,797 files,
-1,169.1 MB uncompressed** after trimming (16,069 files / 401.9 MB removed). The final
+Latest verified Windows vendoring measurement for `omniroute@3.8.54`: **127,837 files,
+1,259.1 MB uncompressed** after trimming (3.8.48: 99,797 files / 1,169.1 MB). The final
 installer is substantially smaller because electron-builder compresses the resource tree.
 
 ## Scripts

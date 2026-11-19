@@ -218,7 +218,7 @@ spawnSidecar()
 
 await waitForHealth('first boot')
 
-// OmniRoute 3.8.48 defaults dashboard/management login to enabled. Ascora
+// OmniRoute (3.8.48 through 3.8.54) defaults dashboard/management login to enabled. Ascora
 // binds the process to loopback and never exposes that dashboard, so disable
 // the management login through the public bootstrap endpoint before using the
 // admin API. Production performs the identical bootstrap after health.
@@ -278,6 +278,13 @@ const mockConnection = await fetchJson(`${base}/api/providers`, {
   body: JSON.stringify({ provider: mockNodeId, name: 'ascora-smoke-local', apiKey: 'sk-local-fixture', defaultModel: 'fixture' })
 }).catch(error => fail(`could not connect local chat fixture: ${error.message}`))
 if (!mockConnection.ok) fail(`could not connect local chat fixture: ${JSON.stringify(mockConnection.body)}`)
+// Since 3.8.54 a new connection stays inactive until a passing connection test
+// activates it — the same flow the dashboard and Ascora's provider wizard use.
+const mockConnectionId = mockConnection.body?.connection?.id ?? mockConnection.body?.id
+if (!mockConnectionId) fail(`local chat fixture connection has no id: ${JSON.stringify(mockConnection.body)}`)
+const mockTest = await fetchJson(`${base}/api/providers/${encodeURIComponent(mockConnectionId)}/test`, { method: 'POST' }, 15000)
+  .catch(error => fail(`could not test local chat fixture: ${error.message}`))
+if (!mockTest.ok || mockTest.body?.valid === false) fail(`local chat fixture connection test failed: ${JSON.stringify(mockTest.body)}`)
 
 async function verifyChat() {
   for (const stream of [false, true]) {

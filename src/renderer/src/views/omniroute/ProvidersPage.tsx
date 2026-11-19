@@ -329,7 +329,13 @@ function ConnectionEditor({
       } else {
         payload.provider = entry.id
         if (apiKey) payload.apiKey = apiKey
-        await omniRequest('POST', '/api/providers', payload)
+        const created = await omniRequest<unknown>('POST', '/api/providers', payload)
+        // OmniRoute creates connections inactive until a passing connection test
+        // activates them; run the same check the provider wizard does. A failed
+        // check leaves the connection disabled with its error shown in the list.
+        const record = isRecord(created) && isRecord(created.connection) ? created.connection : isRecord(created) ? created : {}
+        const id = omniId(record)
+        if (id) await omniRequest('POST', `/api/providers/${encodeURIComponent(id)}/test`).catch(() => undefined)
       }
       onSaved()
       onClose()
@@ -785,8 +791,12 @@ function ProviderWizard({ language, onClose, onSaved }: { language: AppLanguage;
   }
   const testConnection = async (id: string): Promise<string> => {
     if (!id) return 'unknown'
-    try { await omniRequest('POST', `/api/providers/${encodeURIComponent(id)}/test`); return 'ok' }
-    catch { return 'error' }
+    // A failed check still answers HTTP 200 with valid:false, and only a passing
+    // check activates the new connection.
+    try {
+      const result = await omniRequest<unknown>('POST', `/api/providers/${encodeURIComponent(id)}/test`)
+      return isRecord(result) && result.valid === false ? 'error' : 'ok'
+    } catch { return 'error' }
   }
 
   const submitApiKey = async (): Promise<void> => {

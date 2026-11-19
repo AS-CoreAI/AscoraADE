@@ -1,6 +1,6 @@
 # Third-Party Notices
 
-## OmniRoute 3.8.48
+## OmniRoute 3.8.54
 
 Ascora ADE includes [OmniRoute](https://github.com/diegosouzapw/OmniRoute),
 distributed under the MIT License.
