@@ -818,7 +818,7 @@ function ProviderWizard({ language, onClose, onSaved }: { language: AppLanguage;
     try {
       const type = mode === 'openai' ? 'openai-compatible' : 'anthropic-compatible'
       setStatus(l(language, 'Создание совместимого провайдера…', 'Creating compatible provider…'))
-      const nodeResponse = await omniRequest<unknown>('POST', '/api/provider-nodes', { name: name.trim(), prefix: prefix.trim(), baseUrl: baseUrl.trim(), type, ...(mode === 'cc' ? { compatMode: 'cc' } : {}) })
+      const nodeResponse = await omniRequest<unknown>('POST', '/api/provider-nodes', { name: name.trim(), prefix: prefix.trim(), baseUrl: baseUrl.trim(), type, ...(mode === 'openai' ? { apiType: 'chat' } : {}), ...(mode === 'cc' ? { compatMode: 'cc' } : {}) })
       const nodeRecord = isRecord(nodeResponse) && isRecord(nodeResponse.node) ? nodeResponse.node : isRecord(nodeResponse) ? nodeResponse : {}
       const nodeId = omniId(nodeRecord)
       setStatus(l(language, 'Сохранение подключения…', 'Saving connection…'))

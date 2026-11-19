@@ -12,6 +12,7 @@ import { spawn } from 'node:child_process'
 import { createRequire } from 'node:module'
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { createServer } from 'node:net'
+import { createServer as createHttpServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -42,6 +43,7 @@ let dataDir = ''
 let exited = false
 let startupOutput = ''
 let startupError
+let mockUpstream
 const startupExports = {}
 runInNewContext(ts.transpileModule(readFileSync(join(ROOT, 'src/shared/omniroute-startup.ts'), 'utf8'), {
   compilerOptions: { module: ts.ModuleKind.CommonJS }
@@ -52,6 +54,8 @@ function log(msg) {
 }
 
 function cleanup({ keepData = false } = {}) {
+  mockUpstream?.closeAllConnections()
+  mockUpstream?.close()
   if (child && child.pid && child.exitCode === null) {
     if (process.platform === 'win32') {
       crossSpawn.sync('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore' })
@@ -67,7 +71,10 @@ function cleanup({ keepData = false } = {}) {
       }
     }
   }
-  if (dataDir && !keepData) rmSync(dataDir, { recursive: true, force: true })
+  if (dataDir && !keepData) {
+    if (dirname(resolve(dataDir)) !== resolve(tmpdir()) || !dataDir.startsWith(join(tmpdir(), 'omniroute-smoke-'))) throw new Error('Unsafe smoke cleanup path')
+    rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
+  }
 }
 
 function stopChild() {
@@ -230,6 +237,64 @@ const models = await fetchJson(`${base}/v1/models`, {}, 10000).catch((e) => fail
 if (models.status !== 200) fail(`GET /v1/models returned ${models.status}`)
 log(`/v1/models OK (${Array.isArray(models.body?.data) ? models.body.data.length : '?'} models)`)
 
+// A catalog response proves only startup, not that model traffic works. Route
+// real chat requests through the gateway to a local fixture (no external keys,
+// provider availability or paid generation required by packaging).
+mockUpstream = createHttpServer(async (req, res) => {
+  let body = ''
+  for await (const chunk of req) body += chunk
+  const payload = body ? JSON.parse(body) : {}
+  if (req.method === 'GET') {
+    res.setHeader('content-type', 'application/json')
+    res.end(JSON.stringify({ data: [{ id: 'fixture', object: 'model' }] }))
+    return
+  }
+  const message = { role: 'assistant', content: 'ascora-smoke-answer',
+    tool_calls: [{ id: 'call_smoke', type: 'function', function: { name: 'read_file', arguments: '{"path":"fixture.txt"}' } }] }
+  const choice = { index: 0, finish_reason: 'tool_calls' }
+  const completion = { id: 'chatcmpl-smoke', model: 'fixture', created: Math.floor(Date.now() / 1000) }
+  if (payload.stream) {
+    res.setHeader('content-type', 'text/event-stream')
+    res.end(`data: ${JSON.stringify({ ...completion, object: 'chat.completion.chunk', choices: [{ ...choice,
+      delta: { ...message, tool_calls: message.tool_calls.map((call, index) => ({ ...call, index })) } }] })}\n\ndata: [DONE]\n\n`)
+  } else {
+    res.setHeader('content-type', 'application/json')
+    res.end(JSON.stringify({ ...completion, object: 'chat.completion', choices: [{ ...choice, message }], usage: { prompt_tokens: 2, completion_tokens: 3, total_tokens: 5 } }))
+  }
+})
+await new Promise((resolveListen, reject) => {
+  mockUpstream.once('error', reject)
+  mockUpstream.listen(0, '127.0.0.1', resolveListen)
+}).catch(error => fail(`could not start local chat fixture: ${error.message}`))
+const mockBase = `http://127.0.0.1:${mockUpstream.address().port}/v1`
+const mockNode = await fetchJson(`${base}/api/provider-nodes`, {
+  method: 'POST', headers: { 'content-type': 'application/json' },
+  body: JSON.stringify({ name: 'ascora-smoke-local', prefix: 'ascora-smoke', type: 'openai-compatible', apiType: 'chat', baseUrl: mockBase })
+}).catch(error => fail(`could not register local chat fixture: ${error.message}`))
+const mockNodeId = mockNode.body?.node?.id ?? mockNode.body?.id
+if (!mockNode.ok || !mockNodeId) fail(`could not create local chat fixture: ${JSON.stringify(mockNode.body)}`)
+const mockConnection = await fetchJson(`${base}/api/providers`, {
+  method: 'POST', headers: { 'content-type': 'application/json' },
+  body: JSON.stringify({ provider: mockNodeId, name: 'ascora-smoke-local', apiKey: 'sk-local-fixture', defaultModel: 'fixture' })
+}).catch(error => fail(`could not connect local chat fixture: ${error.message}`))
+if (!mockConnection.ok) fail(`could not connect local chat fixture: ${JSON.stringify(mockConnection.body)}`)
+
+async function verifyChat() {
+  for (const stream of [false, true]) {
+    const response = await fetch(`${base}/v1/chat/completions`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, signal: AbortSignal.timeout(15_000),
+      body: JSON.stringify({ model: 'ascora-smoke/fixture', stream, messages: [{ role: 'user', content: 'Smoke test' }],
+        tools: [{ type: 'function', function: { name: 'read_file', parameters: { type: 'object', properties: { path: { type: 'string' } } } } }] })
+    })
+    const body = await response.text()
+    if (!response.ok || !body.includes('ascora-smoke-answer') || !body.includes('read_file') || (stream && !body.includes('data:'))) {
+      fail(`chat routing (${stream ? 'SSE' : 'JSON'}) returned ${response.status}: ${body.slice(0, 500)}`)
+    }
+  }
+  log('chat routing OK (JSON + SSE, text + native tool calls)')
+}
+await verifyChat().catch(error => fail(`chat routing failed: ${error.message}`))
+
 // --- probe 3: storage write round-trip -------------------------------------
 // Preferred: create/read/delete a dummy upstream provider. The POST body
 // shape may drift between releases, so a settings round-trip is the fallback
@@ -309,6 +374,7 @@ const secondLoginMode = await fetchJson(`${base}/api/settings/require-login`, {
   body: JSON.stringify({ requireLogin: false })
 })
 if (!secondLoginMode.ok) fail(`second-boot management bootstrap returned ${secondLoginMode.status}`)
+await verifyChat().catch(error => fail(`second-boot chat routing failed: ${error.message}`))
 
 if (sentinel) {
   const list = await fetchJson(`${base}/api/providers`)
@@ -328,6 +394,6 @@ if (sentinel) {
   log('second boot succeeded (provider POST shape drifted; settings write used as fallback)')
 }
 
-log('OK — vendored OmniRoute boots twice, serves /v1 and persists data')
+log('OK — vendored OmniRoute boots twice, routes chat/tool calls and persists data')
 cleanup()
 process.exit(0)

@@ -452,6 +452,8 @@ export class LmStudioClient {
     try {
       res = this.config.provider === 'gigachat'
         ? await gigachatFetch(url, { headers: this.headers(token), signal })
+        : this.config.provider === 'omniroute'
+          ? await chatFetch(url, { headers: this.headers(), signal }, this.config.provider)
         : await fetch(url, { headers: this.headers(), signal })
     } catch (err) {
       throw connectionError(name, url, err)
@@ -584,7 +586,6 @@ export class LmStudioClient {
 
     if (!res.body) throw new LmStudioError(`${name} returned an empty response body`, 'parse')
 
-    const reader = res.body.getReader()
     const decoder = new TextDecoder()
     let buffer = ''
 
@@ -616,86 +617,133 @@ export class LmStudioClient {
       ...(thinking ? { thinking, thinkingMs: thinkingUpdatedAt! - thinkingStartedAt! } : {})
     })
 
-    try {
-      for (;;) {
-        const { value, done } = await reader.read()
-        buffer += done ? decoder.decode() : decoder.decode(value, { stream: true })
-        // Some compatible servers close after the final data line without LF.
-        if (done && buffer.trim()) buffer += '\n'
-
-        let newline: number
-        while ((newline = buffer.indexOf('\n')) >= 0) {
-          const line = buffer.slice(0, newline).trim()
-          buffer = buffer.slice(newline + 1)
-          if (!line.startsWith('data:')) continue
-          const data = line.slice(5).trim()
-          if (data === '[DONE]') { streamDone = true; break }
-          try {
-            const json = JSON.parse(data)
-            if (json?.error) {
-              const detail = json.error.message ?? json.error
-              throw new LmStudioError(`${name} stream error: ${typeof detail === 'string' ? detail : JSON.stringify(detail)}`, 'http')
-            }
-            const choice = json?.choices?.[0]
-            const reasoning: unknown = choice?.delta?.reasoning_content ?? choice?.delta?.reasoning
-            if (typeof reasoning === 'string') addThinking(reasoning)
-            const content: unknown = choice?.delta?.content
-            if (typeof content === 'string' && content.length > 0) {
-              const parsed = thinkingParser.push(content)
-              addThinking(parsed.thinking)
-              if (parsed.content) { yielded = true; yield parsed.content }
-            }
-
-            const calls: unknown = choice?.delta?.tool_calls
-            if (Array.isArray(calls)) {
-              for (const raw of calls as ToolCallDelta[]) {
-                const idx = raw.index ?? 0
-                const entry = toolAcc.get(idx) ?? { id: '', name: '', arguments: '' }
-                if (raw.id) entry.id = raw.id
-                if (raw.function?.name) entry.name = raw.function.name
-                if (raw.function?.arguments) entry.arguments += raw.function.arguments
-                toolAcc.set(idx, entry)
-              }
-            }
-            // GigaChat streams its tool decision as `delta.function_call`, with
-            // arguments delivered as a whole object (not incremental string
-            // fragments like OpenAI), so replace rather than append for those.
-            const fnCall = choice?.delta?.function_call
-            if (fnCall && typeof fnCall === 'object') {
-              const raw = fnCall as { name?: unknown; arguments?: unknown }
-              const entry = toolAcc.get(0) ?? { id: '', name: '', arguments: '' }
-              if (typeof raw.name === 'string' && raw.name) entry.name = raw.name
-              if (typeof raw.arguments === 'string') entry.arguments += raw.arguments
-              else if (raw.arguments !== undefined) entry.arguments = JSON.stringify(raw.arguments)
-              toolAcc.set(0, entry)
-            }
-
-            if (typeof choice?.finish_reason === 'string') finishReason = choice.finish_reason
-
-            const rawUsage = json?.usage as
-              | { prompt_tokens?: number; completion_tokens?: number }
-              | undefined
-            if (rawUsage && typeof rawUsage === 'object') {
-              usage = {
-                inputTokens: rawUsage.prompt_tokens ?? 0,
-                outputTokens: rawUsage.completion_tokens ?? 0
-              }
-            }
-          } catch (err) {
-            if (err instanceof LmStudioError) throw err
-            /* keep-alive or partial frame — ignore */
-          }
-        }
-        if (streamDone || done) break
+    // Some routed providers answer stream:true with JSON; the same parser is
+    // used for the empty-stream retry so tool calls/reasoning are never lost.
+    const readCompletion = async (response: ChatResponse): Promise<string> => {
+      if (!response.ok) throw await httpError(name, url, response)
+      let json: {
+        error?: { message?: string } | string
+        choices?: { message?: { content?: unknown; reasoning_content?: string; reasoning?: string; tool_calls?: ToolCallDelta[] }; finish_reason?: string }[]
+        usage?: { prompt_tokens?: number; completion_tokens?: number }
       }
-    } catch (err) {
-      if (err instanceof LmStudioError) throw err
-      throw connectionError(name, url, err, signal, true)
-    } finally {
-      // [DONE] can arrive before the socket closes. Release the connection even
-      // on cancellation or if a consumer stops iterating the generator early.
-      await reader.cancel().catch(() => {})
-      reader.releaseLock()
+      try { json = await response.json() as typeof json }
+      catch (err) {
+        if (err instanceof SyntaxError) throw new LmStudioError('OmniRoute returned invalid completion JSON.', 'parse')
+        throw connectionError(name, url, err, signal)
+      }
+      if (json?.error) {
+        const detail = typeof json.error === 'string' ? json.error : json.error.message || JSON.stringify(json.error)
+        throw new LmStudioError(`OmniRoute error: ${detail}`, 'http')
+      }
+      const choice = json?.choices?.[0]
+      const message = choice?.message
+      const reasoning = message?.reasoning_content ?? message?.reasoning
+      if (typeof reasoning === 'string') addThinking(reasoning)
+      let content = message?.content
+      if (Array.isArray(content)) {
+        content = content.map(part => typeof part?.text === 'string' ? part.text : '').join('')
+      }
+      const parsed = new ThinkingParser().push(typeof content === 'string' ? content : '', true)
+      addThinking(parsed.thinking)
+      if (Array.isArray(message?.tool_calls)) {
+        message.tool_calls.forEach((call, index) => {
+          if (typeof call?.function?.name !== 'string' || !call.function.name) return
+          toolAcc.set(index, { id: call.id || '', name: call.function.name,
+            arguments: typeof call.function.arguments === 'string' ? call.function.arguments : JSON.stringify(call.function.arguments ?? {}) })
+        })
+      }
+      if (typeof choice?.finish_reason === 'string') finishReason = choice.finish_reason
+      if (json?.usage) usage = { inputTokens: json.usage.prompt_tokens ?? 0, outputTokens: json.usage.completion_tokens ?? 0 }
+      return parsed.content
+    }
+
+    const jsonResponse = this.config.provider === 'omniroute' && /\bapplication\/json\b/i.test(res.headers.get('content-type') || '')
+    if (jsonResponse) {
+      const content = await readCompletion(res)
+      if (content) { yielded = true; yield content }
+    } else {
+      const reader = res.body.getReader()
+      try {
+        for (;;) {
+          const { value, done } = await reader.read()
+          buffer += done ? decoder.decode() : decoder.decode(value, { stream: true })
+          // Some compatible servers close after the final data line without LF.
+          if (done && buffer.trim()) buffer += '\n'
+
+          let newline: number
+          while ((newline = buffer.indexOf('\n')) >= 0) {
+            const line = buffer.slice(0, newline).trim()
+            buffer = buffer.slice(newline + 1)
+            if (!line.startsWith('data:')) continue
+            const data = line.slice(5).trim()
+            if (data === '[DONE]') { streamDone = true; break }
+            try {
+              const json = JSON.parse(data)
+              if (json?.error) {
+                const detail = json.error.message ?? json.error
+                throw new LmStudioError(`${name} stream error: ${typeof detail === 'string' ? detail : JSON.stringify(detail)}`, 'http')
+              }
+              const choice = json?.choices?.[0]
+              const reasoning: unknown = choice?.delta?.reasoning_content ?? choice?.delta?.reasoning
+              if (typeof reasoning === 'string') addThinking(reasoning)
+              const content: unknown = choice?.delta?.content
+              if (typeof content === 'string' && content.length > 0) {
+                const parsed = thinkingParser.push(content)
+                addThinking(parsed.thinking)
+                if (parsed.content) { yielded = true; yield parsed.content }
+              }
+
+              const calls: unknown = choice?.delta?.tool_calls
+              if (Array.isArray(calls)) {
+                for (const raw of calls as ToolCallDelta[]) {
+                  const idx = raw.index ?? 0
+                  const entry = toolAcc.get(idx) ?? { id: '', name: '', arguments: '' }
+                  if (raw.id) entry.id = raw.id
+                  if (raw.function?.name) entry.name = raw.function.name
+                  if (raw.function?.arguments) entry.arguments += raw.function.arguments
+                  toolAcc.set(idx, entry)
+                }
+              }
+              // GigaChat streams its tool decision as `delta.function_call`, with
+              // arguments delivered as a whole object (not incremental string
+              // fragments like OpenAI), so replace rather than append for those.
+              const fnCall = choice?.delta?.function_call
+              if (fnCall && typeof fnCall === 'object') {
+                const raw = fnCall as { name?: unknown; arguments?: unknown }
+                const entry = toolAcc.get(0) ?? { id: '', name: '', arguments: '' }
+                if (typeof raw.name === 'string' && raw.name) entry.name = raw.name
+                if (typeof raw.arguments === 'string') entry.arguments += raw.arguments
+                else if (raw.arguments !== undefined) entry.arguments = JSON.stringify(raw.arguments)
+                toolAcc.set(0, entry)
+              }
+
+              if (typeof choice?.finish_reason === 'string') finishReason = choice.finish_reason
+
+              const rawUsage = json?.usage as
+                | { prompt_tokens?: number; completion_tokens?: number }
+                | undefined
+              if (rawUsage && typeof rawUsage === 'object') {
+                usage = {
+                  inputTokens: rawUsage.prompt_tokens ?? 0,
+                  outputTokens: rawUsage.completion_tokens ?? 0
+                }
+              }
+            } catch (err) {
+              if (err instanceof LmStudioError) throw err
+              /* keep-alive or partial frame — ignore */
+            }
+          }
+          if (streamDone || done) break
+        }
+      } catch (err) {
+        if (err instanceof LmStudioError) throw err
+        throw connectionError(name, url, err, signal, true)
+      } finally {
+        // [DONE] can arrive before the socket closes. Release the connection even
+        // on cancellation or if a consumer stops iterating the generator early.
+        await reader.cancel().catch(() => {})
+        reader.releaseLock()
+      }
     }
     const tail = thinkingParser.push('', true)
     addThinking(tail.thinking)
@@ -709,36 +757,23 @@ export class LmStudioClient {
     // return an empty SSE stream even though a non-streaming request answers
     // (the native Playground uses stream:false and works). Fall back once so the
     // chat turn isn't a blank "(no content returned)". Scoped to OmniRoute only.
-    if (this.config.provider === 'omniroute' && !yielded && !thinking && toolAcc.size === 0) {
+    if (this.config.provider === 'omniroute' && !jsonResponse && !yielded && !thinking && assembled().toolCalls.length === 0) {
+      let fbRes: ChatResponse
       try {
-        const fbRes = await chatFetch(url, {
+        fbRes = await chatFetch(url, {
           method: 'POST',
           headers: this.headers(token),
           body: JSON.stringify({ ...basePayload, stream: false }),
           signal
         }, this.config.provider)
-        if (fbRes.ok) {
-          const fbJson = (await fbRes.json()) as {
-            choices?: { message?: { content?: unknown }; finish_reason?: string }[]
-            usage?: { prompt_tokens?: number; completion_tokens?: number }
-          }
-          const fbChoice = fbJson?.choices?.[0]
-          let fbContent: unknown = fbChoice?.message?.content
-          if (Array.isArray(fbContent)) {
-            fbContent = fbContent
-              .map((part) => (part && typeof (part as { text?: unknown }).text === 'string' ? (part as { text: string }).text : ''))
-              .join('')
-          }
-          if (typeof fbContent === 'string' && fbContent.length > 0) yield fbContent
-          if (typeof fbChoice?.finish_reason === 'string') finishReason = fbChoice.finish_reason
-          if (fbJson?.usage && typeof fbJson.usage === 'object') {
-            usage = { inputTokens: fbJson.usage.prompt_tokens ?? 0, outputTokens: fbJson.usage.completion_tokens ?? 0 }
-          }
-        }
       } catch (err) {
-        if (isAbort(err)) throw new LmStudioError('Request aborted', 'aborted')
-        // Fallback failed — return whatever the stream produced.
+        throw connectionError(name, url, err, signal)
       }
+      const content = await readCompletion(fbRes)
+      if (content) { yielded = true; yield content }
+    }
+    if (this.config.provider === 'omniroute' && !yielded && assembled().toolCalls.length === 0) {
+      throw new LmStudioError(`OmniRoute returned no answer or tool calls${finishReason ? ` (${finishReason})` : ''}. Check the selected model and provider connection in OmniRoute settings.`, 'parse')
     }
 
     return assembled()

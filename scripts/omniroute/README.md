@@ -77,7 +77,8 @@ app's no-native-build-pipeline stance is preserved. Kept binaries are listed in
 **Hard assertions:** no `*.node` outside the allowlist; the `bin` entry from their
 `package.json` exists. `dist:*` runs `omniroute:ensure` first, and a failed vendor smoke
 deletes the manifest. The `afterPack` hook also boots the copied resources twice and
-checks API/storage persistence; a failure rejects packaging. Native builds use the
+checks API/storage persistence plus JSON/SSE chat and native tool routing against a
+local fixture before and after restart; a failure rejects packaging. Native builds use the
 packaged executable, while cross-builds use the build host's Electron. The smoke's
 CommonJS resolution guard prevents missing packages from being borrowed from Ascora's
 development `node_modules` above the artifact directory.

@@ -35,6 +35,24 @@ let client: LmStudioClient | null = null
 /** In-flight chat requests, keyed by the renderer-supplied request id. */
 const aborters = new Map<string, AbortController>()
 
+/** Chat can arrive while the shared sidecar is still prewarming. Keep the
+ * request's settings snapshot, but obtain its URL only after startup finishes.
+ * Cancelling one chat must not stop startup for other chats/admin pages. */
+async function readyConfig(config: LlmConfig, signal?: AbortSignal): Promise<LlmConfig> {
+  if (config.provider !== 'omniroute') return config
+  if (signal?.aborted) throw new LmStudioError('Request aborted', 'aborted')
+  const status = await new Promise<Awaited<ReturnType<typeof startOmniroute>>>((resolve, reject) => {
+    const abort = (): void => reject(new LmStudioError('Request aborted', 'aborted'))
+    signal?.addEventListener('abort', abort, { once: true })
+    startOmniroute().then(resolve, reject).finally(() => signal?.removeEventListener('abort', abort))
+  })
+  if (signal?.aborted) throw new LmStudioError('Request aborted', 'aborted')
+  if (status.state !== 'ready' || !status.baseUrl) {
+    throw new LmStudioError(status.error || 'OmniRoute could not start. Check its status and logs in provider settings.', 'connection')
+  }
+  return { ...config, omnirouteBaseUrl: status.baseUrl }
+}
+
 export function readConfig(): LlmConfig {
   const store = getStore()
   const openRouterEnabled =
@@ -247,7 +265,7 @@ export function registerLlmHandlers(): void {
       if (provider && !['lmstudio', 'ollama', 'unsloth', 'openrouter', 'antling', 'omniroute', 'gigachat'].includes(provider)) throw new Error('Unsupported model provider')
       const config = readConfig()
       const selectedProvider = provider ?? config.provider
-      const probe = new LmStudioClient({ ...config, provider: selectedProvider })
+      const probe = new LmStudioClient(await readyConfig({ ...config, provider: selectedProvider }))
       const models = await probe.listModels(AbortSignal.timeout(15_000))
       return { ok: true, models, source: selectedProvider === 'antling' ? 'preset' : 'api' }
     } catch (err) {
@@ -343,7 +361,8 @@ export function registerLlmHandlers(): void {
               scheduleChunks()
             })
         }
-        const gen = new LmStudioClient({ ...config, provider }).streamChat(params, controller.signal, (delta) => {
+        const requestConfig = await readyConfig({ ...config, provider }, controller.signal)
+        const gen = new LmStudioClient(requestConfig).streamChat(params, controller.signal, (delta) => {
           finishProgress()
           thinkingStartedAt ??= Date.now()
           thinkingMs = Date.now() - thinkingStartedAt
