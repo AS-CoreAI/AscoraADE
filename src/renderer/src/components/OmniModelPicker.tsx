@@ -3,6 +3,8 @@ import { Icon } from './Icon'
 import { OMNI_PROVIDER_CATALOG } from '@/lib/omnirouteProviderCatalog.generated'
 import { OMNI_BUILTIN_MODELS, OMNI_PROVIDER_ID_TO_ALIAS } from '@/lib/omnirouteProviderModels.generated'
 import { isAutoOmniModel } from '@/lib/omniModels'
+import { tr } from '@/language'
+import { useApp } from '@/state/store'
 
 // The composer's OmniRoute model list shows only models that are routable right
 // now — the live gateway catalog (`/v1/models`, passed as `runtimeModels`) = your
@@ -17,6 +19,15 @@ interface CatalogModel {
 }
 
 const AUTO_GROUP_ID = '__auto__'
+const NO_ACCOUNT_GROUP_ID = '__no_account__'
+
+// Providers that answer agent requests (including tool calls) with no account,
+// key, local CLI or browser runtime — verified live against OmniRoute 3.8.54 on
+// 2026-11-19. Its other no-auth providers need a local CLI (Devin, Auggie, ZCode,
+// MiniMax Code, Codex app-server), a Chromium runtime Ascora does not bundle
+// (Cloudflare Playground) or a key (UncloseAI's beta is closed), or serve only
+// images/video; Pollinations' keyless tier rejects requests that carry tools.
+const NO_ACCOUNT_PROVIDERS = new Set(['duckduckgo-web'])
 
 const PROVIDER_NAME = new Map<string, string>(OMNI_PROVIDER_CATALOG.map((p) => [p.id, p.name]))
 const ALIAS_TO_PROVIDER = new Map<string, { providerId: string; providerName: string }>()
@@ -73,6 +84,7 @@ export function OmniModelPicker({
   searchPlaceholder: string
   emptyLabel: string
 }): JSX.Element {
+  const language = useApp((s) => s.appLanguage)
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const rootRef = useRef<HTMLDivElement>(null)
@@ -96,19 +108,27 @@ export function OmniModelPicker({
         !model.providerName.toLowerCase().includes(needle)
       )
         continue
-      const group = map.get(model.providerId) ?? { providerId: model.providerId, providerName: model.providerName, models: [] }
+      const groupId = NO_ACCOUNT_PROVIDERS.has(model.providerId) ? NO_ACCOUNT_GROUP_ID : model.providerId
+      const group = map.get(groupId) ?? {
+        providerId: groupId,
+        providerName: groupId === NO_ACCOUNT_GROUP_ID ? tr(language, 'composer.modelGroupNoAccount') : model.providerName,
+        models: []
+      }
       group.models.push(model)
-      map.set(model.providerId, group)
+      map.set(groupId, group)
     }
     const arr = [...map.values()]
     for (const group of arr) group.models.sort((a, b) => a.id.localeCompare(b.id))
+    const pinned = [AUTO_GROUP_ID, NO_ACCOUNT_GROUP_ID]
     arr.sort((a, b) => {
-      if (a.providerId === AUTO_GROUP_ID) return -1
-      if (b.providerId === AUTO_GROUP_ID) return 1
-      return a.providerName.localeCompare(b.providerName)
+      const rank = (group: DisplayGroup): number => {
+        const index = pinned.indexOf(group.providerId)
+        return index < 0 ? pinned.length : index
+      }
+      return rank(a) - rank(b) || a.providerName.localeCompare(b.providerName)
     })
     return arr
-  }, [query, runtimeModels])
+  }, [query, runtimeModels, language])
 
   useEffect(() => {
     if (!open) return

@@ -10,6 +10,7 @@ import {
   GEMINI_MODEL_PRESETS,
   GROK_MODEL_PRESETS,
   openRouterModelOptions,
+  OpenRouterModelOptions,
   REASONING_LABEL_KEY,
   COPILOT_REASONING_LABEL_KEY,
   CLAUDE_EFFORT_LABEL_KEY,
@@ -1932,11 +1933,7 @@ function OpenRouterPanel(): JSX.Element {
           value={openRouterModel || modelOptions[0]}
           onChange={(e) => setOpenRouterModel(e.target.value)}
         >
-          {modelOptions.map((m) => (
-            <option key={m} value={m}>
-              {m}
-            </option>
-          ))}
+          <OpenRouterModelOptions options={modelOptions} />
         </select>
         <span className="field-hint">
           {t('settings.defaultModel', { model: DEFAULT_LLM_CONFIG.openRouterModel })}

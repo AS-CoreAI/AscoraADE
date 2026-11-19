@@ -219,6 +219,33 @@ export function openRouterModelOptions(models: string[], selectedModel: string):
     })
 }
 
+/** OpenRouter's free variants carry the `:free` suffix; `openrouter/free`
+ * routes to one of them. Free models come first (router, then by name), the
+ * rest keep the API order. */
+export function isOpenRouterFreeModel(id: string): boolean {
+  return id === 'openrouter/free' || id.endsWith(':free')
+}
+
+export function openRouterModelGroups(options: string[]): { free: string[]; other: string[] } {
+  const free = options.filter(isOpenRouterFreeModel)
+    .sort((a, b) => (a === 'openrouter/free' ? -1 : b === 'openrouter/free' ? 1 : a.localeCompare(b)))
+  return { free, other: options.filter((id) => !isOpenRouterFreeModel(id)) }
+}
+
+/** `<option>` list for an OpenRouter `<select>`, with free models in their own group. */
+export function OpenRouterModelOptions({ options }: { options: string[] }): JSX.Element {
+  const language = useApp((s) => s.appLanguage)
+  const { free, other } = openRouterModelGroups(options)
+  const render = (ids: string[]): JSX.Element[] => ids.map((id) => <option key={id} value={id}>{id}</option>)
+  if (free.length === 0) return <>{render(other)}</>
+  return (
+    <>
+      <optgroup label={tr(language, 'composer.modelGroupFree')}>{render(free)}</optgroup>
+      {other.length > 0 && <optgroup label={tr(language, 'composer.modelGroupAll')}>{render(other)}</optgroup>}
+    </>
+  )
+}
+
 function hasDraggedFiles(dataTransfer: DataTransfer): boolean {
   return (
     Array.from(dataTransfer.types).includes('Files') ||
@@ -1091,11 +1118,7 @@ export function Composer({ showFolder = true }: { showFolder?: boolean }): JSX.E
             onChange={(e) => setOpenRouterModel(e.target.value)}
             title={t('composer.modelOpenRouter')}
           >
-            {modelOptions.map((m) => (
-              <option key={m} value={m}>
-                {m}
-              </option>
-            ))}
+            <OpenRouterModelOptions options={modelOptions} />
           </select>
         ) : provider === 'antling' ? (
           <select
