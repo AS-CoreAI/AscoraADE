@@ -4956,7 +4956,13 @@ export const useApp = create<AppState>((set, get) => {
           })
         }
 
-        if (agentProvider === 'lmstudio' && (result.finishReason === 'length' || (!result.content.trim() && !result.toolCalls?.length))) {
+        // A truncated or empty turn is not a final answer. OpenRouter's routed
+        // (especially free) models can end with finish_reason "length", spend
+        // the whole turn on reasoning, or close an empty stream mid-task; resume
+        // those like LM Studio instead of stopping at "(no content returned)".
+        // A provider content filter is a real outcome and is not retried.
+        const recoversIncompleteTurns = agentProvider === 'lmstudio' || (isOpenRouter && result.finishReason !== 'content_filter')
+        if (recoversIncompleteTurns && (result.finishReason === 'length' || (!result.content.trim() && !result.toolCalls?.length))) {
           if (result.content.trim()) patch(replyId, { text: result.content })
           else removeMsg(replyId)
           if (++incompleteTurns > 2) {
