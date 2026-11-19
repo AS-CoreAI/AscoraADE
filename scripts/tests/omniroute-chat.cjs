@@ -95,6 +95,33 @@ test('fallback failures and empty replies are errors instead of successful silen
   }
 })
 
+test('exhausted combos name the tried providers and explain missing connections', async t => {
+  const exhausted = {
+    error: { message: 'Maximum combo retry limit reached', type: 'server_error', code: '503' },
+    diagnostics: { poolSize: 54, attempted: 30, excluded: [], terminalReason: 'max_attempts_exceeded',
+      attemptOrder: ['auggie', 'theoldllm', 'theoldllm', 'chipotle', 'opencode'].map(provider => ({ provider, model: 'm' })) }
+  }
+  for (const [providers, expected] of [
+    [{ connections: [] }, /^No provider is connected in OmniRoute, so “test\/model” could only use free no-account providers \(auggie, theoldllm, chipotle, opencode\), and none of them answered after 30 attempts\./],
+    [{ connections: [{ id: 'paused', isActive: false }] }, /^No provider is connected in OmniRoute/],
+    [{ connections: [{ id: 'key', isActive: true }] }, /^None of the providers behind “test\/model” \(auggie, theoldllm, chipotle, opencode\) answered after 30 attempts\./],
+    [null, /^None of the providers behind “test\/model”/]
+  ]) {
+    const { client, requests } = await gateway(t, (req, res) => {
+      if (req.path === '/api/providers') return providers ? json(res, providers) : json(res, { error: 'Not found' }, 404)
+      json(res, exhausted, 503)
+    })
+    await assert.rejects(collect(client), error => {
+      assert.equal(error.kind, 'http')
+      assert.equal(error.status, 503)
+      assert.match(error.message, expected)
+      assert.match(error.message, /\(OmniRoute 503: Maximum combo retry limit reached\)$/)
+      return true
+    })
+    assert.deepEqual(requests.map(r => r.path ?? 'chat'), ['chat', '/api/providers'])
+  }
+})
+
 test('Stop interrupts a silent fallback; valid SSE is not retried', async t => {
   let fallbackStarted
   const started = new Promise(resolve => { fallbackStarted = resolve })

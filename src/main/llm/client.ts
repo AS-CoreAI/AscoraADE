@@ -238,7 +238,47 @@ function connectionError(name: string, url: string, err: unknown, signal?: Abort
   )
 }
 
-async function httpError(name: string, url: string, res: Response | ChatResponse): Promise<LmStudioError> {
+interface OmnirouteErrorContext {
+  /** Requested model or combo, e.g. `auto/best-coding`. */
+  model: string
+  /** Gateway `/v1` URL; its origin also serves the loopback admin API. */
+  baseUrl: string
+}
+
+/** Connected OmniRoute providers, or null when the admin API cannot tell. */
+async function omnirouteConnectionCount(baseUrl: string): Promise<number | null> {
+  try {
+    const res = await chatFetch(`${new URL(baseUrl).origin}/api/providers`, { signal: AbortSignal.timeout(3_000) }, 'omniroute')
+    if (!res.ok) { await res.body?.cancel(); return null }
+    const json = await res.json() as { connections?: unknown }
+    return Array.isArray(json?.connections)
+      ? json.connections.filter((c) => !(c && typeof c === 'object' && (c as { isActive?: unknown }).isActive === false)).length
+      : null
+  } catch {
+    return null
+  }
+}
+
+/** OmniRoute reports an exhausted combo only as "Maximum combo retry limit
+ * reached". Name the providers it tried and, when nothing is connected, explain
+ * that auto models were limited to free no-account providers. */
+async function omnirouteComboError(status: number, detail: string, diagnostics: Record<string, unknown>, context: OmnirouteErrorContext): Promise<LmStudioError> {
+  const order = Array.isArray(diagnostics.attemptOrder) ? diagnostics.attemptOrder as unknown[] : []
+  const providers = [...new Set(order.map((entry) =>
+    entry && typeof entry === 'object' && typeof (entry as { provider?: unknown }).provider === 'string' ? (entry as { provider: string }).provider : ''
+  ).filter(Boolean))]
+  const attempted = typeof diagnostics.attempted === 'number' && diagnostics.attempted > 0 ? diagnostics.attempted : order.length
+  const listed = providers.length ? ` (${providers.slice(0, 6).join(', ')}${providers.length > 6 ? ', …' : ''})` : ''
+  const tries = attempted ? ` after ${attempted} attempt${attempted === 1 ? '' : 's'}` : ''
+  const model = context.model ? `“${context.model}”` : 'the selected model'
+  const message = await omnirouteConnectionCount(context.baseUrl) === 0
+    ? `No provider is connected in OmniRoute, so ${model} could only use free no-account providers${listed}, and none of them answered${tries}. ` +
+      'They may be blocked, rate-limited or need a local CLI. Connect a provider in OmniRoute settings → Providers, or choose another backend.'
+    : `None of the providers behind ${model}${listed} answered${tries}. Check their status in OmniRoute settings → Providers, or choose a specific model.`
+  return new LmStudioError(`${message} (OmniRoute ${status}: ${detail.slice(0, 200)})`, 'http', status)
+}
+
+async function httpError(name: string, url: string, res: Response | ChatResponse, omniroute?: OmnirouteErrorContext): Promise<LmStudioError> {
   if (name === 'Unsloth' && res.status === 401) {
     await res.body?.cancel()
     return new LmStudioError('Unsloth rejected the API key. Create a key in Unsloth Settings → API and save it in the Unsloth connection settings.', 'http', 401)
@@ -251,11 +291,16 @@ async function httpError(name: string, url: string, res: Response | ChatResponse
     )
   }
   let detail = text
+  let diagnostics: unknown
   try {
     const json = JSON.parse(text)
     detail = json?.error?.message ?? json?.message ?? (typeof json?.error === 'string' ? json.error : text)
+    diagnostics = json?.diagnostics
   } catch {
     /* not JSON */
+  }
+  if (name === 'OmniRoute' && omniroute && diagnostics && typeof diagnostics === 'object') {
+    return omnirouteComboError(res.status, String(detail), diagnostics as Record<string, unknown>, omniroute)
   }
   if (name === 'OpenRouter' && res.status === 401 && /missing authentication header/i.test(detail)) {
     return new LmStudioError(
@@ -532,6 +577,8 @@ export class LmStudioClient {
           : { tools: params.tools }
         : {})
     }
+    const omnirouteError = this.config.provider === 'omniroute'
+      ? { model: String(basePayload.model ?? ''), baseUrl: this.baseUrl } : undefined
     const body = JSON.stringify({
       ...basePayload,
       stream: true,
@@ -582,7 +629,7 @@ export class LmStudioClient {
         }, this.config.provider)
       } catch (err) { throw connectionError(name, url, err, signal) }
     }
-    if (!res.ok) throw await httpError(name, url, res)
+    if (!res.ok) throw await httpError(name, url, res, omnirouteError)
 
     if (!res.body) throw new LmStudioError(`${name} returned an empty response body`, 'parse')
 
@@ -620,7 +667,7 @@ export class LmStudioClient {
     // Some routed providers answer stream:true with JSON; the same parser is
     // used for the empty-stream retry so tool calls/reasoning are never lost.
     const readCompletion = async (response: ChatResponse): Promise<string> => {
-      if (!response.ok) throw await httpError(name, url, response)
+      if (!response.ok) throw await httpError(name, url, response, omnirouteError)
       let json: {
         error?: { message?: string } | string
         choices?: { message?: { content?: unknown; reasoning_content?: string; reasoning?: string; tool_calls?: ToolCallDelta[] }; finish_reason?: string }[]
